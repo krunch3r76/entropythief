@@ -1,0 +1,9 @@
+__pycache__/
+*.gvmi
+gc__*
+result.bin
+*.swp
+stderr
+*.log
+
+
