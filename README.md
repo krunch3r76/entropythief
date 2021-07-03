@@ -47,16 +47,13 @@ components:
 ./controller.py			# controller-view runnable script that daemonizes the model (Golem executor) and coordinates with the view
 ./model.py			# the Golem specific code (daemonized by controller.py)
 ```
-
-
-
-
 ```
 TO DO: a discussion of randomness and the difference between random bits vs random number generators.
 TO DO: windows compatible routines for named pipes and UI
 TO DO: adjust budget on the fly
 TO DO: detail design, original, self developed mvc model, etc
 TO DO: develop a market strategy for better rates
+TO DO: video demonstration
 ```
 applications:
 have fun with a unpredictable and exotic stream of 1's and 0's!
@@ -68,5 +65,6 @@ this project was inspired by gandombits. however, gandom does not draw upon the 
 
 known (fixable someday) issues:
 you might have some issues with tearing of the command/status line when resizing the window.
+once the budget has been reached, no more work is provisioned and unfinished work will be processed to completion, after which it is necessary to restart by stopping and rerunning to obtain more bits if desired.
 
 this application exposes an undocumented part of the Python API to handle specific events in a novel way. see the code for details (more to follow).
