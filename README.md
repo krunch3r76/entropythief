@@ -14,7 +14,7 @@ pip install -r requirements.txt
 # in a separate window
 cd readers/print_nonce
 python3 print_nonce.py # watch how the status line changes!
-# optionall tail yapapi log and/or stderr file
+# optional: tail yapapi log and/or stderr file
 ```
 
 this requestor runs to pilfer as many bytes of random 1's and 0's from as many providers as the user specifies. these parameters can be adjusted on the fly by the user with the following commands:
@@ -23,12 +23,12 @@ set buflim=<num>	# the minimum threshold that entropythief should do its best to
 set maxworkers=<num>	# the most workers Golem executor can provision
 stop			# stop/exit
 ```
-
+**NOTE: to increase the budget, please set the script variable BUDGET at the head of controller.py**
 
 UI components:
 
 ```
-w:<number of workers started but unfinished "maxworkers">/maximum>
+w:<number of workers started but unfinished "maxworkers">/maximum> # the more the more exotic!
 cost:<total cost aggregated from paid invoices>/<budget>
 buf:<number of random bits in units of bytes>/<maximum number of bytes "buflim">
 ```
@@ -63,8 +63,8 @@ entropy is scarce. i will develop a discussion file to elaborate on that later. 
 
 this project was inspired by gandombits. however, gandom does not draw upon the underlying system's entropy source, which Docker reportedly guarantees is attached to every image. furthermore, gandom mixes bytes to produce a single value whereas entropy thief provides a stream of values, which incidentally can be mixed, or played with in a myriad of ways. additionally, entropythief stores bits in raw format while presenting to the user a bird's eye view of them in the intelligible base 16 (cf. base64).
 
-known (fixable someday) issues:
+this application exposes an undocumented part of the Python API to handle specific events in a novel way. see the code for details (more to follow).
+
+known (to be fixed) issues:
 you might have some issues with tearing of the command/status line when resizing the window.
 once the budget has been reached, no more work is provisioned and unfinished work will be processed to completion, after which it is necessary to restart by stopping and rerunning to obtain more bits if desired.
-
-this application exposes an undocumented part of the Python API to handle specific events in a novel way. see the code for details (more to follow).
