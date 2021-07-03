@@ -10,7 +10,7 @@ git checkout alpha
 python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r requirements.txt
-./controller.py
+./controller.py # --help # to change the network from the default rinkeby and the subnet-tag from the default devnet-beta.2
 # in a separate window
 cd readers/print_nonce
 python3 print_nonce.py # watch how the status line changes!
@@ -67,3 +67,5 @@ this project was inspired by gandombits. however, gandom does not draw upon the 
 
 known (fixable someday) issues:
 you might have some issues with tearing of the command/status line when resizing the window.
+
+this application exposes an undocumented part of the Python API to handle specific events in a novel way. see the code for details (more to follow).
