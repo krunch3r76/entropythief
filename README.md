@@ -4,6 +4,12 @@ get entropy from multiple providers at a "steal" of a rate and send to a named p
 
 
 usage:
+	git clone ...
+	cd ...
+	git checkout ...
+	python3 -m venv entropythief-venv
+	source entropythief-venv/bin/activate
+	pip install -r requirements.txt
 	./controller.py
 
 this requestor runs to pilfer as many bytes of random 1's and 0's from as many providers as the user specifies. these parameters can be adjusted on the fly by the user with the following commands:
