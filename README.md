@@ -56,6 +56,7 @@ TO DO: a discussion of randomness and the difference between random bits vs rand
 TO DO: windows compatible routines for named pipes and UI
 TO DO: adjust budget on the fly
 TO DO: detail design, original, self developed mvc model, etc
+TO DO: develop a market strategy for better rates
 ```
 applications:
 have fun with a unpredictable and exotic stream of 1's and 0's!
