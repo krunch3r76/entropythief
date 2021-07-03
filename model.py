@@ -149,7 +149,7 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
         mySummaryLogger = MySummaryLogger(to_ctl_q)
         # setup executor
         package = await vm.repo(
-            image_hash=IMAGE_HASH, min_mem_gib=0.005, min_storage_gib=0.0
+            image_hash=IMAGE_HASH, min_mem_gib=0.005, min_storage_gib=0.01
         )
 
         while (not OP_STOP): # can catch OP_STOP here and/or in outer
