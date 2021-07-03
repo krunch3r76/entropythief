@@ -17,7 +17,7 @@ python3 print_nonce.py # watch how the status line changes!
 # optional: tail yapapi log and/or stderr file
 ```
 
-this requestor runs to pilfer as many bytes of random 1's and 0's from as many providers as the user specifies. these parameters can be adjusted on the fly by the user with the following commands:
+this requestor runs to pilfer as many bytes of random 1's and 0's from up to as many providers as the user specifies. these parameters can be adjusted on the fly by the user with the following commands:
 ```
 set buflim=<num>	# the minimum threshold that entropythief should do its best to stay above
 set maxworkers=<num>	# the most workers Golem executor can provision
