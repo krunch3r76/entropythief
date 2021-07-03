@@ -51,7 +51,7 @@ components:
 TO DO: a discussion of randomness and the difference between random bits vs random number generators.
 TO DO: windows compatible routines for named pipes and UI
 TO DO: adjust budget on the fly
-TO DO: detail design, original, self developed mvc model, etc
+TO DO: detail design e.g. my original, self developed mvc model, etc
 TO DO: develop a market strategy for better rates
 TO DO: video demonstration
 ```
@@ -61,7 +61,7 @@ have fun with a unpredictable and exotic stream of 1's and 0's!
 comments:
 entropy is scarce. i will develop a discussion file to elaborate on that later. that said, it is so rare, that even a high rate might be considered a steal. or, you might consider it the other way around!
 
-this project was inspired by gandombits. however, gandom does not draw upon the underlying system's entropy source, which Docker reportedly guarantees is attached to every image. furthermore, gandom mixes bytes to produce a single value whereas entropy thief provides a stream of values, which incidentally can be mixed, or played with in a myriad of ways. additionally, entropythief stores bits in raw format while presenting to the user a bird's eye view of them in the intelligible base 16 (cf. base64).
+this project was inspired by gandom. however, gandom does not draw upon the underlying system's entropy source, which Docker reportedly guarantees is attached to every image. furthermore, gandom mixes bytes to produce a single value whereas entropy thief provides a stream of values, which incidentally can be mixed, or played with in a myriad of ways. additionally, entropythief stores bits in raw format while presenting to the user a bird's eye view of them in the intelligible base 16 (cf. base64).
 
 this application exposes an undocumented part of the Python API to handle specific events in a novel way. see the code for details (more to follow).
 
