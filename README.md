@@ -40,7 +40,7 @@ once entropythief runs, it displays the random bytes produced from workers as th
 
 components:
 ```
-/tmp/pilferedbits		# named pipe accessible to anyone on the system with a ski mask recommended
+/tmp/pilferedbits		# named pipe accessible to anyone on the system with a ski mask
 ./stderr			# messages and optionally yapapi logger info messages are written to this file in place of stderr
 ./main.log			# development messages that come from the controller are written to this file
 ./entropythief-yapapi.log	# INFO and DEBUG messages from yapapi
