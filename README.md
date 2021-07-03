@@ -11,6 +11,10 @@ python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r requirements.txt
 ./controller.py
+# in a separate window
+cd readers/print_nonce
+python3 print_nonce.py # watch how the status line changes!
+# optionall tail yapapi log and/or stderr file
 ```
 
 this requestor runs to pilfer as many bytes of random 1's and 0's from as many providers as the user specifies. these parameters can be adjusted on the fly by the user with the following commands:
@@ -19,6 +23,19 @@ set buflim=<num>	# the minimum threshold that entropythief should do its best to
 set maxworkers=<num>	# the most workers Golem executor can provision
 stop			# stop/exit
 ```
+
+
+UI components:
+
+```
+w:<number of workers started but unfinished "maxworkers">/maximum>
+cost:<total cost aggregated from paid invoices>/<budget>
+buf:<number of random bits in units of bytes>/<maximum number of bytes "buflim">
+```
+on the same line that the UI accepts input, status messages are presented.
+the fields are as described above.
+
+once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to the named pipe. the named pipe can be accessed via any progamming language or shell language capable of reading it. a simple python API has been included in the readers directory, _pipe, and an example script is in readers/print_nonce. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. If the script is run repeatedly as a loop, it demonstrates how entropythief provisions workers on demand.
 
 
 components:
@@ -31,17 +48,9 @@ components:
 ./model.py			# the Golem specific code (daemonized by controller.py)
 ```
 
-UI components:
 
-once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to the named pipe. the named pipe can be accessed via any progamming language or shell language capable of reading it. a simple python API has been included in the readers directory, _pipe, and an example script is in readers/print_nonce. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. If the script is run repeatedly as a loop, it demonstrates how entropythief provisions workers on demand.
 
-on the same line that the UI accepts input, status messages are presented.
-the fields are as described:
-```
-	w:<number of workers started but unfinished "maxworkers">/maximum>
-	cost:<total cost aggregated from paid invoices>/<budget>
-	buf:<number of random bits in units of bytes>/<maximum number of bytes "buflim">
-```
+
 ```
 TO DO: a discussion of randomness and the difference between random bits vs random number generators.
 TO DO: windows compatible routines for named pipes and UI
