@@ -35,7 +35,7 @@ buf:<number of random bits in units of bytes>/<maximum number of bytes "buflim">
 on the same line that the UI accepts input, status messages are presented.
 the fields are as described above.
 
-once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to the named pipe. the named pipe can be accessed via any progamming language or shell language capable of reading it. a simple python API has been included in the readers directory, _pipe, and an example script is in readers/print_nonce. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. If the script is run repeatedly as a loop, it demonstrates how entropythief provisions workers on demand.
+once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to the named pipe. the named pipe can be accessed via any programming language or shell language capable of reading it. a simple python API has been included in the readers directory, _pipe, and an example script is in readers/print_nonce. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. If the script is run repeatedly as a loop, it demonstrates how entropythief provisions workers on demand.
 
 
 components:
