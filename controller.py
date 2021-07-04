@@ -25,7 +25,7 @@ import signal
 
 IMAGE_HASH = "bf630610f23b1b8523d624c71e8b3f60c8fad1932ea174e00d7bc9c7"
 MAXWORKERS = 6
-MINPOOLSIZE = 3192
+MINPOOLSIZE = 32192
 BUDGET = 0.1
 kIPC_FIFO_FP = "/tmp/pilferedbits"
 
@@ -102,17 +102,19 @@ def view__getinput(winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BU
 #---------------------------------------------#
 # required by view__coro_update_mainwindow()
 def view__addline(win, last_col, msg):
-    #    epoch = time.time()
-    #    line = str(epoch)
-    line = msg
+
+
+    current_row = win.getyx()[0]
+    next_row = current_row + 1
     rowEnd = win.getmaxyx()[0]
-    if last_col + 1 == rowEnd:
+
+    if next_row == rowEnd:
         win.scroll(1)
-        last_col = last_col-1
+        next_row-=1
 
-    win.addstr(last_col, 0, line)
+    win.addstr(next_row, 0, msg)
 
-    return last_col+1
+    return win.getyx()[0]
 
 
 
@@ -264,9 +266,10 @@ if __name__ == "__main__":
                 elif 'info' in msg_from_model and msg_from_model['info'] == 'worker finished':
                     count_workers-=1
                 elif 'info' in msg_from_model and msg_from_model['info'] == "payment failed":
-                    msg_to_model = {'cmd': 'pause execution'}
-                    print(msg_to_model, file=maindebuglog)
-                    to_model_q.put_nowait(msg_to_model)
+                    if BUDGET - current_total < 0.01: # review epsilon
+                        msg_to_model = {'cmd': 'pause execution'}
+                        print(msg_to_model, file=maindebuglog)
+                        to_model_q.put_nowait(msg_to_model)
 
             #/if
             win.refresh()

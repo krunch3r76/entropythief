@@ -1,25 +1,30 @@
 #!/usr/bin/python3
 #entropythief
 
-# external modules
-import aiohttp # to catch connection exception
-from io import StringIO
-import base64
-import sys
-import os
-import termios
-import fcntl
-import asyncio
-from datetime import timedelta
-from pathlib import Path
-from typing import AsyncIterable, Iterator
-import yapapi
-from yapapi import log # TODO address why log is not addressable as yapapi.log
-import utils
-from yapapi.payload import vm
+##external modules
+
+# standard
+import  aiohttp # to catch connection exception
+import  base64
+import  sys
+import  os
+import  termios
+import  fcntl
+import  asyncio
+from    io          import StringIO
+from    datetime    import timedelta
+from    pathlib     import Path
+from    typing      import AsyncIterable, Iterator
+from    decimal     import  Decimal
+
+# 3rd party
+import  yapapi
+from    yapapi          import log
+from    yapapi.payload  import vm
 
 # internal
-import worker
+import  utils
+import  worker
 
 
 
@@ -169,6 +174,12 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                 , network=args.network
                 , driver=args.driver
                 , event_consumer=mySummaryLogger.log
+                , strategy = yapapi.strategy.LeastExpensiveLinearPayuMS(
+                max_fixed_price=Decimal("0.01"),
+                # max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.001")},
+                max_price_for={yapapi.props.com.Counter.TIME: Decimal("0.1")}
+                # max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.001"), yapapi.props.com.Counter.TIME: Decimal("0.1")}
+            ) 
             ) as golem:
                 OP_STOP = False
                 while (not OP_STOP and not OP_PAUSE):
@@ -202,6 +213,8 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                         # adjust down workers_needed if exceeding max
                         if workers_needed > MAXWORKERS:
                             workers_needed = MAXWORKERS
+                        print("----------WORKERS NEEDED IS:", workers_needed, file=sys.stderr)
+                        print("++++++++++MINPOOLSIZE IS:", MINPOOLSIZE, file=sys.stderr)
                         # execute tasks
                         completed_tasks = golem.execute_tasks(
                             steps,
@@ -258,13 +271,12 @@ def model__main(args, from_ctl_q, fifoWriteEnd, to_ctl_q, MINPOOLSIZE, MAXWORKER
     loop = asyncio.get_event_loop()
 
     # uncomment to output yapapi logger INFO events to stderr and INFO+DEBUG to args.log_fle
-    """
     yapapi.log.enable_default_logger(
         log_file=args.log_file
         , debug_activity_api=True
         , debug_market_api=True
         , debug_payment_api=True)
-    """
+
     task = loop.create_task(
         entropythief(
             args
