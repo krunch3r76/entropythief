@@ -25,7 +25,7 @@ import signal
 
 IMAGE_HASH = "bf630610f23b1b8523d624c71e8b3f60c8fad1932ea174e00d7bc9c7"
 MAXWORKERS = 6
-MINPOOLSIZE = 32192
+MINPOOLSIZE = 3192
 BUDGET = 0.1
 kIPC_FIFO_FP = "/tmp/pilferedbits"
 
@@ -103,19 +103,10 @@ def view__getinput(winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BU
 # required by view__coro_update_mainwindow()
 def view__addline(win, last_col, msg):
 
-
-    current_row = win.getyx()[0]
-    next_row = current_row + 1
-    rowEnd = win.getmaxyx()[0]
-
-    if next_row == rowEnd:
-        win.scroll(1)
-        next_row-=1
-
-    win.addstr(next_row, 0, msg)
+    Y, X = win.getyx()
+    win.addstr(Y, X, msg)
 
     return win.getyx()[0]
-
 
 
 

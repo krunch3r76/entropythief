@@ -175,10 +175,8 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                 , driver=args.driver
                 , event_consumer=mySummaryLogger.log
                 , strategy = yapapi.strategy.LeastExpensiveLinearPayuMS(
-                max_fixed_price=Decimal("0.01"),
-                # max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.001")},
-                max_price_for={yapapi.props.com.Counter.TIME: Decimal("0.1")}
-                # max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.001"), yapapi.props.com.Counter.TIME: Decimal("0.1")}
+                    max_fixed_price=Decimal("0.02"),
+                    max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.02"), yapapi.props.com.Counter.TIME: Decimal("0.02")}
             ) 
             ) as golem:
                 OP_STOP = False
