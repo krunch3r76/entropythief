@@ -20,7 +20,6 @@ import select
 import time
 import utils
 import argparse
-# import signal
 import string
 import curses.ascii
 
@@ -39,7 +38,6 @@ kIPC_FIFO_FP = "/tmp/pilferedbits"
 def view__getinput(winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, win):
 
     # update status line
-    # winbox.leaveok(True)
     Y, X = winbox.getyx()
     yMax, xMax = winbox.getmaxyx()
     current_total_str = "cost:{:.5f}".format(current_total)
@@ -50,7 +48,6 @@ def view__getinput(winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BU
     winbox.addstr(Y, xMax-46, "w")
     maxworkers_str = "{:02d}".format(MAXWORKERS)
     countworkers_str = "{:02d}".format(count_workers)
-    # print("{:02d}".format(1))
     winbox.addstr(Y, xMax-46+1, ":" + countworkers_str + "/" + maxworkers_str)
     winbox.addstr(Y, xMax-37, current_total_str)
     winbox.addstr(Y, xMax-37+len(current_total_str), "/"+current_budget_str)
@@ -60,13 +57,8 @@ def view__getinput(winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BU
     fmt = f"buf:{bytesInPipe}/{str(MINPOOLSIZE)}"
     winbox.addstr(Y, xMax-15, fmt)
     winbox.move(Y, X)
-    # winbox.leaveok(False)
 
     ucmd = ""
-    # check for new input
-    # s_list = select.select([sys.stdin],[],[],0)[0] # only need read set i.e. first member
-    # if len(s_list) > 0:
-        # result = s_list[0].read(1) # s_list[0] is <_io.TextIOWrapper name='<stdin>' mode='r' encoding='utf-8'>
     result = winbox.getch()
     if curses.ascii.isascii(result):
         if result == 127:
@@ -89,21 +81,14 @@ def view__getinput(winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BU
             else:
                 winbox.addstr(0, 1, "")
     elif result == curses.KEY_RESIZE:
-        print(f"KEY RESIZE <--------------------------------", file=sys.stderr)
         winbox.move(0,0)
         winbox.addstr('>')
         winbox.addnstr(0, 1, "".join(linebuf), len(linebuf))
         curses.update_lines_cols()
-        Y1, X1 = winbox.getmaxyx()
-        Y2, X2 = win.getmaxyx()
-        Y3, X3 = curses.LINES, curses.COLS
         win.resize(curses.LINES-1,curses.COLS)
-        winbox.mvwin(curses.LINES-1, 0)
-        print(f"winbox: ({Y1}, {X1})\twin: ({Y2}, {X2})\tcurses: ({Y3}, {X3})\tlines: ({curses.LINES, curses.COLS})", file=sys.stderr)
         win.redrawwin()
-        win.refresh()
+        winbox.mvwin(curses.LINES-1, 0)
         winbox.redrawwin()
-        winbox.refresh()
     return ucmd
 
 
@@ -149,12 +134,6 @@ def view__coro_update_mainwindow(win, last_col):
   ###############################################
  #        view__init_curses()                  #
 ###############################################
-# https://bytes.com/topic/python/answers/609520-curses-resizing-windows
-def sigwinch_handler(n, frame):
-    pass
-    # curses.endwin()
-    # curses.initscr()
-    # curses.resizeterm(curses.LINES, curses.COLS)
     
 
 def view__init_curses():
@@ -167,7 +146,6 @@ def view__init_curses():
     winbox = curses.newwin(1, curses.COLS, curses.LINES-1, 0)
     winbox.addstr(0, 0, ">")
     winbox.nodelay(True)
-    # signal.signal(signal.SIGWINCH, sigwinch_handler)
 
     return win, winbox
 
@@ -203,16 +181,10 @@ def create_fifo_for_writing(IPC_FIFO_FP):
 #                      __main__                          #
 ##########################################################
 if __name__ == "__main__":
-    # parse cli arguments
-    arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument("--subnet", type=str, default="devnet-beta.2")
-    arg_parser.add_argument("--network", type=str, default=None)
+    # parse cli arguments (viz utils.py)
     args = argparse.Namespace()
     parser = utils.build_parser("pipe entropy to the named pipe /tmp/pilferedbits")
-    # parser.set_defaults(log_file=f"entropythief-yapapi.log")
     args = parser.parse_args()
-
-
     maindebuglog = open("main.log", "w", buffering=1)
     stderr2file = open("stderr", "w", buffering=1)
     sys.stderr = stderr2file
@@ -230,12 +202,8 @@ if __name__ == "__main__":
     linebuf = []
     try:
         win, winbox = view__init_curses()
-        Y1, X1 = winbox.getmaxyx()
-        Y2, X2 = win.getmaxyx()
-        Y3, X3 = curses.LINES, curses.COLS
-        print(f"winbox: ({Y1}, {X1})\twin: ({Y2}, {X2})\tcurses: ({Y3}, {X3})\tlines: ({curses.LINES, curses.COLS})", file=sys.stderr)
         # start view process
-        p1 = multiprocessing.Process(target=model.model__main, daemon=True, args=[args, to_model_q, fifoWriteEnd, from_model_q, MINPOOLSIZE, MAXWORKERS, BUDGET, IMAGE_HASH, False])
+        p1 = multiprocessing.Process(target=model.model__main, daemon=True, args=[args, to_model_q, fifoWriteEnd, from_model_q, MINPOOLSIZE, MAXWORKERS, BUDGET, IMAGE_HASH, args.enable_logging])
         p1.start()
         last_col = 0
         u = view__coro_update_mainwindow(win, last_col)
