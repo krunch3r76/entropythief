@@ -99,7 +99,7 @@ def view__getinput(winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BU
         Y3, X3 = curses.LINES, curses.COLS
         win.resize(curses.LINES-1,curses.COLS)
         winbox.mvwin(curses.LINES-1, 0)
-        print(f"winbox: ({Y1}, {X1})\twin: ({Y2}, {X2}\tcurses: {Y3}, {X3})", file=sys.stderr)
+        print(f"winbox: ({Y1}, {X1})\twin: ({Y2}, {X2})\tcurses: ({Y3}, {X3})\tlines: ({curses.LINES, curses.COLS})", file=sys.stderr)
         win.redrawwin()
         win.refresh()
         winbox.redrawwin()
@@ -146,8 +146,8 @@ def view__coro_update_mainwindow(win, last_col):
 
 
 
-###############################################
-#        view__init_curses()                        #
+  ###############################################
+ #        view__init_curses()                  #
 ###############################################
 # https://bytes.com/topic/python/answers/609520-curses-resizing-windows
 def sigwinch_handler(n, frame):
@@ -159,7 +159,7 @@ def sigwinch_handler(n, frame):
 
 def view__init_curses():
     curses.noecho()
-    win = curses.newwin(curses.LINES-2, curses.COLS, 0,0)
+    win = curses.newwin(curses.LINES-1, curses.COLS, 0,0)
     win.idlok(True)
     win.scrollok(True)
     win.leaveok(True)
@@ -233,9 +233,9 @@ if __name__ == "__main__":
         Y1, X1 = winbox.getmaxyx()
         Y2, X2 = win.getmaxyx()
         Y3, X3 = curses.LINES, curses.COLS
-        print(f"winbox: ({Y1}, {X1})\twin: ({Y2}, {X2}\tcurses: {Y3}, {X3})", file=sys.stderr)
+        print(f"winbox: ({Y1}, {X1})\twin: ({Y2}, {X2})\tcurses: ({Y3}, {X3})\tlines: ({curses.LINES, curses.COLS})", file=sys.stderr)
         # start view process
-        p1 = multiprocessing.Process(target=model.model__main, daemon=True, args=[args, to_model_q, fifoWriteEnd, from_model_q, MINPOOLSIZE, MAXWORKERS, BUDGET, IMAGE_HASH])
+        p1 = multiprocessing.Process(target=model.model__main, daemon=True, args=[args, to_model_q, fifoWriteEnd, from_model_q, MINPOOLSIZE, MAXWORKERS, BUDGET, IMAGE_HASH, False])
         p1.start()
         last_col = 0
         u = view__coro_update_mainwindow(win, last_col)

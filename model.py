@@ -211,8 +211,6 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                         # adjust down workers_needed if exceeding max
                         if workers_needed > MAXWORKERS:
                             workers_needed = MAXWORKERS
-                        print("----------WORKERS NEEDED IS:", workers_needed, file=sys.stderr)
-                        print("++++++++++MINPOOLSIZE IS:", MINPOOLSIZE, file=sys.stderr)
                         # execute tasks
                         completed_tasks = golem.execute_tasks(
                             steps,
@@ -253,7 +251,7 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
 #   main entry for the model                                              #
 #   launches entropythief attaching message queues                        #
 ###########################################################################
-def model__main(args, from_ctl_q, fifoWriteEnd, to_ctl_q, MINPOOLSIZE, MAXWORKERS, BUDGET, IMAGE_HASH):
+def model__main(args, from_ctl_q, fifoWriteEnd, to_ctl_q, MINPOOLSIZE, MAXWORKERS, BUDGET, IMAGE_HASH, use_default_logger=True):
     """
         args := result of argparse.Namespace() from the controller/cli
         from_ctl_q := Queue of messages coming from controller
@@ -269,12 +267,12 @@ def model__main(args, from_ctl_q, fifoWriteEnd, to_ctl_q, MINPOOLSIZE, MAXWORKER
     loop = asyncio.get_event_loop()
 
     # uncomment to output yapapi logger INFO events to stderr and INFO+DEBUG to args.log_fle
-    yapapi.log.enable_default_logger(
-        log_file=args.log_file
-        , debug_activity_api=True
-        , debug_market_api=True
-        , debug_payment_api=True)
-
+    if use_default_logger:
+        yapapi.log.enable_default_logger(
+            log_file=args.log_file
+            , debug_activity_api=True
+            , debug_market_api=True
+            , debug_payment_api=True)
     task = loop.create_task(
         entropythief(
             args
