@@ -20,8 +20,9 @@ import select
 import time
 import utils
 import argparse
-import signal
-
+# import signal
+import string
+import curses.ascii
 
 IMAGE_HASH = "bf630610f23b1b8523d624c71e8b3f60c8fad1932ea174e00d7bc9c7"
 MAXWORKERS = 6
@@ -35,7 +36,7 @@ kIPC_FIFO_FP = "/tmp/pilferedbits"
   #        view__getinput()                     #
  #   get input and display status updates      #
 ###############################################
-def view__getinput(winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers):
+def view__getinput(winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, win):
 
     # update status line
     # winbox.leaveok(True)
@@ -63,31 +64,46 @@ def view__getinput(winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BU
 
     ucmd = ""
     # check for new input
-    s_list = select.select([sys.stdin],[],[],0)[0] # only need read set i.e. first member
-    if len(s_list) > 0:
-        result = s_list[0].read(1) # r[0] is <_io.TextIOWrapper name='<stdin>' mode='r' encoding='utf-8'>
-        
-        if ord(result) == 127:
+    # s_list = select.select([sys.stdin],[],[],0)[0] # only need read set i.e. first member
+    # if len(s_list) > 0:
+        # result = s_list[0].read(1) # s_list[0] is <_io.TextIOWrapper name='<stdin>' mode='r' encoding='utf-8'>
+    result = winbox.getch()
+    if curses.ascii.isascii(result):
+        if result == 127:
             if len(linebuf) > 0:
                 # [backspace]
                 linebuf.pop()
                 Y, X = winbox.getyx()
                 winbox.move(0, X-1)
-        elif result == '\r':
+        elif result == ord('\n'):
             if len(linebuf) > 0:
                 ucmd = "".join(linebuf).strip()
                 linebuf.clear()
                 winbox.erase()
                 winbox.addstr('>')
-        else:
+        elif chr(result) in string.printable:
             # [char]
-            linebuf.append(result[0])
+            linebuf.append(chr(result))
             if len(linebuf) > 0:
                 winbox.addstr(0, len(linebuf), linebuf[-1]) # append last character from linebuf
             else:
                 winbox.addstr(0, 1, "")
-
-
+    elif result == curses.KEY_RESIZE:
+        print(f"KEY RESIZE <--------------------------------", file=sys.stderr)
+        winbox.move(0,0)
+        winbox.addstr('>')
+        winbox.addnstr(0, 1, "".join(linebuf), len(linebuf))
+        curses.update_lines_cols()
+        Y1, X1 = winbox.getmaxyx()
+        Y2, X2 = win.getmaxyx()
+        Y3, X3 = curses.LINES, curses.COLS
+        win.resize(curses.LINES-1,curses.COLS)
+        winbox.mvwin(curses.LINES-1, 0)
+        print(f"winbox: ({Y1}, {X1})\twin: ({Y2}, {X2}\tcurses: {Y3}, {X3})", file=sys.stderr)
+        win.redrawwin()
+        win.refresh()
+        winbox.redrawwin()
+        winbox.refresh()
     return ucmd
 
 
@@ -136,19 +152,22 @@ def view__coro_update_mainwindow(win, last_col):
 # https://bytes.com/topic/python/answers/609520-curses-resizing-windows
 def sigwinch_handler(n, frame):
     pass
+    # curses.endwin()
+    # curses.initscr()
     # curses.resizeterm(curses.LINES, curses.COLS)
-
-
+    
 
 def view__init_curses():
-    win = curses.newwin(curses.LINES-1, curses.COLS, 0,0)
+    curses.noecho()
+    win = curses.newwin(curses.LINES-2, curses.COLS, 0,0)
     win.idlok(True)
     win.scrollok(True)
     win.leaveok(True)
 
     winbox = curses.newwin(1, curses.COLS, curses.LINES-1, 0)
     winbox.addstr(0, 0, ">")
-    signal.signal(signal.SIGWINCH, sigwinch_handler)
+    winbox.nodelay(True)
+    # signal.signal(signal.SIGWINCH, sigwinch_handler)
 
     return win, winbox
 
@@ -190,7 +209,7 @@ if __name__ == "__main__":
     arg_parser.add_argument("--network", type=str, default=None)
     args = argparse.Namespace()
     parser = utils.build_parser("pipe entropy to the named pipe /tmp/pilferedbits")
-    parser.set_defaults(log_file=f"entropythief-yapapi.log")
+    # parser.set_defaults(log_file=f"entropythief-yapapi.log")
     args = parser.parse_args()
 
 
@@ -211,6 +230,10 @@ if __name__ == "__main__":
     linebuf = []
     try:
         win, winbox = view__init_curses()
+        Y1, X1 = winbox.getmaxyx()
+        Y2, X2 = win.getmaxyx()
+        Y3, X3 = curses.LINES, curses.COLS
+        print(f"winbox: ({Y1}, {X1})\twin: ({Y2}, {X2}\tcurses: {Y3}, {X3})", file=sys.stderr)
         # start view process
         p1 = multiprocessing.Process(target=model.model__main, daemon=True, args=[args, to_model_q, fifoWriteEnd, from_model_q, MINPOOLSIZE, MAXWORKERS, BUDGET, IMAGE_HASH])
         p1.start()
@@ -222,7 +245,7 @@ if __name__ == "__main__":
         SIGNAL_workerstarted = False
         while True:
             ucmd = view__getinput(
-                winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers)
+                winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, win)
         #    SIGNAL_workerstarted = False   # regardless of last state, reset
             msg_to_model = None
             if ucmd == "stop":
