@@ -31,9 +31,9 @@ kIPC_FIFO_FP = "/tmp/pilferedbits"
 
 
 
-###############################################
-#        view__getinput()                     #
-#   get input and display status updates      #
+   ###############################################
+  #        view__getinput()                     #
+ #   get input and display status updates      #
 ###############################################
 def view__getinput(winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers):
 
@@ -135,7 +135,8 @@ def view__coro_update_mainwindow(win, last_col):
 ###############################################
 # https://bytes.com/topic/python/answers/609520-curses-resizing-windows
 def sigwinch_handler(n, frame):
-    curses.resizeterm(curses.LINES, curses.COLS)
+    pass
+    # curses.resizeterm(curses.LINES, curses.COLS)
 
 
 
