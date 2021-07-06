@@ -40,6 +40,6 @@ def build_parser(description: str):
         default=str(default_log_path),
         help="Log file for YAPAPI; default: %(default)s",
     )
-    parser.add_argument("--enable_logging", help="whether to log {0, 1}", default=1
+    parser.add_argument("--enable-logging", help="whether to log to the log-file {0, 1}", default=1
                         , type=int)
     return parser
