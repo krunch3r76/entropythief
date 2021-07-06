@@ -268,6 +268,9 @@ if __name__ == "__main__":
             time.sleep(0.005)
         #/while
     except Exception as e:
+        curses.nocbreak()
+        curses.echo()
+        curses.curs_set(True)
         curses.endwin()
         print(e)
     except KeyboardInterrupt:
