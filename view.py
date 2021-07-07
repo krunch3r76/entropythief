@@ -185,6 +185,10 @@ def view__create_windows(view):
 
 
 
+  ###################################
+ # _count_bytes_in_pipe            #
+###################################
+# required by View::getinput
 def _count_bytes_in_pipe(fifoWriteEnd, endianness="little"):
     buf = bytearray(4)
     fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
@@ -197,6 +201,9 @@ def _count_bytes_in_pipe(fifoWriteEnd, endianness="little"):
 
 
 
+  ###################################
+ #          View{}                 #
+###################################
 class View:
     winbox = None
     win = None
@@ -207,6 +214,9 @@ class View:
 
 
 
+    #..View............................#
+    #.          _init_screen          .#
+    #..................................#
     def _init_screen(self):
         try:
             self.screen = curses.initscr() 
@@ -230,7 +240,9 @@ class View:
 
 
 
-
+    #..View.........................#
+    #.          __init__           .#
+    #...............................#
     def __init__(self, fifoWriteEnd):
         self._init_screen()
         self.fifoWriteEnd = fifoWriteEnd
@@ -245,6 +257,9 @@ class View:
 
 
 
+    #..View.......................................#
+    #.          coro_update_mainwindow           .#
+    #.............................................#
     def coro_update_mainwindow(self):
         try:
             while True:
@@ -258,6 +273,9 @@ class View:
 
 
 
+    #..View.........................#
+    #.          refresh            .#
+    #...............................#
     def refresh(self):
         self.win.refresh()
         # self.win._widget.refresh()
@@ -268,6 +286,9 @@ class View:
 
 
 
+    #..View.........................#
+    #.          getinput           .#
+    #...............................#
     def getinput(self, current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers):
         # update status line
         Y, X = self.winbox.getyx()
@@ -335,6 +356,9 @@ class View:
 
 
 
+    #..View.........................#
+    #.          destroy            .#
+    #...............................#
     def destroy(self):
         curses.nocbreak()
         curses.echo()
