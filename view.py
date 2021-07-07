@@ -1,5 +1,6 @@
 import curses
 import curses.ascii
+import curses.panel
 import sys
 import fcntl
 import termios
@@ -7,6 +8,139 @@ import string
 
 
 
+# define the main text window
+class Display:
+    ENABLE_SPLASH = True
+    ENABLE_SPLASH_1 = False
+    _widget = None
+    _splash = None
+
+    # define the _splash window
+    class Splash:
+        _txt = ""                   # retains the last contents written to the _splash window
+        _parent_display = None      # retains a reference to the window _splashed i.e. Display
+            
+        #^^^^Splash^^^^^^^^^^^^^^^^^^^^^^#
+        #^     _refresh_coords          ^#
+        #^ make *args for pad refresh   ^#
+        #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
+        def _refresh_coords(self):
+            yBegParent, xBegParent = self._parent_display._widget.getbegyx()
+            Ymax, Xmax = self._parent_display._widget.getmaxyx()
+            height3rd = int( (Ymax-yBegParent)/3)
+            width3rd = int( (Xmax-xBegParent)/3)
+
+            yBeg = yBegParent + height3rd
+            xBeg = xBegParent + height3rd
+            nlines = height3rd
+            ncols = width3rd
+            return 0, 0, yBeg, xBeg, yBeg+nlines, xBeg+ncols
+
+
+        #^^^^Splash^^^^^^^^^^^^^^^^^^^^^^#
+        #^           refresh            ^#
+        #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
+        def refresh(self):
+            if self._parent_display:
+                self._widget.refresh(*self._refresh_coords())
+            
+        """
+        def refresh0(self):
+            if self._parent_display:
+                self._widget.refresh(0, 0, 0, 0, 0, 0)
+
+        def noutrefresh(self):
+            self._widget.noutrefresh(*self._refresh_coords())
+        """
+
+
+        #^^^^Splash^^^^^^^^^^^^^^^^^^^^^^#
+        #^         __init__             ^#
+        #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
+        def __init__(self, display):
+            self._parent_display = display
+            coords = self._refresh_coords()
+            nlines = coords[4]-coords[2]; ncols = coords[5]-coords[3]
+            self._widget = curses.newpad(nlines, ncols)
+            self._widget.box()
+            self._widget.syncok(True)
+            # self._widget.immedok(True)
+
+
+
+        #^^^^Splash^^^^^^^^^^^^^^^^^^^^^^#
+        #^      replace contents        ^#
+        #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
+        def text(self, txt):
+            self._txt = txt
+            self._widget.clear()
+            self._widget.box()
+            yBeg, xBeg = self._widget.getbegyx()
+            height, width = self._widget.getmaxyx()
+            txtLines = self._txt.split('\n')
+            y=1; x=1
+            if len(txtLines) > 0 and len(txtLines) < height:
+                self._widget.addstr(y, x, txtLines[0])
+                for i in range(1, len(txtLines)):
+                    self._widget.addstr(y+i, x, txtLines[i])
+
+
+
+
+    #....Display....................#
+    #.          __init__           .#
+    #...............................#
+    def __init__(self):
+        self._widget = curses.newwin(curses.LINES-1, curses.COLS, 0, 0)
+        self._widget.idlok(True); self._widget.scrollok(True)
+        self._splash = self.Splash(self)
+        self._splash.text("what happened to Roger Rabbit?\nI don't know!")
+        self._widget.leaveok(True)
+
+
+
+
+    #....Display....................#
+    #.          appendtxt          .#
+    #. append to end of last       .#
+    #...............................#
+    def appendtxt(self, line):
+        Y, X = self._widget.getyx()
+        self._widget.addstr(Y, X, line)
+
+
+
+    
+    #....Display....................#
+    #.          refresh            .#
+    #...............................#
+    def refresh(self):
+        if self.ENABLE_SPLASH:
+            if not self.ENABLE_SPLASH_1:
+                pass
+                self._splash.text(self._splash._txt)
+                self.ENABLE_SPLASH_1 = True 
+                # ENABLE_SPLASH_1 indicates that the text has been rewritten at least once
+                # to avoid unncessarily rewriting the whole text and prevent flickering
+            self._widget.refresh()
+            self._splash.refresh()
+        else:
+            if self.ENABLE_SPLASH_1 == True:
+                self._widget.overwrite(self._splash._widget)
+                self._widget.redrawwin()
+                # prevents flickering by only filling in the blank when needed
+
+            self._widget.refresh()
+            pass
+
+
+
+    #....Display....................#
+    #.          toggle__splash      .#
+    #...............................#
+    def toggle__splash(self):
+        self.ENABLE_SPLASH_1 = self.ENABLE_SPLASH
+        self.ENABLE_SPLASH = not self.ENABLE_SPLASH
 
 
 
@@ -14,20 +148,13 @@ import string
 
 
 
-
-
-
-
-   ###################################
-  # view__init_curses()             #
- ###################################
- # required by View::_init_screen
+  ###################################
+ # view__init_curses()             #
+###################################
+# required by View::_init_screen
 def view__create_windows(view):
-    win = curses.newwin(curses.LINES-1, curses.COLS, 0,0)
-    win.idlok(True)
-    win.scrollok(True)
-
-    popupwin = win.subwin(int(curses.LINES/5), int(curses.COLS/4), int(curses.LINES/2), int(curses.COLS/4))
+    win = Display()
+    _splash = win._widget.subwin(int(curses.LINES/5), int(curses.COLS/4), int(curses.LINES/2), int(curses.COLS/4))
     """
     popupwin.box()
     Y, X = popupwin.getmaxyx()
@@ -41,7 +168,7 @@ def view__create_windows(view):
     winbox.addstr(0, 0, ">")
     winbox.nodelay(True)
 
-    return { 'outputfield': win, 'inputfield': winbox, 'popup': popupwin }
+    return { 'outputfield': win, 'inputfield': winbox, 'popup': _splash }
 
 
 
@@ -108,10 +235,6 @@ class View:
 
 
 
-    def addline(self, msg):
-        Y, X = self.win.getyx()
-        self.win.addstr(Y, X, msg)
-
 
 
 
@@ -121,7 +244,8 @@ class View:
         try:
             while True:
                 msg = yield
-                self.addline(msg)
+                self.win.appendtxt(msg)
+                self.win.refresh()
         except GeneratorExit:
             pass
 
@@ -131,6 +255,7 @@ class View:
 
     def refresh(self):
         self.win.refresh()
+        # self.win._widget.refresh()
         self.winbox.refresh()
 
 
@@ -179,13 +304,16 @@ class View:
                     self.winbox.addstr(0, len(self.linebuf), self.linebuf[-1]) # append last character from linebuf
                 else:
                     self.winbox.addstr(0, 1, "")
+            elif result == curses.ascii.ESC:
+                self.win.toggle__splash()
+                # self.win.ENABLE_SPLASH = not self.win.ENABLE_SPLASH
         elif result == curses.KEY_RESIZE:
             self.winbox.move(0,0)
             self.winbox.addstr('>')
             self.winbox.addnstr(0, 1, "".join(self.linebuf), len(self.linebuf))
             curses.update_lines_cols()
-            self.win.resize(curses.LINES-1,curses.COLS)
-            self.win.redrawwin()
+            self.win._widget.resize(curses.LINES-1,curses.COLS)
+            self.win._widget.redrawwin()
             self.winbox.mvwin(curses.LINES-1, 0)
             self.winbox.redrawwin()
         # /if
