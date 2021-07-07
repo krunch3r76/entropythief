@@ -22,6 +22,7 @@ import utils
 import argparse
 import string
 import curses.ascii
+import curses.panel
 
 IMAGE_HASH = "bf630610f23b1b8523d624c71e8b3f60c8fad1932ea174e00d7bc9c7"
 MAXWORKERS = 6
@@ -135,19 +136,18 @@ def view__coro_update_mainwindow(win, last_col):
   ###############################################
  #        view__init_curses()                  #
 ###############################################
-    
-
 def view__init_curses():
     curses.noecho()
     win = curses.newwin(curses.LINES-1, curses.COLS, 0,0)
     win.idlok(True)
     win.scrollok(True)
-    # win.leaveok(True)
-
+    popupwin = win.subwin(int(curses.LINES/5), int(curses.COLS/4), int(curses.LINES/2), int(curses.COLS/4))
+    popupwin.box()
+    popupwin.addstr(5, 3, "Who is the great cornholio?")
+    popupwin.refresh()
     winbox = curses.newwin(1, curses.COLS, curses.LINES-1, 0)
     winbox.addstr(0, 0, ">")
     winbox.nodelay(True)
-
     return win, winbox
 
 
