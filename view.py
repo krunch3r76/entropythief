@@ -98,7 +98,16 @@ class Display:
         self._widget = curses.newwin(curses.LINES-1, curses.COLS, 0, 0)
         self._widget.idlok(True); self._widget.scrollok(True)
         self._splash = self.Splash(self)
-        self._splash.text("what happened to Roger Rabbit?\nI don't know!")
+        txt=\
+"""
+EntropyThief >cmd reference
+---------------------------
+>set buflim=<NUM>
+>set maxworkers=<NUM>
+>stop
+<ESC> toggle this menu
+"""
+        self._splash.text(txt)
         self._widget.leaveok(True)
 
 
