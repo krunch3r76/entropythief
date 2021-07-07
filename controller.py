@@ -13,16 +13,12 @@ import model
 import os
 import sys
 import multiprocessing
-import curses
-import fcntl
-import termios
 import select
 import time
 import utils
 import argparse
-import string
-import curses.ascii
-import curses.panel
+import view
+#from view import View
 
 IMAGE_HASH = "bf630610f23b1b8523d624c71e8b3f60c8fad1932ea174e00d7bc9c7"
 MAXWORKERS = 6
@@ -32,66 +28,6 @@ kIPC_FIFO_FP = "/tmp/pilferedbits"
 
 
 
-   ###############################################
-  #        view__getinput()                     #
- #   get input and display status updates      #
-###############################################
-def view__getinput(winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, win):
-
-    # update status line
-    Y, X = winbox.getyx()
-    yMax, xMax = winbox.getmaxyx()
-    current_total_str = "cost:{:.5f}".format(current_total)
-    current_budget_str = "{:.5f}".format(BUDGET)
-    winbox.move(Y, len(linebuf)+1)
-    winbox.clrtoeol()
-
-    winbox.addstr(Y, xMax-46, "w")
-    maxworkers_str = "{:02d}".format(MAXWORKERS)
-    countworkers_str = "{:02d}".format(count_workers)
-    winbox.addstr(Y, xMax-46+1, ":" + countworkers_str + "/" + maxworkers_str)
-    winbox.addstr(Y, xMax-37, current_total_str)
-    winbox.addstr(Y, xMax-37+len(current_total_str), "/"+current_budget_str)
-    buf = bytearray(4)
-    fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
-    bytesInPipe = int.from_bytes(buf, "little")
-    fmt = f"buf:{bytesInPipe}/{str(MINPOOLSIZE)}"
-    winbox.addstr(Y, xMax-15, fmt)
-    winbox.move(Y, X)
-
-    ucmd = ""
-    result = winbox.getch()
-    if curses.ascii.isascii(result):
-        if result == 127:
-            if len(linebuf) > 0:
-                # [backspace]
-                linebuf.pop()
-                Y, X = winbox.getyx()
-                winbox.move(0, X-1)
-        elif result == ord('\n'):
-            if len(linebuf) > 0:
-                ucmd = "".join(linebuf).strip()
-                linebuf.clear()
-                winbox.erase()
-                winbox.addstr('>')
-        elif chr(result) in string.printable:
-            # [char]
-            linebuf.append(chr(result))
-            if len(linebuf) > 0:
-                winbox.addstr(0, len(linebuf), linebuf[-1]) # append last character from linebuf
-            else:
-                winbox.addstr(0, 1, "")
-    elif result == curses.KEY_RESIZE:
-        winbox.move(0,0)
-        winbox.addstr('>')
-        winbox.addnstr(0, 1, "".join(linebuf), len(linebuf))
-        curses.update_lines_cols()
-        win.resize(curses.LINES-1,curses.COLS)
-        win.redrawwin()
-        winbox.mvwin(curses.LINES-1, 0)
-        winbox.redrawwin()
-    # /if
-    return ucmd
 
 
 
@@ -99,56 +35,6 @@ def view__getinput(winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BU
 
 
 
-
-#---------------------------------------------#
-#       view__addline()
-#---------------------------------------------#
-# required by view__coro_update_mainwindow()
-def view__addline(win, last_col, msg):
-
-    Y, X = win.getyx()
-    win.addstr(Y, X, msg)
-
-    return win.getyx()[0]
-
-
-
-
-
-#####################################################
-#           view__coro_update_mainwindow()                #
-#####################################################
-def view__coro_update_mainwindow(win, last_col):
-    try:
-        while True:
-            msg = yield
-            last_col = view__addline(win, last_col, msg)
-    except GeneratorExit:
-        pass
-
-
-
-
-
-
-
-
-  ###############################################
- #        view__init_curses()                  #
-###############################################
-def view__init_curses():
-    curses.noecho()
-    win = curses.newwin(curses.LINES-1, curses.COLS, 0,0)
-    win.idlok(True)
-    win.scrollok(True)
-    popupwin = win.subwin(int(curses.LINES/5), int(curses.COLS/4), int(curses.LINES/2), int(curses.COLS/4))
-    popupwin.box()
-    popupwin.addstr(5, 3, "Who is the great cornholio?")
-    popupwin.refresh()
-    winbox = curses.newwin(1, curses.COLS, curses.LINES-1, 0)
-    winbox.addstr(0, 0, ">")
-    winbox.nodelay(True)
-    return win, winbox
 
 
 
@@ -197,25 +83,18 @@ if __name__ == "__main__":
     # setup fifo
     fifoWriteEnd = create_fifo_for_writing(kIPC_FIFO_FP)
 
-    # initialize ncurses interface
-    screen = curses.initscr()
-    curses.cbreak()
-    linebuf = []
     try:
-        win, winbox = view__init_curses()
-        # start view process
+        # instantiate and setup view
+        theview = view.View(fifoWriteEnd)
+
         p1 = multiprocessing.Process(target=model.model__main, daemon=True, args=[args, to_model_q, fifoWriteEnd, from_model_q, MINPOOLSIZE, MAXWORKERS, BUDGET, IMAGE_HASH, args.enable_logging])
         p1.start()
-        last_col = 0
-        u = view__coro_update_mainwindow(win, last_col)
+        u = theview.coro_update_mainwindow()
         next(u)
         current_total = 0.0
         count_workers=0
-        SIGNAL_workerstarted = False
         while True:
-            ucmd = view__getinput(
-                winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, win)
-        #    SIGNAL_workerstarted = False   # regardless of last state, reset
+            ucmd = theview.getinput(current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers)
             msg_to_model = None
             if ucmd == "stop":
                 raise KeyboardInterrupt
@@ -254,26 +133,18 @@ if __name__ == "__main__":
                         msg_to_model = {'cmd': 'pause execution'}
                         print(msg_to_model, file=maindebuglog)
                         to_model_q.put_nowait(msg_to_model)
-
             #/if
-            win.refresh()
-            winbox.refresh()
+            theview.refresh()
             time.sleep(0.005)
         #/while
     except Exception as e:
-        curses.nocbreak()
-        curses.echo()
-        curses.curs_set(True)
-        curses.endwin()
+        theview.destroy()
         print(f"\n{e}\n")
     except KeyboardInterrupt:
-        curses.endwin()
+        theview.destroy()
         print("+=+=+=+=+=+=+=stopping=+=+=+=+=+=+=")
     finally:
-        curses.nocbreak()
-        curses.echo()
-        curses.curs_set(True)
-        curses.endwin()
+        theview.destroy()
         cmd = {'cmd': 'stop'}
         to_model_q.put_nowait(cmd)
         p1.join()
