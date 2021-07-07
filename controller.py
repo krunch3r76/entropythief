@@ -89,6 +89,7 @@ def view__getinput(winbox, linebuf, current_total, fifoWriteEnd, MINPOOLSIZE, BU
         win.redrawwin()
         winbox.mvwin(curses.LINES-1, 0)
         winbox.redrawwin()
+    # /if
     return ucmd
 
 
@@ -141,7 +142,7 @@ def view__init_curses():
     win = curses.newwin(curses.LINES-1, curses.COLS, 0,0)
     win.idlok(True)
     win.scrollok(True)
-    win.leaveok(True)
+    # win.leaveok(True)
 
     winbox = curses.newwin(1, curses.COLS, curses.LINES-1, 0)
     winbox.addstr(0, 0, ">")
@@ -264,7 +265,7 @@ if __name__ == "__main__":
         curses.echo()
         curses.curs_set(True)
         curses.endwin()
-        print(e)
+        print(f"\n{e}\n")
     except KeyboardInterrupt:
         curses.endwin()
         print("+=+=+=+=+=+=+=stopping=+=+=+=+=+=+=")
