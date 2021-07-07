@@ -1,3 +1,4 @@
+# view
 import curses
 import curses.ascii
 import curses.panel
@@ -72,6 +73,9 @@ class Display:
         #^      replace contents        ^#
         #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
         def text(self, txt):
+            coords = self._refresh_coords()
+            nlines = coords[4]-coords[2]; ncols = coords[5]-coords[3]
+            self._widget.resize(nlines, ncols)
             self._txt = txt
             self._widget.clear()
             self._widget.box()
@@ -128,6 +132,7 @@ class Display:
             if self.ENABLE_SPLASH_1 == True:
                 self._widget.overwrite(self._splash._widget)
                 self._widget.redrawwin()
+                self.ENABLE_SPLASH_1 = False
                 # prevents flickering by only filling in the blank when needed
 
             self._widget.refresh()
@@ -136,7 +141,7 @@ class Display:
 
 
     #....Display....................#
-    #.          toggle__splash      .#
+    #.    toggle__splash           .#
     #...............................#
     def toggle__splash(self):
         self.ENABLE_SPLASH_1 = self.ENABLE_SPLASH
@@ -311,9 +316,11 @@ class View:
             self.winbox.move(0,0)
             self.winbox.addstr('>')
             self.winbox.addnstr(0, 1, "".join(self.linebuf), len(self.linebuf))
+
             curses.update_lines_cols()
             self.win._widget.resize(curses.LINES-1,curses.COLS)
             self.win._widget.redrawwin()
+            self.win._splash.text(self.win._splash._txt)
             self.winbox.mvwin(curses.LINES-1, 0)
             self.winbox.redrawwin()
         # /if

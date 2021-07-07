@@ -18,7 +18,6 @@ import time
 import utils
 import argparse
 import view
-#from view import View
 
 IMAGE_HASH = "bf630610f23b1b8523d624c71e8b3f60c8fad1932ea174e00d7bc9c7"
 MAXWORKERS = 6
