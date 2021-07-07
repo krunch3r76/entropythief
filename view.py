@@ -28,18 +28,20 @@ def view__create_windows(view):
     win.scrollok(True)
 
     popupwin = win.subwin(int(curses.LINES/5), int(curses.COLS/4), int(curses.LINES/2), int(curses.COLS/4))
+    """
     popupwin.box()
     Y, X = popupwin.getmaxyx()
     msg = "what's up doc?"
     print(Y,X,len(msg) + 3, file=sys.stderr)
     popupwin.addstr(int(Y/2), 3, msg)
     popupwin.refresh()
+    """
 
     winbox = curses.newwin(1, curses.COLS, curses.LINES-1, 0)
     winbox.addstr(0, 0, ">")
     winbox.nodelay(True)
 
-    return win, winbox, popupwin
+    return { 'outputfield': win, 'inputfield': winbox, 'popup': popupwin }
 
 
 
@@ -79,7 +81,11 @@ class View:
             curses.noecho()
             curses.cbreak()
 
-            self.win, self.winbox, self.popupwin = view__create_windows(self)
+            windir = view__create_windows(self)
+            self.win = windir['outputfield']
+            self.winbox = windir['inputfield']
+
+            # self.win, self.winbox, self.popupwin = view__create_windows(self)
         except Exception as e:
             curses.nocbreak()
             curses.echo()
