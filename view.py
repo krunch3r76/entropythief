@@ -75,14 +75,18 @@ class Display:
         def text(self, txt):
             coords = self._refresh_coords()
             nlines = coords[4]-coords[2]; ncols = coords[5]-coords[3]
-            self._widget.resize(nlines, ncols)
+
+
             self._txt = txt
+            txtLines = self._txt.split('\n')
+            if nlines > len(txtLines) + 1:
+                nlines = len(txtLines) + 1
+            self._widget.resize(nlines, ncols)
             self._widget.clear()
             self._widget.box()
             yBeg, xBeg = self._widget.getbegyx()
             height, width = self._widget.getmaxyx()
-            txtLines = self._txt.split('\n')
-            y=1; x=1
+            y=0; x=1
             if len(txtLines) > 0 and len(txtLines) < height:
                 self._widget.addstr(y, x, txtLines[0])
                 for i in range(1, len(txtLines)):
@@ -101,7 +105,6 @@ class Display:
         txt=\
 """
 EntropyThief >cmd reference
----------------------------
 >set buflim=<NUM>
 >set maxworkers=<NUM>
 >stop
