@@ -1,4 +1,7 @@
 # view
+# author: krunch3r (KJM github.com/krunch3r76)
+# license: General Poetic Licence (GPL3)
+
 import curses
 import curses.ascii
 import curses.panel
@@ -11,7 +14,7 @@ import string
 
 # define the main text window
 class Display:
-    ENABLE_SPLASH = True
+    ENABLE_SPLASH = False
     ENABLE_SPLASH_1 = False
     _widget = None
     _splash = None
@@ -79,16 +82,21 @@ class Display:
 
             self._txt = txt
             txtLines = self._txt.split('\n')
-            if nlines > len(txtLines) + 1:
-                nlines = len(txtLines) + 1
+            txtLines_len = len(txtLines) + 1 # include horizontal bar
+            if nlines > txtLines_len + 1:
+                nlines = txtLines_len + 1
             self._widget.resize(nlines, ncols)
             self._widget.clear()
             self._widget.box()
             yBeg, xBeg = self._widget.getbegyx()
             height, width = self._widget.getmaxyx()
-            y=0; x=1
-            if len(txtLines) > 0 and len(txtLines) < height:
+            y=1; x=1
+            if txtLines_len > 0 and txtLines_len < height:
                 self._widget.addstr(y, x, txtLines[0])
+                y=y+1
+                self._widget.hline(y,0, curses.ACS_LTEE, 1)
+                self._widget.hline(y,1, curses.ACS_HLINE, width-2)
+                self._widget.hline(y,width-1, curses.ACS_RTEE, 1)
                 for i in range(1, len(txtLines)):
                     self._widget.addstr(y+i, x, txtLines[i])
 
@@ -103,8 +111,7 @@ class Display:
         self._widget.idlok(True); self._widget.scrollok(True)
         self._splash = self.Splash(self)
         txt=\
-"""
-EntropyThief >cmd reference
+"""EntropyThief >cmd reference
 >set buflim=<NUM>
 >set maxworkers=<NUM>
 >stop
@@ -313,6 +320,7 @@ class View:
 
         self.winbox.move(Y, len(self.linebuf)+1)
         self.winbox.clrtoeol()
+        self.winbox.addstr(Y, xMax-53, "ESC", curses.A_ITALIC | curses.A_STANDOUT)
         self.winbox.addstr(Y, xMax-46, "w")
         self.winbox.addstr(Y, xMax-46+1, ":" + countworkers_str + "/" + maxworkers_str)
         self.winbox.addstr(Y, xMax-37, current_total_str)
