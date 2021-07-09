@@ -1,6 +1,6 @@
 # view
 # author: krunch3r (KJM github.com/krunch3r76)
-# license: General Poetic Licence (GPL3)
+# license: General Poetic License (GPL3)
 
 import curses
 import curses.ascii

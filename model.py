@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 #entropythief
-
+# author: krunch3r (KJM github.com/krunch3r76)
+# license: General Poetic License (GPL3)
 ##external modules
 
 # standard
@@ -103,10 +104,14 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
 # Required by: entropythief
 class MySummaryLogger(yapapi.log.SummaryLogger):
     costRunning = 0.0
+    event_log_file=open('/dev/null')
+    to_ctl_q = None
 
     def __init__(self, to_ctl_q):
+        self.costRunning = 0.0
         self.to_ctl_q = to_ctl_q
         super().__init__()
+        self.event_log_file = open("events.log", "w")
 
     def log(self, event: yapapi.events.Event) -> None:
         to_controller_msg = None
@@ -126,10 +131,32 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
             to_controller_msg = {
                 'info': 'worker finished'
             }
+        elif isinstance(event, yapapi.events.AgreementCreated):
+            to_controller_msg = {
+                'event': 'AgreementCreated'
+                ,'agr_id': event.agr_id
+                ,'provider_id': event.provider_id
+                ,'provider_info': event.provider_info.name
+            }
+        elif hasattr(event, 'agr_id'):
+            to_controller_msg = {
+                'event': event.__class__.__name__
+                , 'agr_id': event.agr_id
+                , 'struct': str(event)
+            }
         else:
-            # uncomment to log all the Event types as they occur to stderr
-            # print(type(event), file=sys.stderr)
-            pass
+            
+            # uncomment to log all the Event types as they occur to the specified file
+            print(type(event), file=self.event_log_file)
+            print(event, file=self.event_log_file)
+            """
+            if hasattr(event, 'agr_id'):
+                agreement = { 'agr_id': event.agr_id
+                             , 
+                to_controller_msg = {
+                    'agreement_event': {}   
+                }
+            """
         #/if
         if to_controller_msg:
             self.to_ctl_q.put(to_controller_msg)
@@ -137,7 +164,8 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
         super().log(event)
 
 
-
+    def __del__(self):
+        self.event_log_file.close()
 
 
 

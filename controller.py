@@ -132,6 +132,8 @@ if __name__ == "__main__":
                         msg_to_model = {'cmd': 'pause execution'}
                         print(msg_to_model, file=maindebuglog)
                         to_model_q.put_nowait(msg_to_model)
+                elif 'event' in msg_from_model:
+                    print(msg_from_model, file=maindebuglog)
             #/if
             theview.refresh()
             time.sleep(0.005)
