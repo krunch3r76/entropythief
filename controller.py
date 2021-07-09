@@ -144,6 +144,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         theview.destroy()
         print("+=+=+=+=+=+=+=stopping=+=+=+=+=+=+=")
+        print("+=+=+=+=+=+=+=settling accounts=+=+=+=+=+=+=")
     finally:
         theview.destroy()
         cmd = {'cmd': 'stop'}
