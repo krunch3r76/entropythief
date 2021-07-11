@@ -22,7 +22,7 @@ import view
 IMAGE_HASH = "bf630610f23b1b8523d624c71e8b3f60c8fad1932ea174e00d7bc9c7"
 MAXWORKERS = 6
 MINPOOLSIZE = 3192
-BUDGET = 0.1
+BUDGET = 0.5
 kIPC_FIFO_FP = "/tmp/pilferedbits"
 
 

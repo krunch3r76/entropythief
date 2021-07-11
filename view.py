@@ -129,15 +129,7 @@ class Display:
     #...............................#
     def appendtxt(self, line):
         Y, X = self._widget.getyx()
-        height, length = self._widget.getmaxyx()
-        topY, topX = self._widget.getbegyx()
-        maxX = topX + length-1
-        if X == maxX:
-            self._widget.scroll(1)
-            X=0
         self._widget.addstr(Y, X, line)
-
-
 
     
     #....Display....................#
@@ -331,7 +323,7 @@ class View:
         self.winbox.addstr(Y, xMax-46+1, ":" + countworkers_str + "/" + maxworkers_str)
         self.winbox.addstr(Y, xMax-37, current_total_str)
         self.winbox.addstr(Y, xMax-37+len(current_total_str), "/"+current_budget_str)
-        self.winbox.addstr(Y, xMax-15, f"buf:{bytesInPipe}/{str(MINPOOLSIZE)}")
+        self.winbox.addstr(Y, xMax-15, "%.14s" % f"buf:{bytesInPipe}/{str(MINPOOLSIZE)}")
         self.winbox.move(Y, X)
 
         ucmd = ""
@@ -372,7 +364,6 @@ class View:
             self.winbox.redrawwin()
         # /if
         return ucmd
-
 
 
 
