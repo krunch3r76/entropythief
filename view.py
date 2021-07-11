@@ -129,6 +129,12 @@ class Display:
     #...............................#
     def appendtxt(self, line):
         Y, X = self._widget.getyx()
+        height, length = self._widget.getmaxyx()
+        topY, topX = self._widget.getbegyx()
+        maxX = topX + length-1
+        if X == maxX:
+            self._widget.scroll(1)
+            X=0
         self._widget.addstr(Y, X, line)
 
 

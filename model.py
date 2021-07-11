@@ -170,6 +170,9 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
 
 
 
+
+
+
   ###############################################
  #             entropythief()                  #
 ###############################################
@@ -182,7 +185,7 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
         mySummaryLogger = MySummaryLogger(to_ctl_q)
         # setup executor
         package = await vm.repo(
-            image_hash=IMAGE_HASH, min_mem_gib=0.005, min_storage_gib=0.01
+            image_hash=IMAGE_HASH, min_mem_gib=0.0005, min_storage_gib=0.001
         )
 
         while (not OP_STOP): # can catch OP_STOP here and/or in outer
@@ -203,8 +206,8 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                 , driver=args.driver
                 , event_consumer=mySummaryLogger.log
                 , strategy = yapapi.strategy.LeastExpensiveLinearPayuMS(
-                    max_fixed_price=Decimal("0.02"),
-                    max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.02"), yapapi.props.com.Counter.TIME: Decimal("0.02")}
+#                    max_fixed_price=Decimal("0.000001"),
+                    max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.003"), yapapi.props.com.Counter.TIME: Decimal("0.002")}
             ) 
             ) as golem:
                 OP_STOP = False
