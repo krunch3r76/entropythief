@@ -144,19 +144,18 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
                 , 'agr_id': event.agr_id
                 , 'struct': str(event)
             }
-        else:
-            
-            # uncomment to log all the Event types as they occur to the specified file
-            print(type(event), file=self.event_log_file)
-            print(event, file=self.event_log_file)
-            """
-            if hasattr(event, 'agr_id'):
-                agreement = { 'agr_id': event.agr_id
-                             , 
-                to_controller_msg = {
-                    'agreement_event': {}   
-                }
-            """
+        
+        # uncomment to log all the Event types as they occur to the specified file
+        # print(type(event), file=self.event_log_file)
+        print(event, file=self.event_log_file)
+        """
+        if hasattr(event, 'agr_id'):
+            agreement = { 'agr_id': event.agr_id
+                         , 
+            to_controller_msg = {
+                'agreement_event': {}   
+            }
+        """
         #/if
         if to_controller_msg:
             self.to_ctl_q.put(to_controller_msg)
@@ -206,7 +205,7 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                 , driver=args.driver
                 , event_consumer=mySummaryLogger.log
                 , strategy = yapapi.strategy.LeastExpensiveLinearPayuMS(
-#                    max_fixed_price=Decimal("0.000001"),
+                    max_fixed_price=Decimal("0.000001"),
                     max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.003"), yapapi.props.com.Counter.TIME: Decimal("0.002")}
             ) 
             ) as golem:
@@ -228,9 +227,10 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                     #/if
 
                     # query length of pipe -> bytesInPipe
-                    loop = asyncio.get_running_loop()
                     buf = bytearray(4)
-                    await loop.run_in_executor(None, fcntl.ioctl, fifoWriteEnd, termios.FIONREAD, buf, 1)
+                    # loop = asyncio.get_running_loop()
+                    # await loop.run_in_executor(None, fcntl.ioctl, fifoWriteEnd, termios.FIONREAD, buf, 1)
+                    fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
                     bytesInPipe = int.from_bytes(buf, "little")
 
                     if bytesInPipe < int(MINPOOLSIZE):
