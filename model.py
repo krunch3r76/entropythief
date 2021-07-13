@@ -17,7 +17,7 @@ from    datetime    import timedelta
 from    pathlib     import Path
 from    typing      import AsyncIterable, Iterator
 from    decimal     import  Decimal
-
+from    dataclasses import dataclass, field
 # 3rd party
 import  yapapi
 from    yapapi          import log
@@ -146,8 +146,9 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
             }
         
         # uncomment to log all the Event types as they occur to the specified file
-        # print(type(event), file=self.event_log_file)
-        print(event, file=self.event_log_file)
+        # print(event, file=self.event_log_file)
+
+
         """
         if hasattr(event, 'agr_id'):
             agreement = { 'agr_id': event.agr_id
@@ -157,6 +158,7 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
             }
         """
         #/if
+
         if to_controller_msg:
             self.to_ctl_q.put(to_controller_msg)
 
@@ -172,6 +174,44 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
 
 
 
+
+# TEMPORARY SCAFFOLDING
+from types import MappingProxyType
+from typing import Dict, Mapping, Optional
+from yapapi.props import com, Activity
+from yapapi import rest
+from yapapi.strategy import *
+@dataclass
+class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, object):
+    golem = None
+    def __init__(
+        self
+        , expected_time_secs: int = 60
+        , max_fixed_price: Decimal = Decimal("inf")
+        , max_price_for: Mapping[com.Counter, Decimal] = MappingProxyType({})
+        ):
+            super().__init__(expected_time_secs, max_fixed_price, max_price_for)
+
+    
+    async def score_offer(
+        self, offer: rest.market.OfferProposal, history: Optional[ComputationHistory] = None
+    ) -> float:
+        score = SCORE_REJECTED
+        """
+        if offer.props["golem.node.id.name"] == "friendly-winter":
+            print("******************** SAW AND REJECTED FRIENDLY WINTER !!!!! MUAHAHAHHAHAH", file=sys.stderr)
+        else:
+            score = await super().score_offer(offer, history)
+        return score
+        """
+        return await super().score_offer(offer, history)
+
+
+
+
+
+
+
   ###############################################
  #             entropythief()                  #
 ###############################################
@@ -179,6 +219,13 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
 
     OP_STOP = False
     OP_PAUSE = False
+    #strat = yapapi.strategy.LeastExpensiveLinearPayuMS(
+    strat = MyLeastExpensiveLinearPayMS(
+            max_fixed_price=Decimal("0.001")
+            , max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.02"), yapapi.props.com.Counter.TIME: Decimal("0.002")}
+            , expected_time_secs=3
+            ) 
+
     while not OP_STOP:
         await asyncio.sleep(0.05)
         mySummaryLogger = MySummaryLogger(to_ctl_q)
@@ -204,10 +251,7 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                 , network=args.network
                 , driver=args.driver
                 , event_consumer=mySummaryLogger.log
-                , strategy = yapapi.strategy.LeastExpensiveLinearPayuMS(
-                    max_fixed_price=Decimal("0.000001"),
-                    max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.003"), yapapi.props.com.Counter.TIME: Decimal("0.002")}
-            ) 
+                , strategy=strat
             ) as golem:
                 OP_STOP = False
                 while (not OP_STOP and not OP_PAUSE):
@@ -228,8 +272,6 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
 
                     # query length of pipe -> bytesInPipe
                     buf = bytearray(4)
-                    # loop = asyncio.get_running_loop()
-                    # await loop.run_in_executor(None, fcntl.ioctl, fifoWriteEnd, termios.FIONREAD, buf, 1)
                     fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
                     bytesInPipe = int.from_bytes(buf, "little")
 

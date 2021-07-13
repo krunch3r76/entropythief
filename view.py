@@ -29,6 +29,7 @@ class Display:
         #^ make *args for pad refresh   ^#
         #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
         def _refresh_coords(self):
+            # makes Splash 1/3 the height of subwindow
             yBegParent, xBegParent = self._parent_display._widget.getbegyx()
             Ymax, Xmax = self._parent_display._widget.getmaxyx()
             height3rd = int( (Ymax-yBegParent)/3)
@@ -45,6 +46,7 @@ class Display:
         #^           refresh            ^#
         #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
         def refresh(self):
+            # refresh & resize display with coords from _refresh_coords
             if self._parent_display:
                 self._widget.refresh(*self._refresh_coords())
             
@@ -77,29 +79,41 @@ class Display:
         #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
         def text(self, txt):
             coords = self._refresh_coords()
-            nlines = coords[4]-coords[2]; ncols = coords[5]-coords[3]
-
+            heightSplash = coords[4]-coords[2] # height of splash
+            widthSplash = coords[5]-coords[3] # width of splash
 
             self._txt = txt
             txtLines = self._txt.split('\n')
             txtLines_len = len(txtLines) + 1 # include horizontal bar
-            if nlines > txtLines_len + 1:
-                nlines = txtLines_len + 1
-            self._widget.resize(nlines, ncols)
+
+            # resize overfit on height to fit
+            # account for 1: top bar, 2 separator, 3 bottom bar
+            if heightSplash > txtLines_len + 3:
+                heightSplash = txtLines_len + 3
+            self._widget.resize(heightSplash, widthSplash)
             self._widget.clear()
             self._widget.box()
+
             yBeg, xBeg = self._widget.getbegyx()
-            height, width = self._widget.getmaxyx()
+            height = heightSplash
+            width = widthSplash
+            # height, width = self._widget.getmaxyx()
             y=1; x=1
-            if txtLines_len > 0 and txtLines_len < height:
-                self._widget.addstr(y, x, txtLines[0])
+            if txtLines_len > 0 and height > 3:
+                # draw first line
+                self._widget.addstr(y, x, f"%.{width-2}s" % txtLines[0])
                 y=y+1
+                # draw separator
                 self._widget.hline(y,0, curses.ACS_LTEE, 1)
                 self._widget.hline(y,1, curses.ACS_HLINE, width-2)
                 self._widget.hline(y,width-1, curses.ACS_RTEE, 1)
-                for i in range(1, len(txtLines)):
-                    self._widget.addstr(y+i, x, txtLines[i])
 
+                # how many of the remaining lines can fit
+                rangeMax = height - 3 - 1
+                # 1: topbar, 2:sep, 3:bot bar, 1: first line
+                # write text
+                for i in range(1, rangeMax):
+                    self._widget.addstr(y+i, x, f"%.{width-2}s" % txtLines[i])
 
 
 
@@ -318,12 +332,18 @@ class View:
 
         self.winbox.move(Y, len(self.linebuf)+1)
         self.winbox.clrtoeol()
-        self.winbox.addstr(Y, xMax-53, "ESC", curses.A_ITALIC | curses.A_STANDOUT)
-        self.winbox.addstr(Y, xMax-46, "w")
-        self.winbox.addstr(Y, xMax-46+1, ":" + countworkers_str + "/" + maxworkers_str)
-        self.winbox.addstr(Y, xMax-37, current_total_str)
-        self.winbox.addstr(Y, xMax-37+len(current_total_str), "/"+current_budget_str)
-        self.winbox.addstr(Y, xMax-15, "%.14s" % f"buf:{bytesInPipe}/{str(MINPOOLSIZE)}")
+        if xMax-53 > 0:
+            if xMax-53 + 3 > 0:
+                self.winbox.addstr(Y, xMax-53, "ESC", curses.A_ITALIC | curses.A_STANDOUT)
+            if xMax-46 + 2 + len(countworkers_str) + 1 + len(maxworkers_str) > 0:
+                self.winbox.addstr(Y, xMax-46, "w")
+                self.winbox.addstr(Y, xMax-46+1, ":" + countworkers_str + "/" + maxworkers_str)
+            if xMax-37 + len(current_total_str) + 1 + len(current_budget_str)  > 0:
+                self.winbox.addstr(Y, xMax-37, current_total_str)
+                self.winbox.addstr(Y, xMax-37+len(current_total_str), "/"+current_budget_str)
+            if xMax-15 + 14 > 0:
+                self.winbox.addstr(Y, xMax-15, "%.14s" % f"buf:{bytesInPipe}/{str(MINPOOLSIZE)}")
+
         self.winbox.move(Y, X)
 
         ucmd = ""
