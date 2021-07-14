@@ -66,5 +66,4 @@ this project was inspired by gandom. however, gandom does not draw upon the unde
 this application exposes an undocumented part of the Python API to handle specific events in a novel way. see the code for details (more to follow).
 
 known (to be fixed) issues:
-you might have some issues with tearing of the command/status line when resizing the window.
 once the budget has been reached, no more work is provisioned and unfinished work will be processed to completion, after which it is necessary to restart by stopping and rerunning to obtain more bits if desired.
