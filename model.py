@@ -221,8 +221,8 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
     OP_PAUSE = False
     #strat = yapapi.strategy.LeastExpensiveLinearPayuMS(
     strat = MyLeastExpensiveLinearPayMS(
-            max_fixed_price=Decimal("0.001")
-            , max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.02"), yapapi.props.com.Counter.TIME: Decimal("0.002")}
+            max_fixed_price=Decimal("0.0001")
+            , max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.01"), yapapi.props.com.Counter.TIME: Decimal("0.01")}
             , expected_time_secs=3
             ) 
 
@@ -387,9 +387,15 @@ def model__main(args, from_ctl_q, fifoWriteEnd, to_ctl_q, MINPOOLSIZE, MAXWORKER
     finally:
         cmd = {'cmd': 'stop'}
         to_ctl_q.put_nowait(cmd)
-        task.cancel()
-        try:
-            loop.run_until_complete(task)
-        except (asyncio.CancelledError, KeyboardInterrupt):
-            pass
+
+        pending = asyncio.all_tasks()
+        for task in pending:
+            task.cancel()
+
+        group = asyncio.gather(*pending, return_exceptions=True)
+        results_with_any_exceptions = loop.run_until_complete(group)
+        # all exceptions should have been handled, on the off chance
+        # not, this effectively ignores and stores them so all
+        # tasks not raising can be shutdown
+        loop.close()
 
