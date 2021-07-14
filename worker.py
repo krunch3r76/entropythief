@@ -3,6 +3,7 @@
 # pull all available entropy from /dev/random and store in text file as base64 for requestor retrieval
 from pathlib import *
 import base64
+import il
 
 outputdir='/golem/output'
 RESULT_PATH = Path(outputdir + '/result.bin')
