@@ -118,11 +118,11 @@ def generate_random_numbers() -> bytes:
 
 if __name__=="__main__":
     try:
+        generate_random_numbers()
         # randomBytes=read_available_random_bytes()
         # randomBytes = _rdrand()
         # encoded = base64.b64encode(randomBytes)
         # print(encoded.decode("utf-8"), end="")
-        pass
     except Exception as exception:
         print("uncaught exception", type(exception).__name__)
         print(exception)

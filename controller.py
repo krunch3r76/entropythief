@@ -19,9 +19,11 @@ import utils
 import argparse
 import view
 
-IMAGE_HASH = "bf630610f23b1b8523d624c71e8b3f60c8fad1932ea174e00d7bc9c7"
+import fcntl
+
+IMAGE_HASH = "1179f424828f13e380e2f82227c0d9f7862f7340d33171d9f9ca2b3f"
 MAXWORKERS = 6
-MINPOOLSIZE = 3192
+MINPOOLSIZE = 1048576
 BUDGET = 0.5
 kIPC_FIFO_FP = "/tmp/pilferedbits"
 
@@ -46,6 +48,7 @@ kIPC_FIFO_FP = "/tmp/pilferedbits"
 #        create_fifo_for_writing()            #
 ###############################################
 def create_fifo_for_writing(IPC_FIFO_FP):
+
     # -overwrite existing
     if os.path.exists(IPC_FIFO_FP):
         os.unlink(IPC_FIFO_FP)
@@ -53,8 +56,11 @@ def create_fifo_for_writing(IPC_FIFO_FP):
     # -/overwrite existing
 
     # -open
+    # fifo_for_writing = os.open(IPC_FIFO_FP, os.O_RDWR)
     fifo_for_writing = os.open(IPC_FIFO_FP, os.O_RDWR | os.O_NONBLOCK)
     # -/open
+    F_SETPIPE_SZ=1031
+    fcntl.fcntl(fifo_for_writing, F_SETPIPE_SZ, MINPOOLSIZE)
     return fifo_for_writing
 
 
