@@ -29,16 +29,12 @@ def _ilasm_rdrand():
 
 
 #-------------------------------------------------------#
-#           _rdrand()                                   #
-#   get a random (64bit) integer repeatedly             #
+#           _gen_rdrand()                               #
+#       yield 3 random int64s (24 bytes)                #
 #                                                       #
 #-------------------------------------------------------#
 def gen_rdrand():
     while True:
-        # val = _ilasm_rdrand()
-        # asbytes = val.to_bytes(8, byteorder="little", signed=True)
-        # rv.extend([ byte for byte in asbytes ] )
-        # rv.extend([ byte for byte in _ilasm_rdrand().to_bytes(8, byteorder="little", signed=True) ])
         yielded = bytearray()
         for _ in range(3):
             val = _ilasm_rdrand()
@@ -87,8 +83,22 @@ def read_available_random_bytes() -> bytes:
 
 
 
+# print the base64 encoding of at least bytesrequired, adding
+# bytes needed 
+def generate_random_numbers_test(bytesrequired=NUMBYTES) -> bytes:
+    missing = bytesrequired % 3 # missing count of bytes
+    bytesrequired += missing
+    coro = gen_rdrand()
+    next(coro)
+    while True:
+        result = coro.send(None)
+        bytesacquired += 24
+        if bytesacquired < bytesrequired:
+            encoded = base64.b64encode(result)
+        else:
+            break
 
-def generate_random_numbers() -> bytes:
+def generate_random_numbers_1() -> bytes:
     bytesrequired=NUMBYTES
     bytesacquired=0
     coro = gen_rdrand()
@@ -107,11 +117,29 @@ def generate_random_numbers() -> bytes:
             print(encoded.decode("utf-8"))
             break
 
-            # print newbytearray as base64 encoded
-        # print(len(result))
-    # thebytes = _rdrand(NUMBYTES)
-    # return thebytes
 
+def generate_random_numbers(bytesrequired=NUMBYTES) -> bytes:
+    bytesacquired=0
+    coro = gen_rdrand()
+    num_div = int(bytesrequired / 24)
+    num_rem = int(bytesrequired % 24)
+
+    next(coro)
+    while True:
+        next_random_twentyfour_bytes = coro.send(None)
+        bytesacquired += 24
+
+        if bytesacquired < num_div:
+            encoded = base64.b64encode(result)
+            print(encoded.decode("utf-8"), end="")
+        else:
+            if num_rem > 0:
+                # at this time we only want num_rem bytes
+                # from next_random_twentyfour_bytes
+                part = next_random_twentyfour_bytes[:num_rem]
+                partEncoded = base64.b64encode(part)
+                print(partEncoded.decode("utf-8"))
+            break
 
 
 
@@ -121,7 +149,7 @@ if __name__=="__main__":
     try:
         if len(sys.argv) > 1:
             NUMBYTES = int(sys.argv[1])
-        generate_random_numbers()
+        generate_random_numbers(NUMBYTES)
         # randomBytes=read_available_random_bytes()
         # randomBytes = _rdrand()
         # encoded = base64.b64encode(randomBytes)
