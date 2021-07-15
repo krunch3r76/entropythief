@@ -197,6 +197,9 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
         self, offer: rest.market.OfferProposal, history: Optional[ComputationHistory] = None
     ) -> float:
         score = SCORE_REJECTED
+        if offer.props["golem.inf.cpu.architecture"] == "x86_64":
+            if 'rdrand' in offer.props["golem.inf.cpu.capabilities"]:
+                score = await super().score_offer(offer, history)
         """
         if offer.props["golem.node.id.name"] == "friendly-winter":
             print("******************** SAW AND REJECTED FRIENDLY WINTER !!!!! MUAHAHAHHAHAH", file=sys.stderr)
@@ -204,8 +207,8 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
             score = await super().score_offer(offer, history)
         return score
         """
-        return await super().score_offer(offer, history)
-
+        # return await super().score_offer(offer, history)
+        return score
 
 
 

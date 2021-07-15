@@ -6,7 +6,7 @@ import base64
 import il
 import ctypes
 
-NUMBYTES=2**20
+NUMBYTES=2**19
 outputdir='/golem/output'
 RESULT_PATH = Path(outputdir + '/result.bin')
 
@@ -32,13 +32,18 @@ def _ilasm_rdrand():
 #   get a random (64bit) integer repeatedly             #
 #                                                       #
 #-------------------------------------------------------#
-def _rdrand(len=2**16):
-    rv = bytearray()
-    for _ in range (0, len):
-        val = _ilasm_rdrand()
-        asbytes = val.to_bytes(8, byteorder="little", signed=True)
-        rv.extend([ byte for byte in asbytes ] )
-    return rv
+def gen_rdrand():
+    while True:
+        # val = _ilasm_rdrand()
+        # asbytes = val.to_bytes(8, byteorder="little", signed=True)
+        # rv.extend([ byte for byte in asbytes ] )
+        # rv.extend([ byte for byte in _ilasm_rdrand().to_bytes(8, byteorder="little", signed=True) ])
+        yielded = bytearray()
+        for _ in range(3):
+            val = _ilasm_rdrand()
+            asbytes = val.to_bytes(8, byteorder="little", signed=True)
+            yielded.extend([ byte for byte in asbytes ])
+        yield yielded
 
 #-------------------------------------------------------#
 #           _read_entropy_available()                   #
@@ -83,8 +88,28 @@ def read_available_random_bytes() -> bytes:
 
 
 def generate_random_numbers() -> bytes:
-    thebytes = _rdrand()
-    return thebytes
+    bytesrequired=NUMBYTES
+    bytesacquired=0
+    coro = gen_rdrand()
+    next(coro)
+    while True:
+        result = coro.send(None)
+        bytesacquired += 24
+        if bytesacquired + 24 < bytesrequired:
+            encoded = base64.b64encode(result)
+            print(encoded.decode("utf-8"), end="")
+            # print all bytesacquired as base64 to stdout
+        else:
+            bytestogo = bytesrequired - bytesacquired
+            curtailed_result = result[0:bytestogo]
+            encoded = base64.b64encode(curtailed_result)
+            print(encoded.decode("utf-8"))
+            break
+
+            # print newbytearray as base64 encoded
+        # print(len(result))
+    # thebytes = _rdrand(NUMBYTES)
+    # return thebytes
 
 
 
@@ -94,9 +119,10 @@ def generate_random_numbers() -> bytes:
 if __name__=="__main__":
     try:
         # randomBytes=read_available_random_bytes()
-        randomBytes = _rdrand(NUMBYTES)
-        encoded = base64.b64encode(randomBytes)
-        print(encoded.decode("utf-8"), end="")
+        # randomBytes = _rdrand()
+        # encoded = base64.b64encode(randomBytes)
+        # print(encoded.decode("utf-8"), end="")
+        pass
     except Exception as exception:
         print("uncaught exception", type(exception).__name__)
         print(exception)
