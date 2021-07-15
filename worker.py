@@ -130,7 +130,7 @@ def generate_random_numbers(bytesrequired=NUMBYTES) -> bytes:
         bytesacquired += 24
 
         if bytesacquired < num_div:
-            encoded = base64.b64encode(result)
+            encoded = base64.b64encode(next_random_twentyfour_bytes)
             print(encoded.decode("utf-8"), end="")
         else:
             if num_rem > 0:
