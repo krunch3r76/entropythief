@@ -348,6 +348,7 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                                 if task.result:
                                     try:
                                         randomBytes = base64.b64decode(task.result)
+                                        print(f"++++++ task received {len(randomBytes)} bytes out of {task.data} requested +++", file=sys.stderr)
                                         msg = randomBytes.hex()
                                         to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
                                         to_ctl_q.put(to_ctl_cmd)

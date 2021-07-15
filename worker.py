@@ -127,9 +127,8 @@ def generate_random_numbers(bytesrequired=NUMBYTES) -> bytes:
     next(coro)
     while True:
         next_random_twentyfour_bytes = coro.send(None)
-        bytesacquired += 24
 
-        if bytesacquired < num_div:
+        if bytesacquired < num_div*24:
             encoded = base64.b64encode(next_random_twentyfour_bytes)
             print(encoded.decode("utf-8"), end="")
         else:
@@ -138,10 +137,10 @@ def generate_random_numbers(bytesrequired=NUMBYTES) -> bytes:
                 # from next_random_twentyfour_bytes
                 part = next_random_twentyfour_bytes[:num_rem]
                 partEncoded = base64.b64encode(part)
-                print(partEncoded.decode("utf-8"))
+                print(partEncoded.decode("utf-8"), end="")
             break
-
-
+        bytesacquired += 24
+    print()
 
 
 
