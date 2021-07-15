@@ -140,7 +140,6 @@ def generate_random_numbers(bytesrequired=NUMBYTES) -> bytes:
                 print(partEncoded.decode("utf-8"), end="")
             break
         bytesacquired += 24
-    print()
 
 
 

@@ -48,19 +48,9 @@ EXPECTED_ENTROPY = 1044480 # the number of bytes we can expect from any single p
 async def write_to_pipe(fifoWriteEnd, thebytes, POOL_LIMIT=1048576):
     try:
         loop = asyncio.get_running_loop()
-        # POOL_LIMIT = fcntl.fcntl(fifoWriteEnd, 1032)
-        # chunks into 65536
-        # INCOMPLETE
-        # divcount = int(len(thebytes)/65535)
-        # remainder = len(thebytes)%65535
-        # for o in range(divcount):
-        #    os.write(fifoWriteEnd, thebytes[ (o+1)*65535 : (o+2)*65535 ] )
-        # middle = len(thebytes)/2
-        # await loop.run_in_executor(None, os.write, fifoWriteEnd, thebytes)
 
         buf = bytearray(4)
-        await loop.run_in_executor(None, fcntl.ioctl, fifoWriteEnd, termios.FIONREAD, buf, 1)
-        # fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
+        fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
         bytesInPipe = int.from_bytes(buf, "little")
         bytesNeeded = POOL_LIMIT - bytesInPipe
 
@@ -95,7 +85,7 @@ async def write_to_pipe(fifoWriteEnd, thebytes, POOL_LIMIT=1048576):
         print("write_to_pipe: UNHANDLED EXCEPTION", file=sys.stderr)
         print(type(exception).__name__, file=sys.stderr)
         print(exception, file=sys.stderr)
-        raise CancelledError #review
+        raise asyncio.CancelledError #review
 
 
 
@@ -368,7 +358,7 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
         print("entropythief: UNHANDLED EXCEPTION", file=sys.stderr)
         print(type(exception).__name__, file=sys.stderr)
         print(exception, file=sys.stderr)
-        raise CancelledError #review
+        raise asyncio.CancelledError #review
 
 
 
