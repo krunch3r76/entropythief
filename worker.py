@@ -4,14 +4,41 @@
 from pathlib import *
 import base64
 import il
+import ctypes
 
+NUMBYTES=2**20
 outputdir='/golem/output'
 RESULT_PATH = Path(outputdir + '/result.bin')
 
+# OUT: 64bit integer
+def _ilasm_rdrand():
+    f = il.def_asm(
+            name="r2",
+            prototype=ctypes.CFUNCTYPE(ctypes.c_int64),
+            code="""
+            .intel_syntax noprefix
+            0:
+            mov rax, 0
+            rdrand rax
+            jnc 0b
+            ret
+            """)
+    return f()
 
 
 
-
+#-------------------------------------------------------#
+#           _rdrand()                                   #
+#   get a random (64bit) integer repeatedly             #
+#                                                       #
+#-------------------------------------------------------#
+def _rdrand(len=2**16):
+    rv = bytearray()
+    for _ in range (0, len):
+        val = _ilasm_rdrand()
+        asbytes = val.to_bytes(8, byteorder="little", signed=True)
+        rv.extend([ byte for byte in asbytes ] )
+    return rv
 
 #-------------------------------------------------------#
 #           _read_entropy_available()                   #
@@ -55,8 +82,9 @@ def read_available_random_bytes() -> bytes:
 
 
 
-
-
+def generate_random_numbers() -> bytes:
+    thebytes = _rdrand()
+    return thebytes
 
 
 
@@ -65,7 +93,8 @@ def read_available_random_bytes() -> bytes:
 
 if __name__=="__main__":
     try:
-        randomBytes=read_available_random_bytes()
+        # randomBytes=read_available_random_bytes()
+        randomBytes = _rdrand(NUMBYTES)
         encoded = base64.b64encode(randomBytes)
         print(encoded.decode("utf-8"), end="")
     except Exception as exception:
