@@ -5,6 +5,7 @@ from pathlib import *
 import base64
 import il
 import ctypes
+import sys
 
 NUMBYTES=2**19
 outputdir='/golem/output'
@@ -118,6 +119,8 @@ def generate_random_numbers() -> bytes:
 
 if __name__=="__main__":
     try:
+        if len(sys.argv) > 1:
+            NUMBYTES = int(sys.argv[1])
         generate_random_numbers()
         # randomBytes=read_available_random_bytes()
         # randomBytes = _rdrand()

@@ -332,17 +332,18 @@ class View:
 
         self.winbox.move(Y, len(self.linebuf)+1)
         self.winbox.clrtoeol()
-        if xMax-53 > 0:
-            if xMax-53 + 3 > 0:
-                self.winbox.addstr(Y, xMax-53, "ESC", curses.A_ITALIC | curses.A_STANDOUT)
-            if xMax-46 + 2 + len(countworkers_str) + 1 + len(maxworkers_str) > 0:
-                self.winbox.addstr(Y, xMax-46, "w")
-                self.winbox.addstr(Y, xMax-46+1, ":" + countworkers_str + "/" + maxworkers_str)
-            if xMax-37 + len(current_total_str) + 1 + len(current_budget_str)  > 0:
-                self.winbox.addstr(Y, xMax-37, current_total_str)
-                self.winbox.addstr(Y, xMax-37+len(current_total_str), "/"+current_budget_str)
-            if xMax-15 + 14 > 0:
-                self.winbox.addstr(Y, xMax-15, "%.14s" % f"buf:{bytesInPipe}/{str(MINPOOLSIZE)}")
+        ADJUST=10
+        if xMax-53-ADJUST > 0:
+            if xMax-53-ADJUST + 3 > 0:
+                self.winbox.addstr(Y, xMax-53-ADJUST, "ESC", curses.A_ITALIC | curses.A_STANDOUT)
+            if xMax-46-ADJUST + 2 + len(countworkers_str) + 1 + len(maxworkers_str) > 0:
+                self.winbox.addstr(Y, xMax-46-ADJUST, "w")
+                self.winbox.addstr(Y, xMax-46+1-ADJUST, ":" + countworkers_str + "/" + maxworkers_str)
+            if xMax-37-ADJUST + len(current_total_str) + 1 + len(current_budget_str)  > 0:
+                self.winbox.addstr(Y, xMax-37-ADJUST, current_total_str)
+                self.winbox.addstr(Y, xMax-37-ADJUST+len(current_total_str), "/"+current_budget_str)
+            if xMax-15-ADJUST + 14 > 0:
+                self.winbox.addstr(Y, xMax-15-ADJUST, "%.20s" % f"buf:{bytesInPipe}/{str(MINPOOLSIZE)}")
 
         self.winbox.move(Y, X)
 

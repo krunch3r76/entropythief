@@ -46,9 +46,9 @@ EXPECTED_ENTROPY = 65536 # the number of bytes we can expect from any single pro
 #-------------------------------------------------#
 # required by: entropythief()
 async def write_to_pipe(fifoWriteEnd, thebytes, POOL_LIMIT=1048576):
-    loop = asyncio.get_running_loop()
-
     try:
+        loop = asyncio.get_running_loop()
+        # POOL_LIMIT = fcntl.fcntl(fifoWriteEnd, 1032)
         # chunks into 65536
         # INCOMPLETE
         # divcount = int(len(thebytes)/65535)
@@ -57,33 +57,45 @@ async def write_to_pipe(fifoWriteEnd, thebytes, POOL_LIMIT=1048576):
         #    os.write(fifoWriteEnd, thebytes[ (o+1)*65535 : (o+2)*65535 ] )
         # middle = len(thebytes)/2
         # await loop.run_in_executor(None, os.write, fifoWriteEnd, thebytes)
+
         buf = bytearray(4)
-        fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
+        await loop.run_in_executor(None, fcntl.ioctl, fifoWriteEnd, termios.FIONREAD, buf, 1)
+        # fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
         bytesInPipe = int.from_bytes(buf, "little")
         bytesNeeded = POOL_LIMIT - bytesInPipe
+
+        count_to_write = 0
         if bytesNeeded > 0:
             count_to_write = len(thebytes)
             if count_to_write + bytesInPipe > POOL_LIMIT:
                 count_to_write = POOL_LIMIT - bytesInPipe 
-            if count_to_write > len(thebytes):
+            if count_to_write > len(thebytes): #review
                 count_to_write = len(thebytes)
-            print(f"********** {count_to_write} adding to get to  {bytesNeeded} (current {bytesInPipe}) MAX: {POOL_LIMIT}*********", file=sys.stderr)
-
             count_remaining = count_to_write
+
+
+
             written = os.write(fifoWriteEnd, thebytes[:count_remaining])
             total_written = written
             offset=written
-            print(f"++++++++++++ {written} total written {total_written} vs {count_to_write}/{count_remaining} ------------", file=sys.stderr)
-            while total_written < count_to_write:
+            while count_remaining - written >4096 and total_written < count_to_write:
                 count_remaining -= written
-                written = os.write(fifoWriteEnd, thebytes[offset:count_remaining])
+                POOL_LIMIT_F = fcntl.fcntl(fifoWriteEnd, 1032)
+                buf = bytearray(4)
+                fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
+                bytesInPipe = int.from_bytes(buf, "little")
+                written = os.write(fifoWriteEnd, thebytes[offset:(offset + count_remaining)])
                 offset+=written
                 total_written+=written
-                print(f"------------ {written} total written {total_written} vs {count_to_write}/{count_remaining} ------------", file=sys.stderr)
+    except BlockingIOError:
+        pass
     except BrokenPipeError:
         raise
-    except:
-        raise
+    except Exception as exception:
+        print("write_to_pipe: UNHANDLED EXCEPTION", file=sys.stderr)
+        print(type(exception).__name__, file=sys.stderr)
+        print(exception, file=sys.stderr)
+        raise CancelledError #review
 
 
 
@@ -102,7 +114,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     async for task in tasks:
         try:
             #taskid=task.data
-            ctx.run(ENTRYPOINT_FILEPATH.as_posix())
+            ctx.run(ENTRYPOINT_FILEPATH.as_posix(), [str(task.data)])
 
             # TODO ensure worker does not output on error
 
@@ -250,7 +262,7 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
  #             entropythief()                  #
 ###############################################
 async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BUDGET, MAXWORKERS, IMAGE_HASH, TASK_TIMEOUT=kTASK_TIMEOUT):
-
+    loop = asyncio.get_running_loop()
     OP_STOP = False
     OP_PAUSE = False
     #strat = yapapi.strategy.LeastExpensiveLinearPayuMS(
@@ -306,12 +318,14 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                     # query length of pipe -> bytesInPipe
                     buf = bytearray(4)
                     fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
+                    # await loop.run_in_executor(None, fcntl.ioctl, fifoWriteEnd, termios.FIONREAD, buf, 1)
                     bytesInPipe = int.from_bytes(buf, "little")
 
                     if bytesInPipe < int(MINPOOLSIZE):
                         bytes_needed = MINPOOLSIZE - bytesInPipe
                         # estimate how many workers it would take given the EXPECTED_ENTROPY per worker
                         workers_needed = int(bytes_needed/EXPECTED_ENTROPY)
+                        bytes_needed_per_worker = int(bytes_needed/workers_needed)
                         if workers_needed == 0:
                             workers_needed = 1 # always at least one to get at least 1 byte
                         # adjust down workers_needed if exceeding max
@@ -320,7 +334,7 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                         # execute tasks
                         completed_tasks = golem.execute_tasks(
                             steps,
-                            [yapapi.Task(data=taskid) for taskid in range(workers_needed)],
+                            [yapapi.Task(data=bytes_needed_per_worker) for _ in range(workers_needed)],
                             payload=package,
                             max_workers=workers_needed,
                             timeout=TASK_TIMEOUT

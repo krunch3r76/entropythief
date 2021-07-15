@@ -23,7 +23,8 @@ import fcntl
 
 IMAGE_HASH = "1179f424828f13e380e2f82227c0d9f7862f7340d33171d9f9ca2b3f"
 MAXWORKERS = 6
-MINPOOLSIZE = 1048576
+MAXPOOLSIZE = 1048576 - 4096
+MINPOOLSIZE = MAXPOOLSIZE
 BUDGET = 0.5
 kIPC_FIFO_FP = "/tmp/pilferedbits"
 
@@ -60,7 +61,10 @@ def create_fifo_for_writing(IPC_FIFO_FP):
     fifo_for_writing = os.open(IPC_FIFO_FP, os.O_RDWR | os.O_NONBLOCK)
     # -/open
     F_SETPIPE_SZ=1031
-    fcntl.fcntl(fifo_for_writing, F_SETPIPE_SZ, MINPOOLSIZE)
+    result = fcntl.fcntl(fifo_for_writing, F_SETPIPE_SZ, MAXPOOLSIZE)
+
+    #F_GETPIPE_SZ=1032 
+    #POOL_LIMIT_REPORTED = fcntl.fcntl(fifo_for_writing, 1032)
     return fifo_for_writing
 
 
