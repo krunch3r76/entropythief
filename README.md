@@ -24,7 +24,7 @@ set buflim=<num>	# the minimum threshold that entropythief should do its best to
 set maxworkers=<num>	# the most workers Golem executor can provision  # the more the more exotic!
 stop			# stop/exit
 ```
-**DEPRECATED NOTE: to increase the budget, please set the script variable BUDGET at the head of controller.py**
+NOTE: to increase the budget, please set the script variable BUDGET at the head of controller.py
 
 UI components:
 
