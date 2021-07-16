@@ -1,12 +1,12 @@
 # entropythief
 
-get entropy from multiple providers at a "steal" of a rate and send to a named pipe. requests are sent whenever the named pipe falls below a set threshold.
+get random bits (aka entropy) from multiple providers utilizing Intel's RDRAND cpu instruction and send to a named pipe. requests are sent whenever the named pipe falls below a set threshold.
 
 usage:
 ```
 git clone https://github.com/krunch3r76/entropythief.git
 cd entropythief
-git checkout alpha-v4
+git checkout alpha-v5
 python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r requirements.txt
