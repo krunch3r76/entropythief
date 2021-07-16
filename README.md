@@ -18,7 +18,7 @@ python3 print_nonce.py # watch how the status line changes!
 # optional: tail yapapi log and/or stderr file
 ```
 
-this requestor runs to pilfer as many bytes of random 1's and 0's from up to as many providers as the user specifies. these parameters can be adjusted on the fly by the user with the following commands:
+this requestor runs to pilfer as many bytes of random 1's and 0's from up to as many providers as the user specifies. these parameter(s) can be adjusted on the fly by the user with the following commands:
 ```
 set buflim=<num>	# the minimum threshold that entropythief should do its best to stay above <DEPRECATED>
 set maxworkers=<num>	# the most workers Golem executor can provision  # the more the more exotic!
@@ -26,8 +26,17 @@ stop			# stop/exit
 ```
 NOTE: to increase the budget, please set the script variable BUDGET at the head of controller.py
 
-UI components:
+__Usage/API__:
+once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to the named pipe. the named pipe can be accessed via any programming language or shell language capable of reading it. a simple python API module has been included at `readers/_pipe.py`, and an example script is in `readers/print_nonce`. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. _If the script is run repeatedly as a loop, it demonstrates how entropythief provisions workers on demand._
 
+
+__comments/reflections__:
+entropy is extremely scarce and as of now extremely expensive. but some of the most useful things in life are not scarce, take air for one. entropy (i.e. from /dev/random), though potentially a diamond of randommness where there is sufficient user io with the computer, is being phased out in favor of air ie Intel's own on-die random number generator, which is a very close approximatation to entropy and even more so because of so many foreign cpu's utilized by way of golem. it may continue to be an optional component, otherwise i may need to change the name!
+
+this project was inspired by gandom. however, gandom does not draw upon the underlying system's entropy source, which Docker reportedly guarantees is attached to every image. furthermore, gandom mixes bytes to produce a single value whereas entropy thief provides a stream of values, which incidentally can be mixed, or played with in a myriad of ways. additionally, entropythief stores bits in raw format while presenting to the user a bird's eye view of them in the intelligible base 16 (cf. base64).
+
+
+__UI components__:
 ```
 w:<number of workers started but unfinished>/maximum>
 cost:<total cost aggregated from paid invoices>/<budget>
@@ -36,10 +45,9 @@ buf:<number of random bits in units of bytes>/<maximum number of bytes "buflim">
 on the same line that the UI accepts input, status messages are presented.
 the fields are as described above.
 
-once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to the named pipe. the named pipe can be accessed via any programming language or shell language capable of reading it. a simple python API has been included in the readers directory, _pipe, and an example script is in readers/print_nonce. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. If the script is run repeatedly as a loop, it demonstrates how entropythief provisions workers on demand.
 
 
-components:
+__other components__:
 ```
 /tmp/pilferedbits		# named pipe accessible to anyone on the system with a ski mask
 ./stderr			# messages and optionally yapapi logger info messages are written to this file in place of stderr
@@ -48,6 +56,17 @@ components:
 ./controller.py			# controller-view runnable script that daemonizes the model (Golem executor) and coordinates with the view
 ./model.py			# the Golem specific code (daemonized by controller.py)
 ```
+
+__applications__:
+have fun with a unpredictable and exotic stream of 1's and 0's!
+
+
+
+this application exposes undocumented parts of the Python API to handle specific events in a novel way and to filter providers. see the code for details (elaboration to follow).
+
+known (to be fixed) issues:
+once the budget has been reached, no more work is provisioned and unfinished work will be processed to completion, after which it is necessary to restart by stopping and rerunning to obtain more bits if desired.
+
 ```
 TO DO: a discussion of randomness and the difference between random bits vs random number generators.
 TO DO: modularize view to facilitate porting and daemonization
@@ -59,16 +78,3 @@ TO DO: video demonstration
 TO DO: improve comments
 TO DO: document flow
 ```
-applications:
-have fun with a unpredictable and exotic stream of 1's and 0's!
-
-**comments/reflections**:
-entropy is extremely scarce and as of now extremely expensive. but some of the most useful things in life are not scarce, take air for one. entropy (i.e. from /dev/random), though potentially a diamond of randommness where there is sufficient user io with the computer, is being phased out in favor of air ie Intel's own on-die random number generator, which is a very close approximatation to entropy and even more so because of so many foreign cpu's utilized by way of golem. it may continue to be an optional component, otherwise i may need to change the name!
-
-this project was inspired by gandom. however, gandom does not draw upon the underlying system's entropy source, which Docker reportedly guarantees is attached to every image. furthermore, gandom mixes bytes to produce a single value whereas entropy thief provides a stream of values, which incidentally can be mixed, or played with in a myriad of ways. additionally, entropythief stores bits in raw format while presenting to the user a bird's eye view of them in the intelligible base 16 (cf. base64).
-
-this application exposes undocumented parts of the Python API to handle specific events in a novel way and to filter providers. see the code for details (elaboration to follow).
-
-known (to be fixed) issues:
-once the budget has been reached, no more work is provisioned and unfinished work will be processed to completion, after which it is necessary to restart by stopping and rerunning to obtain more bits if desired.
-
