@@ -1,4 +1,5 @@
 # entropythief
+**LINUX little endian (e.g. Intel chips i.e. not Raspberry Pi ARM) only**
 
 get random bits (aka entropy) from multiple providers utilizing Intel's RDRAND cpu instruction and send to a named pipe. requests are sent whenever the named pipe falls below a set threshold.
 
@@ -19,11 +20,11 @@ python3 print_nonce.py # watch how the status line changes!
 
 this requestor runs to pilfer as many bytes of random 1's and 0's from up to as many providers as the user specifies. these parameters can be adjusted on the fly by the user with the following commands:
 ```
-set buflim=<num>	# the minimum threshold that entropythief should do its best to stay above
+set buflim=<num>	# the minimum threshold that entropythief should do its best to stay above <DEPRECATED>
 set maxworkers=<num>	# the most workers Golem executor can provision  # the more the more exotic!
 stop			# stop/exit
 ```
-**NOTE: to increase the budget, please set the script variable BUDGET at the head of controller.py**
+**DEPRECATED NOTE: to increase the budget, please set the script variable BUDGET at the head of controller.py**
 
 UI components:
 
@@ -49,11 +50,14 @@ components:
 ```
 ```
 TO DO: a discussion of randomness and the difference between random bits vs random number generators.
-TO DO: windows compatible routines for named pipes and UI
+TO DO: modularize view to facilitate porting and daemonization
+TO DO: windows compatible routines for named pipes (and UI)
 TO DO: adjust budget on the fly
 TO DO: detail design e.g. my original, self developed mvc model, etc
 TO DO: develop a market strategy for better rates
 TO DO: video demonstration
+TO DO: improve comments
+TO DO: document flow
 ```
 applications:
 have fun with a unpredictable and exotic stream of 1's and 0's!
@@ -63,7 +67,7 @@ entropy is scarce. i will develop a discussion file to elaborate on that later. 
 
 this project was inspired by gandom. however, gandom does not draw upon the underlying system's entropy source, which Docker reportedly guarantees is attached to every image. furthermore, gandom mixes bytes to produce a single value whereas entropy thief provides a stream of values, which incidentally can be mixed, or played with in a myriad of ways. additionally, entropythief stores bits in raw format while presenting to the user a bird's eye view of them in the intelligible base 16 (cf. base64).
 
-this application exposes an undocumented part of the Python API to handle specific events in a novel way. see the code for details (more to follow).
+this application exposes an undocumented part of the Python API to handle specific events in a novel way and to filter providers. see the code for details (elaboration to follow).
 
 known (to be fixed) issues:
 once the budget has been reached, no more work is provisioned and unfinished work will be processed to completion, after which it is necessary to restart by stopping and rerunning to obtain more bits if desired.
