@@ -1,5 +1,5 @@
 FROM python:slim
-VOLUME golem/output
+VOLUME /golem/output
 COPY worker.py golem/run/
 RUN apt update
 RUN apt-get -y install build-essential

@@ -13,7 +13,6 @@ import model
 import os
 import sys
 import multiprocessing
-import select
 import time
 import utils
 import argparse
@@ -21,10 +20,12 @@ import view
 
 import fcntl
 
-IMAGE_HASH = "0e62fc30d04bb0883048c74cac21e1c8cc7459263b9b3f24458e9c82"
-MAXWORKERS = 6
-MAXPOOLSIZE = 1048576 - 4096
-MINPOOLSIZE = MAXPOOLSIZE
+IMAGE_HASH = "eb9d18bf1262a3f070baae7a7ff5f150233ca00f329ee46f8d089e95"
+MAXWORKERS = 3
+_MEGABYTE = 1048576
+_MAXPOOLSIZE = _MEGABYTE # this is the theoretical max
+MINPOOLSIZE = _MAXPOOLSIZE - 4096 # leave one page room to prevent blocking
+#MINPOOLSIZE = _MAXPOOLSIZE
 BUDGET = 0.5
 kIPC_FIFO_FP = "/tmp/pilferedbits"
 
@@ -61,7 +62,7 @@ def create_fifo_for_writing(IPC_FIFO_FP):
     fifo_for_writing = os.open(IPC_FIFO_FP, os.O_RDWR | os.O_NONBLOCK)
     # -/open
     F_SETPIPE_SZ=1031
-    result = fcntl.fcntl(fifo_for_writing, F_SETPIPE_SZ, MAXPOOLSIZE)
+    result = fcntl.fcntl(fifo_for_writing, F_SETPIPE_SZ, _MAXPOOLSIZE)
 
     #F_GETPIPE_SZ=1032 
     #POOL_LIMIT_REPORTED = fcntl.fcntl(fifo_for_writing, 1032)

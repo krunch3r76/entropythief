@@ -6,8 +6,10 @@ import base64
 import il
 import ctypes
 import sys
+import json
 
 NUMBYTES=2**19
+#outputdir='/tmp'
 outputdir='/golem/output'
 RESULT_PATH = Path(outputdir + '/result.bin')
 
@@ -118,7 +120,9 @@ def generate_random_numbers_1() -> bytes:
             break
 
 
-def generate_random_numbers(bytesrequired=NUMBYTES) -> bytes:
+def generate_random_numbers(d=dict(), bytesrequired=NUMBYTES) -> bytes:
+    d['requested']=int(bytesrequired)
+    output=str()
     bytesacquired=0
     coro = gen_rdrand()
     num_div = int(bytesrequired / 24)
@@ -130,16 +134,37 @@ def generate_random_numbers(bytesrequired=NUMBYTES) -> bytes:
 
         if bytesacquired < num_div*24:
             encoded = base64.b64encode(next_random_twentyfour_bytes)
-            print(encoded.decode("utf-8"), end="")
+            output+=encoded.decode("utf-8")
+            # print(encoded.decode("utf-8"), end="")
         else:
             if num_rem > 0:
                 # at this time we only want num_rem bytes
                 # from next_random_twentyfour_bytes
                 part = next_random_twentyfour_bytes[:num_rem]
                 partEncoded = base64.b64encode(part)
-                print(partEncoded.decode("utf-8"), end="")
+                output+=partEncoded.decode("utf-8")
+                # print(partEncoded.decode("utf-8"), end="")
             break
         bytesacquired += 24
+
+    d['b64']=output
+
+
+
+
+
+def generate_random_numbers_bin(bytesrequired=NUMBYTES) -> bytes:
+    int64_count = int(bytesrequired / 8)
+    rem_bytes_count = bytesrequired % 8
+    thebytes=bytearray()
+    for _ in range(int64_count):
+       bytes_int64 = _ilasm_rdrand().to_bytes(8, byteorder="little", signed=True)
+       thebytes.extend(bytes_int64)
+    if rem_bytes_count > 0:
+        bytes_int64 = _ilasm_rdrand().to_bytes(8, byteorder="little", signed=True)
+        thebytes.extend(bytes_int64[0:rem_bytes_count])
+    return thebytes
+
 
 
 
@@ -147,13 +172,12 @@ if __name__=="__main__":
     try:
         if len(sys.argv) > 1:
             NUMBYTES = int(sys.argv[1])
-        generate_random_numbers(NUMBYTES)
-        # randomBytes=read_available_random_bytes()
-        # randomBytes = _rdrand()
-        # encoded = base64.b64encode(randomBytes)
-        # print(encoded.decode("utf-8"), end="")
+
+        thebytes=generate_random_numbers_bin(NUMBYTES)
+        with RESULT_PATH.open(mode="wb") as f:
+            f.write(thebytes)
     except Exception as exception:
-        print("uncaught exception", type(exception).__name__)
-        print(exception)
-        raise
+        print("worker.py: UNHANDLED EXCEPTION", file=sys.stderr)
+        print(type(exception).__name__, file=sys.stderr)
+        print(exception, file=sys.stderr)
 
