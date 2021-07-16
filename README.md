@@ -62,12 +62,13 @@ TO DO: document flow
 applications:
 have fun with a unpredictable and exotic stream of 1's and 0's!
 
-comments:
-entropy is scarce. i will develop a discussion file to elaborate on that later. that said, it is so rare, that even a high rate might be considered a steal. or, you might consider it the other way around!
+**comments/reflections**:
+entropy is extremely scarce and as of now extremely expensive. but some of the most useful things in life are not scarce, take air for one. entropy (i.e. from /dev/random), though potentially a diamond of randommness where there is sufficient user io with the computer, is being phased out in favor of air ie Intel's own on-die random number generator, which is a very close approximatation to entropy and even more so because of so many foreign cpu's utilized by way of golem. it may continue to be an optional component, otherwise i may need to change the name!
 
 this project was inspired by gandom. however, gandom does not draw upon the underlying system's entropy source, which Docker reportedly guarantees is attached to every image. furthermore, gandom mixes bytes to produce a single value whereas entropy thief provides a stream of values, which incidentally can be mixed, or played with in a myriad of ways. additionally, entropythief stores bits in raw format while presenting to the user a bird's eye view of them in the intelligible base 16 (cf. base64).
 
-this application exposes an undocumented part of the Python API to handle specific events in a novel way and to filter providers. see the code for details (elaboration to follow).
+this application exposes undocumented parts of the Python API to handle specific events in a novel way and to filter providers. see the code for details (elaboration to follow).
 
 known (to be fixed) issues:
 once the budget has been reached, no more work is provisioned and unfinished work will be processed to completion, after which it is necessary to restart by stopping and rerunning to obtain more bits if desired.
+
