@@ -89,9 +89,10 @@ def harness_entropy(loot_size, cb, endianness="little", IPC_FIFO_FP=kIPC_FIFO_FP
                         pass
                     fifo_read = _open_pipe_for_reading(IPC_FIFO_FP)
                 #/if  [!fifo available]
-                count = _count_bytes_in_pipe(fifo_read)
+                # count = _count_bytes_in_pipe(fifo_read)
                 while _count_bytes_in_pipe(fifo_read) < loot_size:
                     time.sleep(0.1) # rest between ioctl calls or risk crash
+                    continue
                 #/while  [!payload readable]
                 loot = os.read(fifo_read, loot_size)
                 cb(loot)

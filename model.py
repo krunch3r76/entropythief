@@ -13,14 +13,12 @@ import  termios
 import  fcntl
 import  asyncio
 from    io          import StringIO
-from    datetime    import timedelta
+from    datetime    import timedelta, datetime, timezone
 from    pathlib     import Path
 from    typing      import AsyncIterable, Iterator
 from    decimal     import  Decimal
 from    dataclasses import dataclass, field
 import  json
-import selectors
-
 # 3rd party
 import  yapapi
 from    yapapi          import log
@@ -114,11 +112,12 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     loop = asyncio.get_running_loop()
     async for task in tasks:
         try:
+            start_time = datetime.now()
+            expiration = datetime.now(timezone.utc) + timedelta(seconds=30)
             #taskid=task.data
             ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']))
 
             # TODO ensure worker does not output on error
-
             future_results = yield ctx.commit()
             results = await future_results
             print(results, file=sys.stderr)
@@ -133,8 +132,12 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                 future_result = yield ctx.commit()
                 # block/await here before switching to the other tasks otherwise state change
                 # on buffer causes more work than necessary in my loop
-                result = await future_result
+                await asyncio.wait_for(future_result, timeout=30)
+                # result = await future_result
                 task.accept_result()
+        except asyncio.TimeoutError:
+            print("steps: TIMEOUT", file=sys.stderr)
+            task.reject_result()
         except Exception as exception:
             print("steps: UNHANDLED EXCEPTION", file=sys.stderr)
             print(type(exception).__name__, file=sys.stderr)
@@ -250,6 +253,7 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
         self, offer: rest.market.OfferProposal, history: Optional[ComputationHistory] = None
     ) -> float:
         score = SCORE_REJECTED
+        print(offer.props, file=sys.stderr)
         if offer.props["golem.inf.cpu.architecture"] == "x86_64":
             if 'rdrand' in offer.props["golem.inf.cpu.capabilities"]:
                 score = await super().score_offer(offer, history)
@@ -303,15 +307,15 @@ class TaskResultWriter:
 ###############################################
 async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BUDGET, MAXWORKERS, IMAGE_HASH, TASK_TIMEOUT=kTASK_TIMEOUT):
     taskResultWriter = TaskResultWriter(fifoWriteEnd, to_ctl_q, MINPOOLSIZE)
-    sel = selectors.DefaultSelector()
-    sel.register(fifoWriteEnd, selectors.EVENT_WRITE)
+    # sel = selectors.DefaultSelector()
+    # sel.register(fifoWriteEnd, selectors.EVENT_WRITE)
     try:
         loop = asyncio.get_running_loop()
         OP_STOP = False
         OP_PAUSE = False
         strat = MyLeastExpensiveLinearPayMS(
-                max_fixed_price=Decimal("0.0001")
-                , max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.01"), yapapi.props.com.Counter.TIME: Decimal("0.01")}
+                # max_fixed_price=Decimal("0.0001"),
+                # max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.001"), yapapi.props.com.Counter.TIME: Decimal("0.001")}
                 ) 
 
         while not OP_STOP:
@@ -319,7 +323,7 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
             mySummaryLogger = MySummaryLogger(to_ctl_q)
             # setup executor
             package = await vm.repo(
-                image_hash=IMAGE_HASH, min_mem_gib=0.0005, min_storage_gib=0.001
+                image_hash=IMAGE_HASH, min_mem_gib=0.001, min_storage_gib=0.001
             )
 
             while (not OP_STOP): # can catch OP_STOP here and/or in outer
@@ -371,7 +375,7 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                         fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
                         # await loop.run_in_executor(None, fcntl.ioctl, fifoWriteEnd, termios.FIONREAD, buf, 1)
                         bytesInPipe = int.from_bytes(buf, "little")
-                        if bytesInPipe < int(MINPOOLSIZE):
+                        if bytesInPipe < int(MINPOOLSIZE/2):
                             bytes_needed = MINPOOLSIZE - bytesInPipe
                             # estimate how many workers it would take given the EXPECTED_ENTROPY per worker
                             workers_needed = int(bytes_needed/MAXWORKERS)
@@ -394,7 +398,7 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                             async for task in completed_tasks:
                                 if task.result:
                                     try:
-                                        print("COMPLETED TASK!!!!!!!!!", file=sys.stderr)
+                                        print("++++++++++++++++++++COMPLETED TASK!!!!!!!!!", file=sys.stderr)
                                         pass
                                         # msg = randomBytes.hex()
                                         # to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
@@ -471,7 +475,6 @@ def model__main(args, from_ctl_q, fifoWriteEnd, to_ctl_q, MINPOOLSIZE, MAXWORKER
 
     try:
         loop.run_until_complete(task)
-
     except yapapi.NoPaymentAccountError as e:
         handbook_url = (
             "https://handbook.golem.network/requestor-tutorials/"
@@ -498,15 +501,18 @@ def model__main(args, from_ctl_q, fifoWriteEnd, to_ctl_q, MINPOOLSIZE, MAXWORKER
     finally:
         cmd = {'cmd': 'stop'}
         to_ctl_q.put_nowait(cmd)
-
+        """
         pending = asyncio.all_tasks()
         for task in pending:
             task.cancel()
 
+        print("gathering")
         group = asyncio.gather(*pending, return_exceptions=True)
+        print("run until complete")
         results_with_any_exceptions = loop.run_until_complete(group)
         # all exceptions should have been handled, on the off chance
         # not, this effectively ignores and stores them so all
         # tasks not raising can be shutdown
+        print("close")
         loop.close()
-
+        """
