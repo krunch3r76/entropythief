@@ -420,7 +420,8 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
         print("entropythief: UNHANDLED EXCEPTION", file=sys.stderr)
         print(type(exception).__name__, file=sys.stderr)
         print(exception, file=sys.stderr)
-        raise asyncio.CancelledError #review
+        raise
+        # raise asyncio.CancelledError #review
 
 
 
@@ -475,6 +476,8 @@ def model__main(args, from_ctl_q, fifoWriteEnd, to_ctl_q, MINPOOLSIZE, MAXWORKER
 
     try:
         loop.run_until_complete(task)
+    except asyncio.exceptions.CancelledError:
+        pass
     except yapapi.NoPaymentAccountError as e:
         handbook_url = (
             "https://handbook.golem.network/requestor-tutorials/"

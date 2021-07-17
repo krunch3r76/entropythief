@@ -22,10 +22,10 @@ import fcntl
 
 IMAGE_HASH = "eb9d18bf1262a3f070baae7a7ff5f150233ca00f329ee46f8d089e95"
 MAXWORKERS = 3
-_MEGABYTE = 1048576
-_MAXPOOLSIZE = _MEGABYTE # this is the theoretical max
+_MEBIBYTE = 2**20
+_MAXPOOLSIZE = _MEBIBYTE # this is the theoretical max
 MINPOOLSIZE = _MAXPOOLSIZE - 4096 # leave one page room to prevent blocking
-#MINPOOLSIZE = _MAXPOOLSIZE
+#MINPOOLSIZE= 30000 - 4096
 BUDGET = 5.0
 kIPC_FIFO_FP = "/tmp/pilferedbits"
 

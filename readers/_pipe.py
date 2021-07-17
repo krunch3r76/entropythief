@@ -38,11 +38,13 @@ kIPC_FIFO_FP="/tmp/pilferedbits"
 #           _count_bytes_in_pipe            #
 #-------------------------------------------#
 def _count_bytes_in_pipe(fifo_read):
-    s = select.select([fifo_read],[],[],0)
+    s = select.select([fifo_read],[],[fifo_read],0)
     if len(s[0]) > 0:
         buf=bytearray(4)
         fcntl.ioctl(fifo_read, termios.FIONREAD, buf, 1)
-        return int.from_bytes(buf, "little")
+        val = int.from_bytes(buf, "little")
+        return val
+        # return int.from_bytes(buf, "little")
     else:
         return 0
 
@@ -60,7 +62,7 @@ def _open_pipe_for_reading(IPC_FIFO_FP):
             break
         else:
             print("...", file=sys.stderr, end="\r")
-            time.sleep(0.1)
+            time.sleep(0.0001)
             continue
     return fifo
 
@@ -69,6 +71,7 @@ def _open_pipe_for_reading(IPC_FIFO_FP):
 
 ##################################################
 #           harness_entropy()                    #
+#   generator                                    #
 ##################################################
 def harness_entropy(loot_size, cb, endianness="little", IPC_FIFO_FP=kIPC_FIFO_FP):
 
@@ -77,7 +80,6 @@ def harness_entropy(loot_size, cb, endianness="little", IPC_FIFO_FP=kIPC_FIFO_FP
     endianness: to ensure the bits are received the same way generated, this option is available to help
     IPC_FIFO_FP: to override the named pipe file. the default is same as that used by entropythief
     """
-
     fifo_read = _open_pipe_for_reading(IPC_FIFO_FP)
     try:
         while True:
@@ -88,10 +90,23 @@ def harness_entropy(loot_size, cb, endianness="little", IPC_FIFO_FP=kIPC_FIFO_FP
                     except OSError:
                         pass
                     fifo_read = _open_pipe_for_reading(IPC_FIFO_FP)
+                xlist = select.select([], [], [fifo_read],0)[2]
+                if len(xlist) > 0:
+                    print(xlist)
+                    try:
+                        os.close(fifo_read)
+                    except OSError:
+                        pass
+                    fifo_read = _open_pipe_for_reading(IPC_FIFO_FP)
+                    time.sleep(0.001)
+                    continue
+                else:
+                    fifo_read = _open_pipe_for_reading(IPC_FIFO_FP)
+                    slist = select.select([fifo_read], [], [fifo_read],0)
                 #/if  [!fifo available]
                 # count = _count_bytes_in_pipe(fifo_read)
                 while _count_bytes_in_pipe(fifo_read) < loot_size:
-                    time.sleep(0.1) # rest between ioctl calls or risk crash
+                    time.sleep(0.001) # rest between ioctl calls or risk crash
                     continue
                 #/while  [!payload readable]
                 loot = os.read(fifo_read, loot_size)
