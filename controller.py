@@ -26,7 +26,7 @@ _MEGABYTE = 1048576
 _MAXPOOLSIZE = _MEGABYTE # this is the theoretical max
 MINPOOLSIZE = _MAXPOOLSIZE - 4096 # leave one page room to prevent blocking
 #MINPOOLSIZE = _MAXPOOLSIZE
-BUDGET = 1.0
+BUDGET = 5.0
 kIPC_FIFO_FP = "/tmp/pilferedbits"
 
 
