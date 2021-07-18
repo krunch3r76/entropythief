@@ -14,11 +14,12 @@ import os
 import sys
 import multiprocessing
 import time
-import utils
 import argparse
 import view
-
 import fcntl
+
+import utils
+from pipe_writer import *
 
 IMAGE_HASH = "eb9d18bf1262a3f070baae7a7ff5f150233ca00f329ee46f8d089e95"
 MAXWORKERS = 3
@@ -84,6 +85,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     maindebuglog = open("main.log", "w", buffering=1)
     stderr2file = open("stderr", "w", buffering=1)
+    devdebuglog = open("devdebug.log", "w", buffering=1)
     sys.stderr = stderr2file
 
     # set up {to_,from_}_model_queue
@@ -96,8 +98,20 @@ if __name__ == "__main__":
     try:
         # instantiate and setup view
         theview = view.View(fifoWriteEnd)
-
-        p1 = multiprocessing.Process(target=model.model__main, daemon=True, args=[args, to_model_q, fifoWriteEnd, from_model_q, MINPOOLSIZE, MAXWORKERS, BUDGET, IMAGE_HASH, args.enable_logging])
+        taskResultWriter = TaskResultWriter(fifoWriteEnd, from_model_q, MINPOOLSIZE)
+        # invoke model__main on separate process
+        p1 = multiprocessing.Process(target=model.model__main, daemon=True
+                , args=[args
+                    , to_model_q
+                    , fifoWriteEnd
+                    , from_model_q
+                    , MINPOOLSIZE
+                    , MAXWORKERS
+                    , BUDGET
+                    , IMAGE_HASH
+                    , taskResultWriter
+                    , args.enable_logging
+                    ])
         p1.start()
         u = theview.coro_update_mainwindow()
         next(u)
@@ -122,7 +136,8 @@ if __name__ == "__main__":
                 msg_to_model = {'cmd': 'restart' }
                 to_model_q.put_nowait(msg_to_model)
             if msg_to_model:
-                print(msg_to_model, file=maindebuglog)
+                if not ('cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes'):
+                    print(msg_to_model, file=maindebuglog)
             #/if
             if not from_model_q.empty():
                 msg_from_model = from_model_q.get_nowait()
@@ -145,6 +160,8 @@ if __name__ == "__main__":
                         to_model_q.put_nowait(msg_to_model)
                 elif 'event' in msg_from_model:
                     print(msg_from_model, file=maindebuglog)
+                elif 'debug' in msg_from_model:
+                    print(msg_from_model, file=devdebuglog)
             #/if
             theview.refresh()
             time.sleep(0.005)

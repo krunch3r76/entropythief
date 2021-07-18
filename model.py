@@ -30,71 +30,10 @@ import  worker
 
 
 
-
 ENTRYPOINT_FILEPATH = Path("/golem/run/worker.py")
 kTASK_TIMEOUT = timedelta(minutes=6)
 # EXPECTED_ENTROPY = 1044480 # the number of bytes we can expect from any single provider's entropy pool
 # TODO dynamically adjust based on statistical data
-
-
-
-
-
-
-
-  #-------------------------------------------------#
- #           write_to_pipe                         #
-#-------------------------------------------------#
-# required by: entropythief()
-async def write_to_pipe(fifoWriteEnd, thebytes, POOL_LIMIT):
-    WRITTEN = 0
-    try:
-        loop = asyncio.get_running_loop()
-
-        buf = bytearray(4)
-        fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
-        bytesInPipe = int.from_bytes(buf, "little")
-        bytesNeeded = POOL_LIMIT - bytesInPipe
-
-        count_to_write = 0
-        if bytesNeeded > 0:
-            count_to_write = len(thebytes)
-            if count_to_write + bytesInPipe > POOL_LIMIT:
-                count_to_write = POOL_LIMIT - bytesInPipe 
-            if count_to_write > len(thebytes): #review
-                count_to_write = len(thebytes)
-            count_remaining = count_to_write
-            written = os.write(fifoWriteEnd, thebytes[:count_remaining])
-            total_written = written
-            offset=written
-            WRITTEN = written
-            """
-            # while count_remaining - written >= 4096 and total_written < count_to_write:
-            while count_remaining - written > 1 and total_written < count_to_write:
-                count_remaining -= written
-                POOL_LIMIT_F = fcntl.fcntl(fifoWriteEnd, 1032)
-                buf = bytearray(4)
-                fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
-                bytesInPipe = int.from_bytes(buf, "little")
-                written = os.write(fifoWriteEnd, thebytes[offset:(offset + count_remaining)])
-                offset+=written
-                total_written+=written
-            """
-        return WRITTEN
-    except BlockingIOError:
-        print(f"write_to_pipe: COULD NOT WRITE. count_remaining = {count_remaining}", file=sys.stderr)
-        WRITTEN=0
-        pass
-    except BrokenPipeError:
-        WRITTEN=0
-        raise
-    except Exception as exception:
-        print("write_to_pipe: UNHANDLED EXCEPTION", file=sys.stderr)
-        print(type(exception).__name__, file=sys.stderr)
-        print(exception, file=sys.stderr)
-        raise asyncio.CancelledError #review
-    finally:
-        return WRITTEN
 
 
 
@@ -115,12 +54,12 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             start_time = datetime.now()
             expiration = datetime.now(timezone.utc) + timedelta(seconds=30)
             #taskid=task.data
+            # request <count> bytes from provider and wait
             ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']))
-
-            # TODO ensure worker does not output on error
             future_results = yield ctx.commit()
             results = await future_results
-            print(results, file=sys.stderr)
+
+            # download bytes only if there is no stderr message from provider
             stderr=results[-1].stderr
             if stderr:
                 print("A WORKER REPORTED AN ERROR:\n", stderr, file=sys.stderr)
@@ -128,13 +67,17 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             elif results[-1].success == False:
                 task.reject_result()
             else:
+                # download_bytes and invoke callback at task.data['writer']
                 ctx.download_bytes(worker.RESULT_PATH.as_posix(), task.data['writer'], sys.maxsize)
                 future_result = yield ctx.commit()
                 # block/await here before switching to the other tasks otherwise state change
                 # on buffer causes more work than necessary in my loop
-                await asyncio.wait_for(future_result, timeout=30)
-                # result = await future_result
-                task.accept_result()
+                result = await asyncio.wait_for(future_result, timeout=30)
+                if result:
+                    task.accept_result()
+                    print("STEPS: accepting result", file=sys.stderr)
+                else:
+                    task.reject_result("timeout")
         except asyncio.TimeoutError:
             print("steps: TIMEOUT", file=sys.stderr)
             task.reject_result()
@@ -142,7 +85,8 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             print("steps: UNHANDLED EXCEPTION", file=sys.stderr)
             print(type(exception).__name__, file=sys.stderr)
             print(exception, file=sys.stderr)
-            raise exception
+            raise asyncio.GeneratorExit
+            # raise exception
         finally:
             try:
                 pass
@@ -224,7 +168,22 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
     def __del__(self):
         self.event_log_file.close()
 
+"""
+  ###################################
+ # TaskResultWriter{}              #
+###################################
+class TaskResultWriter:
+    def __init__(self, fifoWriteEnd, to_ctl_q, POOL_LIMIT):
+        self.to_ctl_q = to_ctl_q
+        self.fifoWriteEnd = fifoWriteEnd
+        self.POOL_LIMIT = POOL_LIMIT
 
+    async def __call__(self, randomBytes):
+        written = await write_to_pipe(self.fifoWriteEnd, randomBytes, self.POOL_LIMIT)
+        msg = randomBytes[:written].hex()
+        to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
+        self.to_ctl_q.put(to_ctl_cmd)
+"""
 
 
 
@@ -278,22 +237,6 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
 
 
 
-  ###################################
- # TaskResultWriter{}              #
-###################################
-class TaskResultWriter:
-    def __init__(self, fifoWriteEnd, to_ctl_q, POOL_LIMIT):
-        self.to_ctl_q = to_ctl_q
-        self.fifoWriteEnd = fifoWriteEnd
-        self.POOL_LIMIT = POOL_LIMIT
-
-    async def __call__(self, randomBytes):
-        written = await write_to_pipe(self.fifoWriteEnd, randomBytes, self.POOL_LIMIT)
-        msg = randomBytes[:written].hex()
-        to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
-        self.to_ctl_q.put(to_ctl_cmd)
-
-
 
 
 
@@ -305,8 +248,23 @@ class TaskResultWriter:
   ###############################################
  #             entropythief()                  #
 ###############################################
-async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BUDGET, MAXWORKERS, IMAGE_HASH, TASK_TIMEOUT=kTASK_TIMEOUT):
-    taskResultWriter = TaskResultWriter(fifoWriteEnd, to_ctl_q, MINPOOLSIZE)
+async def entropythief(
+        args
+        , from_ctl_q
+        , fifoWriteEnd
+        , MINPOOLSIZE
+        , to_ctl_q
+        , BUDGET
+        , MAXWORKERS
+        , IMAGE_HASH
+        , result_cb
+        , TASK_TIMEOUT=kTASK_TIMEOUT):
+    """
+    result_cb: callable that inputs random bytes acquired
+    """
+    taskResultWriter = result_cb
+    # taskResultWriter = TaskResultWriter(fifoWriteEnd, to_ctl_q, MINPOOLSIZE)
+
     # sel = selectors.DefaultSelector()
     # sel.register(fifoWriteEnd, selectors.EVENT_WRITE)
     try:
@@ -389,7 +347,7 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                             # execute tasks
                             completed_tasks = golem.execute_tasks(
                                 steps,
-                                [yapapi.Task(data={'req_byte_count': bytes_needed_per_worker, 'writer': taskResultWriter}) for _ in range(workers_needed)],
+                                [yapapi.Task(data={'req_byte_count': bytes_needed_per_worker, 'writer': result_cb}) for _ in range(workers_needed)],
                                 payload=package,
                                 max_workers=workers_needed,
                                 timeout=TASK_TIMEOUT
@@ -410,7 +368,8 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
                                         print("completed_tasks: UNHANDLED EXCEPTION", file=sys.stderr)
                                         print(type(exception).__name__, file=sys.stderr)
                                         print(exception, file=sys.stderr)
-                                        raise asyncio.CancelledError #review
+                                        raise asyncio.GeneratorExit
+                                        #raise asyncio.CancelledError #review
                             #/async for
                         #/if
                     #/while True
@@ -420,8 +379,8 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
         print("entropythief: UNHANDLED EXCEPTION", file=sys.stderr)
         print(type(exception).__name__, file=sys.stderr)
         print(exception, file=sys.stderr)
-        raise
-        # raise asyncio.CancelledError #review
+        # raise asyncio.GeneratorExit
+        raise asyncio.CancelledError #review
 
 
 
@@ -440,7 +399,16 @@ async def entropythief(args, from_ctl_q, fifoWriteEnd, MINPOOLSIZE, to_ctl_q, BU
 #   main entry for the model                                              #
 #   launches entropythief attaching message queues                        #
 ###########################################################################
-def model__main(args, from_ctl_q, fifoWriteEnd, to_ctl_q, MINPOOLSIZE, MAXWORKERS, BUDGET, IMAGE_HASH, use_default_logger=True):
+def model__main(args
+        , from_ctl_q
+        , fifoWriteEnd
+        , to_ctl_q
+        , MINPOOLSIZE
+        , MAXWORKERS
+        , BUDGET
+        , IMAGE_HASH
+        , result_cb
+        , use_default_logger=True):
     """
         args := result of argparse.Namespace() from the controller/cli
         from_ctl_q := Queue of messages coming from controller
@@ -450,8 +418,11 @@ def model__main(args, from_ctl_q, fifoWriteEnd, to_ctl_q, MINPOOLSIZE, MAXWORKER
         MAXWORKERS := the maximum number of workers assigned at a time for results (may be reduced internally)
         BUDGET := the maxmum amount of GLM spendable per run
         IMAGE_HASH := the hash link to the vm that providers will run
+        result_cb := callback for random bytes acquired
     """
 
+    msg = {'debug': type(result_cb) }
+    to_ctl_q.put_nowait(msg)
     # loop
     loop = asyncio.get_event_loop()
 
@@ -471,13 +442,15 @@ def model__main(args, from_ctl_q, fifoWriteEnd, to_ctl_q, MINPOOLSIZE, MAXWORKER
             , to_ctl_q
             , BUDGET
             , MAXWORKERS
-            , IMAGE_HASH)
+            , IMAGE_HASH
+            , result_cb=result_cb
+            )
     )
 
     try:
         loop.run_until_complete(task)
     except asyncio.exceptions.CancelledError:
-        pass
+        loop.run_until_complete(task)
     except yapapi.NoPaymentAccountError as e:
         handbook_url = (
             "https://handbook.golem.network/requestor-tutorials/"
@@ -498,10 +471,13 @@ def model__main(args, from_ctl_q, fifoWriteEnd, to_ctl_q, MINPOOLSIZE, MAXWORKER
         msg = {'exception': "..." +  _msg }
         to_ctl_q.put_nowait(msg)
     except Exception as e:
-        msg = {'exception': str(type(e)) + ": " + str(e) }
+        msg = {'model exception': str(type(e)) + ": " + str(e) }
         to_ctl_q.put_nowait(msg)
 
     finally:
+        task.cancel()
+        loop.run_until_complete(task)
+        print("MODEL: process exiting", file=sys.stderr)
         cmd = {'cmd': 'stop'}
         to_ctl_q.put_nowait(cmd)
         """
