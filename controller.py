@@ -35,6 +35,20 @@ kIPC_FIFO_FP = "/tmp/pilferedbits"
 
 
 
+  ###################################
+ # TaskResultWriter{}              #
+###################################
+class TaskResultWriter:
+    def __init__(self, fifoWriteEnd, to_ctl_q, POOL_LIMIT):
+        self.to_ctl_q = to_ctl_q
+        self.fifoWriteEnd = fifoWriteEnd
+        self.POOL_LIMIT = POOL_LIMIT
+
+    async def __call__(self, randomBytes):
+        written = await write_to_pipe(self.fifoWriteEnd, randomBytes, self.POOL_LIMIT)
+        msg = randomBytes[:written].hex()
+        to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
+        self.to_ctl_q.put(to_ctl_cmd)
 
 
 

@@ -19,10 +19,17 @@ from    typing      import AsyncIterable, Iterator
 from    decimal     import  Decimal
 from    dataclasses import dataclass, field
 import  json
-# 3rd party
+
+## 3rd party
 import  yapapi
 from    yapapi          import log
 from    yapapi.payload  import vm
+# Market Strategy imports, REVIEW
+from types import MappingProxyType
+from typing import Dict, Mapping, Optional
+from yapapi.props import com, Activity
+from yapapi import rest
+from yapapi.strategy import *
 
 # internal
 import  utils
@@ -50,51 +57,35 @@ kTASK_TIMEOUT = timedelta(minutes=6)
 async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     loop = asyncio.get_running_loop()
     async for task in tasks:
-        try:
-            start_time = datetime.now()
-            expiration = datetime.now(timezone.utc) + timedelta(seconds=30)
-            #taskid=task.data
-            # request <count> bytes from provider and wait
-            ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']))
-            future_results = yield ctx.commit()
-            results = await future_results
+        start_time = datetime.now()
+        expiration = datetime.now(timezone.utc) + timedelta(seconds=30)
+        #taskid=task.data
+        # request <count> bytes from provider and wait
+        ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']))
+        future_results = yield ctx.commit()
+        results = await future_results
 
-            # download bytes only if there is no stderr message from provider
-            stderr=results[-1].stderr
-            if stderr:
-                print("A WORKER REPORTED AN ERROR:\n", stderr, file=sys.stderr)
-                task.reject_result(stderr)
-            elif results[-1].success == False:
-                task.reject_result()
-            else:
-                # download_bytes and invoke callback at task.data['writer']
-                ctx.download_bytes(worker.RESULT_PATH.as_posix(), task.data['writer'], sys.maxsize)
-                future_result = yield ctx.commit()
-                # block/await here before switching to the other tasks otherwise state change
-                # on buffer causes more work than necessary in my loop
+        # download bytes only if there is no stderr message from provider
+        stderr=results[-1].stderr
+        if stderr:
+            print("A WORKER REPORTED AN ERROR:\n", stderr, file=sys.stderr)
+            task.reject_result(stderr)
+        elif results[-1].success == False:
+            task.reject_result()
+        else:
+            # download_bytes and invoke callback at task.data['writer']
+            ctx.download_bytes(worker.RESULT_PATH.as_posix(), task.data['writer'], sys.maxsize)
+            future_result = yield ctx.commit()
+            # block/await here before switching to the other tasks otherwise state change
+            # on buffer causes more work than necessary in my loop
+            try:
                 result = await asyncio.wait_for(future_result, timeout=30)
                 if result:
-                    task.accept_result()
+                    task.accept_result(True)
                     print("STEPS: accepting result", file=sys.stderr)
-                else:
-                    task.reject_result("timeout")
-        except asyncio.TimeoutError:
-            print("steps: TIMEOUT", file=sys.stderr)
-            task.reject_result()
-        except Exception as exception:
-            print("steps: UNHANDLED EXCEPTION", file=sys.stderr)
-            print(type(exception).__name__, file=sys.stderr)
-            print(exception, file=sys.stderr)
-            raise asyncio.GeneratorExit
-            # raise exception
-        finally:
-            try:
-                pass
-            except FileNotFoundError:
-                pass
-
-
-
+            except asyncio.TimeoutError:
+                print("steps: TIMEOUT", file=sys.stderr)
+                task.reject_result("timeout")
 
 
 
@@ -168,34 +159,12 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
     def __del__(self):
         self.event_log_file.close()
 
-"""
-  ###################################
- # TaskResultWriter{}              #
-###################################
-class TaskResultWriter:
-    def __init__(self, fifoWriteEnd, to_ctl_q, POOL_LIMIT):
-        self.to_ctl_q = to_ctl_q
-        self.fifoWriteEnd = fifoWriteEnd
-        self.POOL_LIMIT = POOL_LIMIT
-
-    async def __call__(self, randomBytes):
-        written = await write_to_pipe(self.fifoWriteEnd, randomBytes, self.POOL_LIMIT)
-        msg = randomBytes[:written].hex()
-        to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
-        self.to_ctl_q.put(to_ctl_cmd)
-"""
 
 
 
 
 
 
-# TEMPORARY SCAFFOLDING
-from types import MappingProxyType
-from typing import Dict, Mapping, Optional
-from yapapi.props import com, Activity
-from yapapi import rest
-from yapapi.strategy import *
 @dataclass
 class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, object):
     golem = None
@@ -216,16 +185,10 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
         if offer.props["golem.inf.cpu.architecture"] == "x86_64":
             if 'rdrand' in offer.props["golem.inf.cpu.capabilities"]:
                 score = await super().score_offer(offer, history)
-        """
-        if offer.props["golem.node.id.name"] == "friendly-winter":
-            print("******************** SAW AND REJECTED FRIENDLY WINTER !!!!! MUAHAHAHHAHAH", file=sys.stderr)
-        else:
-            score = await super().score_offer(offer, history)
-        return score
-        """
         # return await super().score_offer(offer, history)
         if score == SCORE_REJECTED:
-            print("REJECTED------------------------------------------\n\n\n", file=sys.stderr)
+            pass
+            # print("REJECTED------------------------------------------\n\n\n", file=sys.stderr)
         return score
 
 
@@ -265,122 +228,98 @@ async def entropythief(
     taskResultWriter = result_cb
     # taskResultWriter = TaskResultWriter(fifoWriteEnd, to_ctl_q, MINPOOLSIZE)
 
-    # sel = selectors.DefaultSelector()
-    # sel.register(fifoWriteEnd, selectors.EVENT_WRITE)
-    try:
-        loop = asyncio.get_running_loop()
-        OP_STOP = False
-        OP_PAUSE = False
-        strat = MyLeastExpensiveLinearPayMS(
-                # max_fixed_price=Decimal("0.0001"),
-                # max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.001"), yapapi.props.com.Counter.TIME: Decimal("0.001")}
-                ) 
+    loop = asyncio.get_running_loop()
+    OP_STOP = False
+    OP_PAUSE = False
+    strat = MyLeastExpensiveLinearPayMS(
+            # max_fixed_price=Decimal("0.0001"),
+            # max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.001"), yapapi.props.com.Counter.TIME: Decimal("0.001")}
+            ) 
 
-        while not OP_STOP:
+    while not OP_STOP:
+        await asyncio.sleep(0.05)
+        mySummaryLogger = MySummaryLogger(to_ctl_q)
+        # setup executor
+        package = await vm.repo(
+            image_hash=IMAGE_HASH, min_mem_gib=0.001, min_storage_gib=0.001
+        )
+
+        while (not OP_STOP): # can catch OP_STOP here and/or in outer
             await asyncio.sleep(0.05)
-            mySummaryLogger = MySummaryLogger(to_ctl_q)
-            # setup executor
-            package = await vm.repo(
-                image_hash=IMAGE_HASH, min_mem_gib=0.001, min_storage_gib=0.001
-            )
+            if OP_PAUSE: # burn queue messages unless stop message seen
+                if not from_ctl_q.empty():
+                    qmsg = from_ctl_q.get_nowait()
+                    print(qmsg, file=sys.stderr)
+                    if 'cmd' in qmsg and qmsg['cmd'] == 'stop':
+                        OP_STOP = True
+                    elif 'cmd' in qmsg and qmsg['cmd'] == 'resume execution':
+                        OP_PAUSE=False # currently resume execution is not part of the design, included for future designs
+                continue # always rewind outer loop on OP_PAUSE
 
-            while (not OP_STOP): # can catch OP_STOP here and/or in outer
-                await asyncio.sleep(0.05)
-                if OP_PAUSE: # burn queue messages unless stop message seen
+            # check that the pipe is writable before assigning work
+
+            async with yapapi.Golem(
+                budget=BUDGET
+                , subnet_tag=args.subnet_tag
+                , network=args.network
+                , driver=args.driver
+                , event_consumer=mySummaryLogger.log
+                , strategy=strat
+            ) as golem:
+                OP_STOP = False
+                while (not OP_STOP and not OP_PAUSE):
+                    await asyncio.sleep(0.05)
                     if not from_ctl_q.empty():
                         qmsg = from_ctl_q.get_nowait()
                         print(qmsg, file=sys.stderr)
                         if 'cmd' in qmsg and qmsg['cmd'] == 'stop':
                             OP_STOP = True
-                        elif 'cmd' in qmsg and qmsg['cmd'] == 'resume execution':
-                            OP_PAUSE=False # currently resume execution is not part of the design, included for future designs
-                    continue # always rewind outer loop on OP_PAUSE
+                            continue
+                        elif 'cmd' in qmsg and qmsg['cmd'] == 'set buflim':
+                            MINPOOLSIZE = qmsg['limit']
+                        elif 'cmd' in qmsg and qmsg['cmd'] == 'set maxworkers':
+                            MAXWORKERS = qmsg['count']
+                        elif 'cmd' in qmsg and qmsg['cmd'] == 'pause execution':
+                            OP_PAUSE=True
+                    #/if
 
-                # check that the pipe is writable before assigning work
+                    # query length of pipe -> bytesInPipe
+                    buf = bytearray(4)
+                    fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
+                    # await loop.run_in_executor(None, fcntl.ioctl, fifoWriteEnd, termios.FIONREAD, buf, 1)
+                    bytesInPipe = int.from_bytes(buf, "little")
+                    if bytesInPipe < int(MINPOOLSIZE/2):
+                        bytes_needed = MINPOOLSIZE - bytesInPipe
+                        # estimate how many workers it would take given the EXPECTED_ENTROPY per worker
+                        workers_needed = int(bytes_needed/MAXWORKERS)
+                        if workers_needed == 0:
+                            workers_needed = 1 # always at least one to get at least 1 byte
+                        # adjust down workers_needed if exceeding max
+                        if workers_needed > MAXWORKERS:
+                            workers_needed = MAXWORKERS
 
-
-                async with yapapi.Golem(
-                    budget=BUDGET
-                    , subnet_tag=args.subnet_tag
-                    , network=args.network
-                    , driver=args.driver
-                    , event_consumer=mySummaryLogger.log
-                    , strategy=strat
-                ) as golem:
-                    OP_STOP = False
-                    while (not OP_STOP and not OP_PAUSE):
-                        # events = sel.select()[0] # (SelectorKey, <integer>) <- []
-                        # print(type(events), file=sys.stderr)
-                        # print(len(events), file=sys.stderr)
-                        # print(f"---------------------------------{events}", file=sys.stderr)
-                        await asyncio.sleep(0.05)
-                        if not from_ctl_q.empty():
-                            qmsg = from_ctl_q.get_nowait()
-                            print(qmsg, file=sys.stderr)
-                            if 'cmd' in qmsg and qmsg['cmd'] == 'stop':
-                                OP_STOP = True
-                                continue
-                            elif 'cmd' in qmsg and qmsg['cmd'] == 'set buflim':
-                                MINPOOLSIZE = qmsg['limit']
-                            elif 'cmd' in qmsg and qmsg['cmd'] == 'set maxworkers':
-                                MAXWORKERS = qmsg['count']
-                            elif 'cmd' in qmsg and qmsg['cmd'] == 'pause execution':
-                                OP_PAUSE=True
-                        #/if
-
-                        # query length of pipe -> bytesInPipe
-                        buf = bytearray(4)
-                        fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
-                        # await loop.run_in_executor(None, fcntl.ioctl, fifoWriteEnd, termios.FIONREAD, buf, 1)
-                        bytesInPipe = int.from_bytes(buf, "little")
-                        if bytesInPipe < int(MINPOOLSIZE/2):
-                            bytes_needed = MINPOOLSIZE - bytesInPipe
-                            # estimate how many workers it would take given the EXPECTED_ENTROPY per worker
-                            workers_needed = int(bytes_needed/MAXWORKERS)
-                            if workers_needed == 0:
-                                workers_needed = 1 # always at least one to get at least 1 byte
-                            # adjust down workers_needed if exceeding max
-                            if workers_needed > MAXWORKERS:
-                                workers_needed = MAXWORKERS
-
-                            bytes_needed_per_worker = int(bytes_needed/workers_needed)
-                            # execute tasks
-                            completed_tasks = golem.execute_tasks(
-                                steps,
-                                [yapapi.Task(data={'req_byte_count': bytes_needed_per_worker, 'writer': result_cb}) for _ in range(workers_needed)],
-                                payload=package,
-                                max_workers=workers_needed,
-                                timeout=TASK_TIMEOUT
-                            )
-                            # generate results
-                            async for task in completed_tasks:
-                                if task.result:
-                                    try:
-                                        print("++++++++++++++++++++COMPLETED TASK!!!!!!!!!", file=sys.stderr)
-                                        pass
-                                        # msg = randomBytes.hex()
-                                        # to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
-                                        # to_ctl_q.put(to_ctl_cmd)
-                                        # await write_to_pipe(fifoWriteEnd, randomBytes)
-
-                                    except Exception as exception:
-                                        print(task.result, file=sys.stderr)
-                                        print("completed_tasks: UNHANDLED EXCEPTION", file=sys.stderr)
-                                        print(type(exception).__name__, file=sys.stderr)
-                                        print(exception, file=sys.stderr)
-                                        raise asyncio.GeneratorExit
-                                        #raise asyncio.CancelledError #review
-                            #/async for
-                        #/if
-                    #/while True
-                #/while not OP_PAUSE
-            #/while not OP_STOP
-    except Exception as exception:
-        print("entropythief: UNHANDLED EXCEPTION", file=sys.stderr)
-        print(type(exception).__name__, file=sys.stderr)
-        print(exception, file=sys.stderr)
-        # raise asyncio.GeneratorExit
-        raise asyncio.CancelledError #review
+                        bytes_needed_per_worker = int(bytes_needed/workers_needed)
+                        # execute tasks
+                        completed_tasks = golem.execute_tasks(
+                            steps,
+                            [yapapi.Task(data={'req_byte_count': bytes_needed_per_worker, 'writer': result_cb}) for _ in range(workers_needed)],
+                            payload=package,
+                            max_workers=workers_needed,
+                            timeout=TASK_TIMEOUT
+                        )
+                        # generate results
+                        async for task in completed_tasks:
+                            if task.result:
+                                # for now only the callback on task.data is used within steps
+                                pass
+                            else:
+                                print("entropythief: a task result was not set!", file=sys.stderr)
+                        #/async for
+                    #/if bytesInPipe <...
+                #/while (not OP_...
+            #/golem:
+        #/while not OP_STOP
+    #/while not OP_STOP
 
 
 
@@ -433,6 +372,8 @@ def model__main(args
             , debug_activity_api=True
             , debug_market_api=True
             , debug_payment_api=True)
+
+    # create the task
     task = loop.create_task(
         entropythief(
             args
@@ -447,10 +388,13 @@ def model__main(args
             )
     )
 
+    # gracefully conclude the task
     try:
         loop.run_until_complete(task)
+
     except asyncio.exceptions.CancelledError:
         loop.run_until_complete(task)
+
     except yapapi.NoPaymentAccountError as e:
         handbook_url = (
             "https://handbook.golem.network/requestor-tutorials/"
@@ -470,6 +414,7 @@ def model__main(args
         _msg += "\ndid you forget to invoke " + utils.TEXT_COLOR_YELLOW + "yagna service run" + utils.TEXT_COLOR_DEFAULT + "?"
         msg = {'exception': "..." +  _msg }
         to_ctl_q.put_nowait(msg)
+
     except Exception as e:
         msg = {'model exception': str(type(e)) + ": " + str(e) }
         to_ctl_q.put_nowait(msg)
@@ -480,18 +425,3 @@ def model__main(args
         print("MODEL: process exiting", file=sys.stderr)
         cmd = {'cmd': 'stop'}
         to_ctl_q.put_nowait(cmd)
-        """
-        pending = asyncio.all_tasks()
-        for task in pending:
-            task.cancel()
-
-        print("gathering")
-        group = asyncio.gather(*pending, return_exceptions=True)
-        print("run until complete")
-        results_with_any_exceptions = loop.run_until_complete(group)
-        # all exceptions should have been handled, on the off chance
-        # not, this effectively ignores and stores them so all
-        # tasks not raising can be shutdown
-        print("close")
-        loop.close()
-        """
