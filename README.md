@@ -31,7 +31,6 @@ once entropythief runs, it displays the random bytes produced from workers as th
 
 
 __comments/reflections__:
-entropy is extremely scarce and as of now extremely expensive. but some of the most useful things in life are not scarce, take air for one. entropy (i.e. from /dev/random), though potentially a diamond of randommness where there is sufficient user io with the computer, is being phased out in favor of air ie Intel's own on-die random number generator, which is a very close approximatation to entropy and even more so because of so many foreign cpu's utilized by way of golem. it may continue to be an optional component, otherwise i may need to change the name!
 
 this project was inspired by gandom. however, gandom does not draw upon the underlying system's entropy source (kernel/cpu), which Docker reportedly guarantees is attached to every image. furthermore, gandom mixes bytes to produce a single value whereas entropy thief provides a stream of values, which incidentally can be mixed, or played with in a myriad of ways. additionally, entropythief stores bits in raw format while presenting to the user a bird's eye view of them in the intelligible base 16 (cf. base64).
 
