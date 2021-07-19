@@ -25,7 +25,7 @@ MAXWORKERS = 10
 _MEBIBYTE = 2**20
 _MAXPOOLSIZE = _MEBIBYTE # this is the theoretical max
 MINPOOLSIZE = _MAXPOOLSIZE - 4096 # leave one page room to prevent blocking
-MINPOOLSIZE = (2**20) * 25
+MINPOOLSIZE = (2**20) * 30
 #MINPOOLSIZE= 30000 - 4096
 BUDGET = 5.0
 kIPC_FIFO_FP = "/tmp/pilferedbits"
@@ -42,32 +42,6 @@ kIPC_FIFO_FP = "/tmp/pilferedbits"
 
 
 
-
-
-
-###############################################
-#        create_fifo_for_writing()            #
-###############################################
-"""
-def create_fifo_for_writing(IPC_FIFO_FP):
-
-    # -overwrite existing
-    if os.path.exists(IPC_FIFO_FP):
-        os.unlink(IPC_FIFO_FP)
-    os.mkfifo(IPC_FIFO_FP)
-    # -/overwrite existing
-
-    # -open
-    # fifo_for_writing = os.open(IPC_FIFO_FP, os.O_RDWR)
-    fifo_for_writing = os.open(IPC_FIFO_FP, os.O_RDWR | os.O_NONBLOCK)
-    # -/open
-    F_SETPIPE_SZ=1031
-    result = fcntl.fcntl(fifo_for_writing, F_SETPIPE_SZ, _MAXPOOLSIZE)
-
-    #F_GETPIPE_SZ=1032 
-    #POOL_LIMIT_REPORTED = fcntl.fcntl(fifo_for_writing, 1032)
-    return fifo_for_writing
-"""
 
 
 
@@ -180,7 +154,7 @@ if __name__ == "__main__":
         theview.destroy()
         cmd = {'cmd': 'stop'}
         to_model_q.put_nowait(cmd)
-        p1.join()
+        # p1.join() # a daemonized process need not be joined?
         while not from_model_q.empty():
             msg_from_model = from_model_q.get_nowait()
             print(msg_from_model, file=maindebuglog)
@@ -189,7 +163,6 @@ if __name__ == "__main__":
             elif 'exception' in msg_from_model:
                 print("unhandled exception reported by model:\n")
                 print(msg_from_model['exception'])
-                pass
                 # raise Exception(msg_from_model['exception'])
         print("Costs incurred were: " + str(current_total) + ".\nOn behalf of the Golem Community, thank you for your participation.")
         maindebuglog.close()

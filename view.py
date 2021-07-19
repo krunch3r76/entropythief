@@ -330,7 +330,7 @@ class View:
                 self.winbox.addstr(Y, xMax-37-ADJUST, current_total_str)
                 self.winbox.addstr(Y, xMax-37-ADJUST+len(current_total_str), "/"+current_budget_str)
             if xMax-15-ADJUST + 14 > 0:
-                self.winbox.addstr(Y, xMax-15-ADJUST, "%.20s" % f"buf:{bytesInPipe}/{str(MINPOOLSIZE)}")
+                self.winbox.addstr(Y, xMax-15-ADJUST, "%.25s" % f"buf:{bytesInPipe}/{str(MINPOOLSIZE)}")
 
         self.winbox.move(Y, X)
 

@@ -453,5 +453,6 @@ def model__main(args
         # task.cancel()
         # loop.run_until_complete(task)
         print("MODEL: process exiting", file=sys.stderr)
+        sys.exit(0)
         # cmd = {'cmd': 'stop'}
         # to_ctl_q.put_nowait(cmd)
