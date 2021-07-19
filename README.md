@@ -1,7 +1,7 @@
 # entropythief
 **LINUX little endian (e.g. Intel chips/little endian i.e. not Raspberry Pi/ARM) only**
 
-the latest tag alpha-v5 and the version as of this commit are using different approaches to getting randomness, the former the rdrand cpu instruction and the latter /dev/random...
+the latest tag alpha-v5 and the version as of this commit are using different approaches to getting randomness, the former the rdrand cpu instruction and the latter /dev/random... the next revision shall offer a choice and at competitive rates!
 
 
 get random bits (aka entropy) from multiple providers utilizing Intel's RDRAND cpu instruction and send to a named pipe. requests are sent whenever the named pipe falls below a set threshold.
