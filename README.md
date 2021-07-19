@@ -1,5 +1,5 @@
 # entropythief
-**LINUX little endian (e.g. Intel chips i.e. not Raspberry Pi ARM) only**
+**LINUX little endian (e.g. Intel chips/little endian i.e. not Raspberry Pi/ARM) only**
 
 UPDATE: the latest release of entropythief utilizes rdrand instead of the system's entropy pool. this appears to have been a failure as preliminary findings point to an emulated cpu instruction. the project is undergoing a simultaneous regression and overhaul as i take concepts learned and built upon and apply it to the previous model. thank youe.
 
