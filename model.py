@@ -75,9 +75,11 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
         else:
             # download_bytes and invoke callback at task.data['writer']
             ctx.download_bytes(worker.RESULT_PATH.as_posix(), task.data['writer'], sys.maxsize)
-            future_result = yield ctx.commit()
+            # future_result = yield ctx.commit()
             # block/await here before switching to the other tasks otherwise state change
             # on buffer causes more work than necessary in my loop
+            task.accept_result(True)
+            """
             try:
                 result = await asyncio.wait_for(future_result, timeout=60)
                 if result:
@@ -86,7 +88,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             except asyncio.TimeoutError:
                 print("steps: TIMEOUT", file=sys.stderr)
                 task.reject_result("timeout")
-
+            """
 
 
   #---------------------------------------------#
@@ -181,6 +183,7 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
         self, offer: rest.market.OfferProposal, history: Optional[ComputationHistory] = None
     ) -> float:
         score = SCORE_REJECTED
+        """
         print(offer.props, file=sys.stderr)
         if offer.props["golem.inf.cpu.architecture"] == "x86_64":
             if 'rdrand' in offer.props["golem.inf.cpu.capabilities"]:
@@ -189,6 +192,8 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
         if score == SCORE_REJECTED:
             pass
             # print("REJECTED------------------------------------------\n\n\n", file=sys.stderr)
+        """
+        score = await super().score_offer(offer, history)
         return score
 
 
@@ -219,11 +224,11 @@ class TaskResultWriter:
 
     async def __call__(self, randomBytes):
         written = self._writerPipe.write(randomBytes)
+        asyncio.sleep(0.01)
         # written = await write_to_pipe(self.fifoWriteEnd, randomBytes, self.POOL_LIMIT)
         msg = randomBytes[:written].hex()
         to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
         self.to_ctl_q.put(to_ctl_cmd)
-
 
     def __del__(self):
         if self._writerPipe:

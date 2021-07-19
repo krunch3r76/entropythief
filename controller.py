@@ -20,12 +20,12 @@ import fcntl
 
 import utils
 
-IMAGE_HASH = "eb9d18bf1262a3f070baae7a7ff5f150233ca00f329ee46f8d089e95"
+IMAGE_HASH = "9f8ae94206a0ab77f0a42625e258d334c4bbb21f80077740e37fe233"
 MAXWORKERS = 10
 _MEBIBYTE = 2**20
 _MAXPOOLSIZE = _MEBIBYTE # this is the theoretical max
 MINPOOLSIZE = _MAXPOOLSIZE - 4096 # leave one page room to prevent blocking
-MINPOOLSIZE = (2**20) * 30
+MINPOOLSIZE = _MEBIBYTE * 30 
 #MINPOOLSIZE= 30000 - 4096
 BUDGET = 5.0
 kIPC_FIFO_FP = "/tmp/pilferedbits"
@@ -154,7 +154,7 @@ if __name__ == "__main__":
         theview.destroy()
         cmd = {'cmd': 'stop'}
         to_model_q.put_nowait(cmd)
-        # p1.join() # a daemonized process need not be joined?
+        p1.join() # a daemonized process need not be joined?
         while not from_model_q.empty():
             msg_from_model = from_model_q.get_nowait()
             print(msg_from_model, file=maindebuglog)
