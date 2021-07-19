@@ -32,7 +32,7 @@ class Display:
             # makes Splash 1/3 the height of subwindow
             yBegParent, xBegParent = self._parent_display._widget.getbegyx()
             Ymax, Xmax = self._parent_display._widget.getmaxyx()
-            height3rd = int( (Ymax-yBegParent)/3)
+            height3rd = int( (Ymax-yBegParent)/3)+1
             width3rd = int( (Xmax-xBegParent)/3)
 
             yBeg = yBegParent + height3rd
@@ -216,17 +216,6 @@ def view__create_windows(view):
 
 
 
-  ###################################
- # _count_bytes_in_pipe            #
-###################################
-# required by View::getinput
-def _count_bytes_in_pipe(fifoWriteEnd, endianness="little"):
-    buf = bytearray(4)
-    fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
-    bytesInPipe = int.from_bytes(buf, endianness)
-    return bytesInPipe
-
-
 
 
 
@@ -239,7 +228,6 @@ class View:
     winbox = None
     win = None
     linebuf = []
-    fifoWriteEnd = None
 
 
 
@@ -274,9 +262,8 @@ class View:
     #..View.........................#
     #.          __init__           .#
     #...............................#
-    def __init__(self, fifoWriteEnd):
+    def __init__(self):
         self._init_screen()
-        self.fifoWriteEnd = fifoWriteEnd
 
 
 
@@ -320,7 +307,7 @@ class View:
     #..View.........................#
     #.          getinput           .#
     #...............................#
-    def getinput(self, current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers):
+    def getinput(self, current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, bytesInPipe=0):
         # update status line
         Y, X = self.winbox.getyx()
         yMax, xMax = self.winbox.getmaxyx()
@@ -328,7 +315,7 @@ class View:
         current_budget_str = "{:.5f}".format(BUDGET)
         maxworkers_str = "{:02d}".format(MAXWORKERS)
         countworkers_str = "{:02d}".format(count_workers)
-        bytesInPipe = _count_bytes_in_pipe(self.fifoWriteEnd)
+
 
         self.winbox.move(Y, len(self.linebuf)+1)
         self.winbox.clrtoeol()

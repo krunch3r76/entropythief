@@ -19,13 +19,13 @@ import view
 import fcntl
 
 import utils
-from pipe_writer import *
 
 IMAGE_HASH = "eb9d18bf1262a3f070baae7a7ff5f150233ca00f329ee46f8d089e95"
 MAXWORKERS = 3
 _MEBIBYTE = 2**20
 _MAXPOOLSIZE = _MEBIBYTE # this is the theoretical max
 MINPOOLSIZE = _MAXPOOLSIZE - 4096 # leave one page room to prevent blocking
+MINPOOLSIZE = 2**20 * 5
 #MINPOOLSIZE= 30000 - 4096
 BUDGET = 5.0
 kIPC_FIFO_FP = "/tmp/pilferedbits"
@@ -33,22 +33,6 @@ kIPC_FIFO_FP = "/tmp/pilferedbits"
 
 
 
-
-
-  ###################################
- # TaskResultWriter{}              #
-###################################
-class TaskResultWriter:
-    def __init__(self, fifoWriteEnd, to_ctl_q, POOL_LIMIT):
-        self.to_ctl_q = to_ctl_q
-        self.fifoWriteEnd = fifoWriteEnd
-        self.POOL_LIMIT = POOL_LIMIT
-
-    async def __call__(self, randomBytes):
-        written = await write_to_pipe(self.fifoWriteEnd, randomBytes, self.POOL_LIMIT)
-        msg = randomBytes[:written].hex()
-        to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
-        self.to_ctl_q.put(to_ctl_cmd)
 
 
 
@@ -64,6 +48,7 @@ class TaskResultWriter:
 ###############################################
 #        create_fifo_for_writing()            #
 ###############################################
+"""
 def create_fifo_for_writing(IPC_FIFO_FP):
 
     # -overwrite existing
@@ -82,7 +67,7 @@ def create_fifo_for_writing(IPC_FIFO_FP):
     #F_GETPIPE_SZ=1032 
     #POOL_LIMIT_REPORTED = fcntl.fcntl(fifo_for_writing, 1032)
     return fifo_for_writing
-
+"""
 
 
 
@@ -107,23 +92,21 @@ if __name__ == "__main__":
     from_model_q = multiprocessing.Queue()  # message queue FROM golem executor process
 
     # setup fifo
-    fifoWriteEnd = create_fifo_for_writing(kIPC_FIFO_FP)
+    # fifoWriteEnd = create_fifo_for_writing(kIPC_FIFO_FP)
 
     try:
         # instantiate and setup view
-        theview = view.View(fifoWriteEnd)
-        taskResultWriter = TaskResultWriter(fifoWriteEnd, from_model_q, MINPOOLSIZE)
+        theview = view.View()
         # invoke model__main on separate process
         p1 = multiprocessing.Process(target=model.model__main, daemon=True
                 , args=[args
                     , to_model_q
-                    , fifoWriteEnd
+                    , None
                     , from_model_q
                     , MINPOOLSIZE
                     , MAXWORKERS
                     , BUDGET
                     , IMAGE_HASH
-                    , taskResultWriter
                     , args.enable_logging
                     ])
         p1.start()
@@ -131,8 +114,9 @@ if __name__ == "__main__":
         next(u)
         current_total = 0.0
         count_workers=0
+        bytesInPipe = 0
         while True:
-            ucmd = theview.getinput(current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers)
+            ucmd = theview.getinput(current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, bytesInPipe)
             msg_to_model = None
             if ucmd == "stop":
                 raise KeyboardInterrupt
@@ -176,6 +160,9 @@ if __name__ == "__main__":
                     print(msg_from_model, file=maindebuglog)
                 elif 'debug' in msg_from_model:
                     print(msg_from_model, file=devdebuglog)
+                elif 'bytesInPipe' in msg_from_model:
+                    bytesInPipe = msg_from_model['bytesInPipe']
+
             #/if
             theview.refresh()
             time.sleep(0.005)
@@ -184,6 +171,8 @@ if __name__ == "__main__":
         theview.destroy()
         print(f"\n{e}\n")
     except KeyboardInterrupt:
+        cmd = {'cmd': 'stop'}
+        to_model_q.put_nowait(cmd)
         theview.destroy()
         print("+=+=+=+=+=+=+=stopping=+=+=+=+=+=+=")
         print("+=+=+=+=+=+=+=settling accounts=+=+=+=+=+=+=")
@@ -198,10 +187,13 @@ if __name__ == "__main__":
             if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'update_total_cost':
                 current_total = msg_from_model['amount']
             elif 'exception' in msg_from_model:
-                raise Exception(msg_from_model['exception'])
+                print("unhandled exception reported by model:\n")
+                print(msg_from_model['exception'])
+                pass
+                # raise Exception(msg_from_model['exception'])
         print("Costs incurred were: " + str(current_total) + ".\nOn behalf of the Golem Community, thank you for your participation.")
         maindebuglog.close()
         stderr2file.close()
         # instead of closing the write end, leave it open for any pending bits that may be needed by a reader
-        os.close(fifoWriteEnd)
+        # os.close(fifoWriteEnd)
         os.unlink(kIPC_FIFO_FP)
