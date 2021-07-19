@@ -20,16 +20,15 @@ import fcntl
 
 import utils
 
-IMAGE_HASH = "9f8ae94206a0ab77f0a42625e258d334c4bbb21f80077740e37fe233"
+IMAGE_HASH = "8b522bf5dbb34dd76dd03f4b0980f8f45623bff71e4585e8021586bc"
 MAXWORKERS = 10
 _MEBIBYTE = 2**20
 _MAXPOOLSIZE = _MEBIBYTE # this is the theoretical max
 MINPOOLSIZE = _MAXPOOLSIZE - 4096 # leave one page room to prevent blocking
-MINPOOLSIZE = _MEBIBYTE * 30 
+MINPOOLSIZE = 50*_MEBIBYTE
 #MINPOOLSIZE= 30000 - 4096
 BUDGET = 5.0
 kIPC_FIFO_FP = "/tmp/pilferedbits"
-
 
 
 
@@ -52,13 +51,14 @@ kIPC_FIFO_FP = "/tmp/pilferedbits"
 #                      __main__                          #
 ##########################################################
 if __name__ == "__main__":
+    debug_list = []
     # parse cli arguments (viz utils.py)
     args = argparse.Namespace()
     parser = utils.build_parser("pipe entropy to the named pipe /tmp/pilferedbits")
     args = parser.parse_args()
     maindebuglog = open("main.log", "w", buffering=1)
     stderr2file = open("stderr", "w", buffering=1)
-    devdebuglog = open("devdebug.log", "w", buffering=1)
+    # devdebuglog = open("devdebug.log", "w", buffering=1)
     sys.stderr = stderr2file
 
     # set up {to_,from_}_model_queue
@@ -116,6 +116,11 @@ if __name__ == "__main__":
                 print(msg_from_model, file=maindebuglog)
                 if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes':
                     msg = msg_from_model['hexstring']
+                    if msg in debug_list:
+                        print("WTF!")
+                        raise
+                    debug_list.append(msg)
+
                     result = u.send(msg)
                 elif 'cmd' in msg_from_model and msg_from_model['cmd'] == 'update_total_cost':
                     current_total = msg_from_model['amount']
@@ -150,6 +155,7 @@ if __name__ == "__main__":
         theview.destroy()
         print("+=+=+=+=+=+=+=stopping=+=+=+=+=+=+=")
         print("+=+=+=+=+=+=+=settling accounts=+=+=+=+=+=+=")
+        raise
     finally:
         theview.destroy()
         cmd = {'cmd': 'stop'}
@@ -165,7 +171,6 @@ if __name__ == "__main__":
                 print(msg_from_model['exception'])
                 # raise Exception(msg_from_model['exception'])
         print("Costs incurred were: " + str(current_total) + ".\nOn behalf of the Golem Community, thank you for your participation.")
-        maindebuglog.close()
         stderr2file.close()
         # instead of closing the write end, leave it open for any pending bits that may be needed by a reader
         # os.close(fifoWriteEnd)

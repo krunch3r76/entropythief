@@ -61,7 +61,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
         expiration = datetime.now(timezone.utc) + timedelta(seconds=30)
         #taskid=task.data
         # request <count> bytes from provider and wait
-        ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']))
+        ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']), task.data['rdrand_arg'])
         future_results = yield ctx.commit()
         results = await future_results
 
@@ -75,11 +75,10 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
         else:
             # download_bytes and invoke callback at task.data['writer']
             ctx.download_bytes(worker.RESULT_PATH.as_posix(), task.data['writer'], sys.maxsize)
-            # future_result = yield ctx.commit()
+            future_result = yield ctx.commit()
             # block/await here before switching to the other tasks otherwise state change
             # on buffer causes more work than necessary in my loop
-            task.accept_result(True)
-            """
+            # task.accept_result(True)
             try:
                 result = await asyncio.wait_for(future_result, timeout=60)
                 if result:
@@ -88,7 +87,6 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             except asyncio.TimeoutError:
                 print("steps: TIMEOUT", file=sys.stderr)
                 task.reject_result("timeout")
-            """
 
 
   #---------------------------------------------#
@@ -175,25 +173,31 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
         , expected_time_secs: int = 60
         , max_fixed_price: Decimal = Decimal("inf")
         , max_price_for: Mapping[com.Counter, Decimal] = MappingProxyType({})
+        , use_rdrand=False
         ):
             super().__init__(expected_time_secs, max_fixed_price, max_price_for)
+            self.use_rdrand=use_rdrand
 
     
     async def score_offer(
         self, offer: rest.market.OfferProposal, history: Optional[ComputationHistory] = None
     ) -> float:
         score = SCORE_REJECTED
+
         """
-        print(offer.props, file=sys.stderr)
-        if offer.props["golem.inf.cpu.architecture"] == "x86_64":
-            if 'rdrand' in offer.props["golem.inf.cpu.capabilities"]:
-                score = await super().score_offer(offer, history)
-        # return await super().score_offer(offer, history)
-        if score == SCORE_REJECTED:
-            pass
-            # print("REJECTED------------------------------------------\n\n\n", file=sys.stderr)
+        if offer.props["golem.node.id.name"] == "friendly-winter":
+            score = await super().score_offer(offer, history)
+        # return score
         """
-        score = await super().score_offer(offer, history)
+        # print(offer.props, file=sys.stderr)
+        
+        if self.use_rdrand:
+            if offer.props["golem.inf.cpu.architecture"] == "x86_64":
+                if 'rdrand' in offer.props["golem.inf.cpu.capabilities"]:
+                    score = await super().score_offer(offer, history)
+        else:
+            score = await super().score_offer(offer, history)
+
         return score
 
 
@@ -224,7 +228,7 @@ class TaskResultWriter:
 
     async def __call__(self, randomBytes):
         written = self._writerPipe.write(randomBytes)
-        asyncio.sleep(0.01)
+        await asyncio.sleep(0.01)
         # written = await write_to_pipe(self.fifoWriteEnd, randomBytes, self.POOL_LIMIT)
         msg = randomBytes[:written].hex()
         to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
@@ -260,7 +264,9 @@ async def entropythief(
     """
     taskResultWriter: callable that inputs random bytes acquired
     """
-
+    rdrand_arg = ''
+    if args.rdrand:
+        rdrand_arg = 'rdrand'
     try:
         loop = asyncio.get_running_loop()
         OP_STOP = False
@@ -268,6 +274,7 @@ async def entropythief(
         strat = MyLeastExpensiveLinearPayMS(
                 # max_fixed_price=Decimal("0.0001"),
                 # max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.001"), yapapi.props.com.Counter.TIME: Decimal("0.001")}
+                use_rdrand = args.rdrand
                 ) 
 
         while not OP_STOP:
@@ -291,7 +298,6 @@ async def entropythief(
                     continue # always rewind outer loop on OP_PAUSE
 
                 # check that the pipe is writable before assigning work
-
                 async with yapapi.Golem(
                     budget=BUDGET
                     , subnet_tag=args.subnet_tag
@@ -336,7 +342,7 @@ async def entropythief(
                             # execute tasks
                             completed_tasks = golem.execute_tasks(
                                 steps,
-                                [yapapi.Task(data={'req_byte_count': bytes_needed_per_worker, 'writer': taskResultWriter}) for _ in range(workers_needed)],
+                                [yapapi.Task(data={'req_byte_count': bytes_needed_per_worker, 'writer': taskResultWriter, 'rdrand_arg':rdrand_arg}) for _ in range(workers_needed)],
                                 payload=package,
                                 max_workers=workers_needed,
                                 timeout=TASK_TIMEOUT

@@ -42,4 +42,5 @@ def build_parser(description: str):
     )
     parser.add_argument("--enable-logging", help="whether to log to the above log-file {0, 1} DEFAULT: 1", default=1
                         , type=int)
+    parser.add_argument("--rdrand", default=0, help="whether to use rdrand cpu instruction (limits providers) {0, 1} DEFAULT: 0", type=int)
     return parser
