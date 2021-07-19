@@ -27,7 +27,7 @@ stop			# stop/exit
 NOTE: to increase the budget, please set the script variable BUDGET at the head of controller.py
 
 __Usage/API__:
-once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to the named pipe. the named pipe can be accessed via any programming language or shell language capable of reading it. a simple python API module has been included at `readers/_pipe.py`, and an example script is in `readers/print_nonce`. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. _If the script is run repeatedly as a loop, it demonstrates how entropythief provisions workers on demand._
+once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to the named pipe. the named pipe can be accessed via any programming language or shell language capable of reading it. a simple python API module has been included at `readers/pipe_reader.py`, and an example script is in `readers/print_nonce`. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. _If the script is run repeatedly as a loop, it demonstrates how entropythief provisions workers on demand._
 
 
 __comments/reflections__:
@@ -49,12 +49,16 @@ the fields are as described above.
 
 __other components__:
 ```
-/tmp/pilferedbits		# named pipe accessible to anyone on the system with a ski mask
+/tmp/pilferedbits_# # named pipes pool referred to by pilferebits.dat and utilized via readers API
+/tmp/pilferedbits.dat # stores named pipe pool info
 ./stderr			# messages and optionally yapapi logger info messages are written to this file in place of stderr
 ./main.log			# development messages that come from the controller are written to this file
 ./entropythief-yapapi.log	# INFO and DEBUG messages from yapapi
 ./controller.py			# controller-view runnable script that daemonizes the model (Golem executor) and coordinates with the view
 ./model.py			# the Golem specific code (daemonized by controller.py)
+./pipe_writer.py # modularized pooled pipe_writer used by model and follows a model that ./readers/pipe_reader.py understands
+./readers/pipe_reader.py # API to named pipe pool
+
 ```
 
 __applications__:
