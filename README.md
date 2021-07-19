@@ -1,5 +1,9 @@
 # entropythief
-**LINUX little endian (e.g. Intel chips i.e. not Raspberry Pi ARM) only**
+**LINUX little endian (e.g. Intel chips/little endian i.e. not Raspberry Pi/ARM) only**
+
+UPDATE: the project has reached icarus status and is falling to the earth. it is expected however to rise like a phoenix from the ashes.
+
+to put it blandly, the latest release of entropythief utilizes rdrand instead of the system's entropy pool. this appears to have been a failure as preliminary findings point to an emulated cpu instruction. the project is undergoing a simultaneous regression and overhaul as i take concepts learned and built upon and apply it to the previous model.
 
 get random bits (aka entropy) from multiple providers utilizing Intel's RDRAND cpu instruction and send to a named pipe. requests are sent whenever the named pipe falls below a set threshold.
 
