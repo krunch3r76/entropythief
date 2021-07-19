@@ -1,10 +1,7 @@
 # entropythief
 **LINUX little endian (e.g. Intel chips/little endian i.e. not Raspberry Pi/ARM) only**
 
-the latest tag alpha-v5 and the version as of this commit are using different approaches to getting randomness, the former the rdrand cpu instruction and the latter /dev/random... the next revision shall offer a choice and at competitive rates! the next revision (as of the recent commit as well) uses a pool of named pipes to write (and) read arbitrarily beyond system limits of a single named pipe.
-
-
-get random entropy at a steal of a rate from multiple providers utilizing Intel's RDRAND cpu instruction and send to a named pipe. requests are sent whenever the named pipe falls below a set threshold.
+get random entropy at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (see usage rdrand argument) and send to a named pipe. requests are sent whenever the named pipe falls below a set threshold.
 
 usage:
 ```
@@ -14,7 +11,7 @@ git checkout alpha-v6
 python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r requirements.txt
-./controller.py # --help # to change the network from the default rinkeby and the subnet-tag from the default devnet-beta.2
+./controller.py [--rdrand 1] # --help # to change the network from the default rinkeby and the subnet-tag from the default devnet-beta.2
 # in a separate window
 cd readers/print_nonce
 python3 print_nonce.py # watch how the status line changes!
@@ -23,7 +20,7 @@ python3 print_nonce.py # watch how the status line changes!
 
 this requestor runs to pilfer as many bytes of random 1's and 0's from up to as many providers as the user specifies. these parameter(s) can be adjusted on the fly by the user with the following commands:
 ```
-set buflim=<num>	# the minimum threshold that entropythief should do its best to stay above <DEPRECATED>
+set buflim=<num>	# the minimum threshold that entropythief should do its best to stay above
 set maxworkers=<num>	# the most workers Golem executor can provision  # the more the more exotic!
 stop			# stop/exit
 ```
