@@ -319,7 +319,7 @@ class View:
 
         self.winbox.move(Y, len(self.linebuf)+1)
         self.winbox.clrtoeol()
-        ADJUST=10
+        ADJUST=15
         if xMax-53-ADJUST > 0:
             if xMax-53-ADJUST + 3 > 0:
                 self.winbox.addstr(Y, xMax-53-ADJUST, "ESC", curses.A_ITALIC | curses.A_STANDOUT)

@@ -79,7 +79,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             # block/await here before switching to the other tasks otherwise state change
             # on buffer causes more work than necessary in my loop
             try:
-                result = await asyncio.wait_for(future_result, timeout=30)
+                result = await asyncio.wait_for(future_result, timeout=60)
                 if result:
                     task.accept_result(True)
                     print("STEPS: accepting result", file=sys.stderr)
@@ -343,6 +343,7 @@ async def entropythief(
                                     pass
                                 else:
                                     print("entropythief: a task result was not set!", file=sys.stderr)
+                                await asyncio.sleep(0.003)
                             #/async for
                         #/if count_bytes_req...
                     #/while (not OP_...
