@@ -1,7 +1,7 @@
 # entropythief
 **LINUX little endian (e.g. Intel chips/little endian i.e. not Raspberry Pi/ARM) only**
 
-get random entropy at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (see usage rdrand argument) and send to a named pipe. requests are sent whenever the named pipe falls below a set threshold.
+get random entropy at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (see usage rdrand argument) and send to a named pipe. requests are sent whenever the named pipe falls below a set threshold. Be advised rdrand is creating a memory leak and should be avoided as of this commit/tag. issue #1
 
 usage:
 ```
