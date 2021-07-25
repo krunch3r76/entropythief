@@ -6,6 +6,7 @@ result.bin
 stderr
 *.log
 hooks
+*.so
 *.il
 
 

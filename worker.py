@@ -5,54 +5,34 @@ from pathlib import *
 import base64
 import sys
 
-import il
-import ctypes
+# import ctypes
+import rdrand # C extension
 
 outputdir='/golem/output'
 RESULT_PATH = Path(outputdir + '/result.bin')
 
 
-# OUT: 64bit integer
-def rdrand__ilasm():
-    f = il.def_asm(
-            name="r2",
-            prototype=ctypes.CFUNCTYPE(ctypes.c_int64),
-            code="""
-            .intel_syntax noprefix
-            0:
-            mov rax, 0
-            rdrand rax
-            jnc 0b
-            ret
-            """)
-    return f()
-
-
-#-------------------------------------------------------#
-#           rdrand__gen()                               #
-#       yield 3 random int64s (24 bytes)                #
-#                                                       #
-#-------------------------------------------------------#
-def rdrand__gen():
-    while True:
-        yielded = bytearray()
-        for _ in range(3):
-            val = rdrand__ilasm()
-            asbytes = val.to_bytes(8, byteorder="little", signed=True)
-            yielded.extend([ byte for byte in asbytes ])
-        yield yielded
 
 
 
+
+#####################################################
+# rdrand__generate_random_numbers_bin               #
+#####################################################
+# read the count bytes from the cpu entropy source as 8 byte frames sliced as needed
+# IN: count of bytes required
+# PRE: rdrand cpu instruction available
+# POST: cpu emptied of the ceiling in measures of 8 bytes of the count requested
+# OUT: random bits in measures of bytes requested
 def rdrand__generate_random_numbers_bin(bytesrequired) -> bytes:
     int64_count = int(bytesrequired / 8)
     rem_bytes_count = bytesrequired % 8
     thebytes=bytearray()
     for _ in range(int64_count):
-       bytes_int64 = rdrand__ilasm().to_bytes(8, byteorder="little", signed=True)
+       bytes_int64 = rdrand.rdrand().to_bytes(8, byteorder="little", signed=False)
        thebytes.extend(bytes_int64)
     if rem_bytes_count > 0:
-        bytes_int64 = rdrand__ilasm().to_bytes(8, byteorder="little", signed=True)
+        bytes_int64 = rdrand.rdrand().to_bytes(8, byteorder="little", signed=False)
         thebytes.extend(bytes_int64[0:rem_bytes_count])
     return thebytes[:bytesrequired]  # in case the requested count is not measured by 8
 
@@ -107,7 +87,14 @@ def devrand__read_all_available_random_bytes() -> bytes:
     return devrand__read_num_random_bytes( entropy_available_in_num_bytes )
 
 
-
+#################################################
+#   devrand__generate_random_numbers_bin        #
+#################################################
+# read count random bytes from the system's kernel entropy source
+# IN: count
+# PRE: n/a
+# POST: entropy source emptied of count bytes bits
+# OUT: count random bytes
 def devrand__generate_random_numbers_bin(count):
     countRemaining = count
     result = bytearray()
@@ -125,7 +112,15 @@ def devrand__generate_random_numbers_bin(count):
     return result
 
 
-def main(count, USE_RDRAND):
+#############################
+#   steal                   #
+#############################
+# draw randomness from a specified entropy source
+# IN: count of bytes in which to store random bits, flag to indicate cpu rdrand as randomness source
+# PRE: rdrand cpu instruction available on a 64 bit processor (as per shared library requirement)
+# POST: random sources emptied of corresponding bits
+# OUT: count bytes of random bits
+def steal(count, USE_RDRAND):
     if not USE_RDRAND:
         result = devrand__generate_random_numbers_bin(count)
     else:
@@ -133,6 +128,13 @@ def main(count, USE_RDRAND):
     return result
 
 
+
+
+
+
+#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
+#                        __main__                         #
+#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 if __name__=="__main__":
     USE_RDRAND=False
     try:
@@ -140,7 +142,7 @@ if __name__=="__main__":
         if len(sys.argv) == 3:
             if sys.argv[2] == 'rdrand':
                 USE_RDRAND=True
-        result = main(count, USE_RDRAND)
+        result = steal(count, USE_RDRAND)
 
         with RESULT_PATH.open(mode="wb") as f:
             f.write(result)
