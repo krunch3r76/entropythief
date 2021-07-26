@@ -8,6 +8,8 @@ stderr
 hooks
 *.so
 *.il
+*.o
+*-venv
 
 
 

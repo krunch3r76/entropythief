@@ -20,12 +20,12 @@ import fcntl
 
 import utils
 
-IMAGE_HASH = "8b522bf5dbb34dd76dd03f4b0980f8f45623bff71e4585e8021586bc"
+IMAGE_HASH = "238e362f7b52aa21c3f2a26ade9ba3952ae8c715c9efe37af0ef8258"
 MAXWORKERS = 10
 _MEBIBYTE = 2**20
 _MAXPOOLSIZE = _MEBIBYTE # this is the theoretical max
 MINPOOLSIZE = _MAXPOOLSIZE - 4096 # leave one page room to prevent blocking
-MINPOOLSIZE = 50*_MEBIBYTE
+MINPOOLSIZE = 100*_MEBIBYTE
 #MINPOOLSIZE= 30000 - 4096
 BUDGET = 5.0
 kIPC_FIFO_FP = "/tmp/pilferedbits"
@@ -141,6 +141,10 @@ if __name__ == "__main__":
                     print(msg_from_model, file=devdebuglog)
                 elif 'bytesInPipe' in msg_from_model:
                     bytesInPipe = msg_from_model['bytesInPipe']
+                elif 'model exception' in msg_from_model:
+                    theview.destroy()
+                    print(msg_from_model)
+                    raise KeyboardInterrupt
 
             #/if
             theview.refresh()

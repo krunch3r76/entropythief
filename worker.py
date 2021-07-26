@@ -6,7 +6,7 @@ import base64
 import sys
 
 # import ctypes
-import rdrand # C extension
+from rdrand import rdrand # C extension
 
 outputdir='/golem/output'
 RESULT_PATH = Path(outputdir + '/result.bin')
@@ -29,10 +29,10 @@ def rdrand__generate_random_numbers_bin(bytesrequired) -> bytes:
     rem_bytes_count = bytesrequired % 8
     thebytes=bytearray()
     for _ in range(int64_count):
-       bytes_int64 = rdrand.rdrand().to_bytes(8, byteorder="little", signed=False)
+       bytes_int64 = rdrand().to_bytes(8, byteorder="little", signed=False)
        thebytes.extend(bytes_int64)
     if rem_bytes_count > 0:
-        bytes_int64 = rdrand.rdrand().to_bytes(8, byteorder="little", signed=False)
+        bytes_int64 = rdrand().to_bytes(8, byteorder="little", signed=False)
         thebytes.extend(bytes_int64[0:rem_bytes_count])
     return thebytes[:bytesrequired]  # in case the requested count is not measured by 8
 
@@ -135,6 +135,10 @@ def steal(count, USE_RDRAND):
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 #                        __main__                         #
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
+# notes:
+#   argument 1: count of bytes <REQUIRED>
+#   argument 2: 'rdrand' <OPTIONAL> use rdrand as entropy source
+# POST: count random bytes written to RESULT_PATH
 if __name__=="__main__":
     USE_RDRAND=False
     try:

@@ -32,12 +32,13 @@ class PipeReader:
     def _update_names(self):
         with open(self._filepathDatFile) as fpDatFile:
             names = json.load(fpDatFile)
-            for name in names:
-                if name not in self._pipes:
-                    self._add_name(name)
-            for name in self._pipes.keys():
-                if name not in names:
-                    del self._pipes[name]
+            if names not None: # testing
+                for name in names:
+                    if name not in self._pipes:
+                        self._add_name(name)
+                for name in self._pipes.keys():
+                    if name not in names:
+                        del self._pipes[name]
 
     # continuously read pipes until read count satisfied
     def read(self, count) -> bytearray:
