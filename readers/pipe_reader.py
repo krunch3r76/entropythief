@@ -32,7 +32,7 @@ class PipeReader:
     def _update_names(self):
         with open(self._filepathDatFile) as fpDatFile:
             names = json.load(fpDatFile)
-            if names not None: # testing
+            if names is not None: # testing
                 for name in names:
                     if name not in self._pipes:
                         self._add_name(name)
