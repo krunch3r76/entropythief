@@ -26,8 +26,8 @@ class PipeReader:
 
     def _add_name(self, name):
         # open the named pipe and store name:descriptor in _pipes
-        # fd = os.open(self._resolve_name(name), os.O_RDONLY | os.O_NONBLOCK)
-        fd = os.open(self._resolve_name(name), os.O_RDWR | os.O_NONBLOCK)
+        fd = os.open(self._resolve_name(name), os.O_RDONLY | os.O_NONBLOCK)
+        # fd = os.open(self._resolve_name(name), os.O_RDWR | os.O_NONBLOCK)
         self._pipes[name]=fd
 
     def _update_names(self):
@@ -63,12 +63,23 @@ class PipeReader:
         while remainingCount > 0:
             for fd in self._pipes.values():
                 bytesInCurrentPipe = count_bytes_in_pipe(fd)
+                ba = None
                 if bytesInCurrentPipe >= remainingCount:
-                    ba = os.read(fd, remainingCount)
-                    remainingCount = 0
+                    while ba is None:
+                        try:
+                            ba = os.read(fd, remainingCount)
+                        except BlockingIOError:
+                            pass
+                        else:
+                            remainingCount = 0
                 else:
-                    ba = os.read(fd, bytesInCurrentPipe)
-                    remainingCount -= bytesInCurrentPipe
+                    while ba is None:
+                        try:
+                            ba = os.read(fd, bytesInCurrentPipe)
+                        except BlockingIOError:
+                            pass
+                        else:
+                            remainingCount -= bytesInCurrentPipe
                 rv.extend(ba)
             time.sleep(0.01)
 
