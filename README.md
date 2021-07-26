@@ -1,17 +1,17 @@
 # entropythief
 **LINUX little endian (e.g. Intel chips/little endian i.e. not Raspberry Pi/ARM) only**
 
-get random entropy at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (see usage rdrand argument) and send to a named pipe. requests are sent whenever the named pipe falls below a set threshold. Be advised rdrand is creating a memory leak and should be avoided as of this commit/tag, i.e. do not pass --rdrand 1 option. issue #1
+get random entropy at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (default). requests are sent whenever the named pipe falls below a half the set threshold. 
 
 usage:
 ```
 git clone https://github.com/krunch3r76/entropythief.git
 cd entropythief
-git checkout alpha-v6
+git checkout alpha-v7
 python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r requirements.txt
-./controller.py [--rdrand 1] # --help # to change the network from the default rinkeby and the subnet-tag from the default devnet-beta.2
+./controller.py [--rdrand=0] # --help # to change the network from the default rinkeby and the subnet-tag from the default devnet-beta.2
 # in a separate window
 cd readers/print_nonce
 python3 print_nonce.py # watch how the status line changes!
@@ -20,14 +20,14 @@ python3 print_nonce.py # watch how the status line changes!
 
 this requestor runs to pilfer as many bytes of random 1's and 0's from up to as many providers as the user specifies. these parameter(s) can be adjusted on the fly by the user with the following commands:
 ```
-set buflim=<num>	# the minimum threshold that entropythief should do its best to stay above
+set buflim=<num>	# the minimum threshold that entropythief should do its best to stay above (refills when it falls beneath half this value)
 set maxworkers=<num>	# the most workers Golem executor can provision  # the more the more exotic!
 stop			# stop/exit
 ```
 NOTE: to increase the budget, please set the script variable BUDGET at the head of controller.py
 
 __Usage/API__:
-once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to the named pipe. the named pipe can be accessed via any programming language or shell language capable of reading it. a simple python API module has been included at `readers/pipe_reader.py`, and an example script is in `readers/print_nonce`. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. _If the script is run repeatedly as a loop, it demonstrates how entropythief provisions workers on demand._
+once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to a named pipe pool ring of files. the named pipe ring should be accessed via the API provided at `readers/pipe_reader.py`, and an example script is in `readers/print_nonce`. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. _If the script is run repeatedly as a loop, it demonstrates how entropythief provisions workers on demand._
 
 
 __comments/reflections__:
@@ -57,7 +57,7 @@ __other components__:
 ./model.py			# the Golem specific code (daemonized by controller.py)
 ./pipe_writer.py # modularized pooled pipe_writer used by model and follows a model that ./readers/pipe_reader.py understands
 ./readers/pipe_reader.py # API to named pipe pool
-
+./rdrand.c # python c extension to access rdrand (utilized upon construction of image)
 ```
 
 __applications__:
