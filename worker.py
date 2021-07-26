@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # worker
 # pull all available entropy from /dev/random and store in text file as base64 for requestor retrieval
+from worker_public import *
 from pathlib import *
 import base64
 import sys
@@ -8,8 +9,6 @@ import sys
 # import ctypes
 from rdrand import rdrand # C extension
 
-outputdir='/golem/output'
-RESULT_PATH = Path(outputdir + '/result.bin')
 
 
 

@@ -5,6 +5,7 @@ import termios
 import json
 import io
 from functools import singledispatchmethod
+import select
 
   #-------------------------------------------------#
  #           write_to_pipe                         #
@@ -12,6 +13,11 @@ from functools import singledispatchmethod
 # required by: entropythief()
 # nonblocking io!
 def write_to_pipe(fifoWriteEnd, thebytes, POOL_LIMIT):
+    """
+    fifoWriteEnd:
+    thebytes:
+    POOL_LIMIT:
+    """
     WRITTEN = 0
     try:
 
@@ -28,29 +34,15 @@ def write_to_pipe(fifoWriteEnd, thebytes, POOL_LIMIT):
             if count_to_write > len(thebytes): #review
                 count_to_write = len(thebytes)
             count_remaining = count_to_write
-            written = os.write(fifoWriteEnd, thebytes[:count_remaining])
-            total_written = written
-            offset=written
-            WRITTEN = written
-            """
-            # while count_remaining - written >= 4096 and total_written < count_to_write:
-            while count_remaining - written > 1 and total_written < count_to_write:
-                count_remaining -= written
-                POOL_LIMIT_F = fcntl.fcntl(fifoWriteEnd, 1032)
-                buf = bytearray(4)
-                fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
-                bytesInPipe = int.from_bytes(buf, "little")
-                written = os.write(fifoWriteEnd, thebytes[offset:(offset + count_remaining)])
-                offset+=written
-                total_written+=written
-            """
+            WRITTEN = os.write(fifoWriteEnd, thebytes[:count_remaining])
         return WRITTEN
     except BlockingIOError:
-        print(f"write_to_pipe: COULD NOT WRITE. count_remaining = {count_remaining}", file=sys.stderr)
+        print(f"write_to_pipe: COULD NOT WRITE. count_remaining = {count_remaining}. bytes in pipe = {bytesInPipe}", file=sys.stderr)
         WRITTEN=0
         pass
     except BrokenPipeError:
         WRITTEN=0
+        print("BROKEN PIPE--------------------------------------", file=sys.stderr)
         raise
     except Exception as exception:
         print("write_to_pipe: UNHANDLED EXCEPTION", file=sys.stderr)
@@ -127,7 +119,13 @@ class PipeWriter:
         name = "pilferedbits_" + str(max)
         os.mkfifo(self._resolve_name(name))
         fd = os.open(self._resolve_name(name), os.O_RDWR | os.O_NONBLOCK)
-        fcntl.fcntl(fd, self._F_SETPIPE_SZ, 2**20)
+        try:
+            fcntl.fcntl(fd, self._F_SETPIPE_SZ, 2**20)
+        except OSError:
+            # could not for whatever reason adjust up the pipe size
+            # nothing to do but accept the system imposed limit
+            pass
+
         self._pipes[name] = fd
 
         # update dat file
@@ -140,6 +138,21 @@ class PipeWriter:
         self._datfile.write(jsonarray)
         self._datfile.flush()
         print(f"PipeWriter: {jsonarray}", file=sys.stderr)
+
+
+    def _filter_ready_fds(self):
+        candidate_fds = []
+        writable_fds = []
+        for fd in self._pipes.values():
+            candidate_fds.append(fd)
+        s = select.select([], candidate_fds, candidate_fds, 0)
+        wlist = s[1]
+        for wfd in wlist:
+            writable_fds.append(wfd)
+        for efd in s[2]:
+            if efd in writable_fds:
+                writable_fds.remove(efd)
+        return writable_fds
 
     def _query_pipe_len(self, name) -> int:
         pass
@@ -154,12 +167,18 @@ class PipeWriter:
         offset = 0
         bytes_end = len(bytes)
         while offset < bytes_end:
-            for fd in self._pipes.values():
+            # here we need to filter the fds that are ready for writing (and maybe
+            # not in an exception state)
+
+#            for fd in self._pipes.values():
+            for fd in self._filter_ready_fds():
                 avail = self._report_free(fd)
                 # write to pipe if not full
                 if avail > 0:
                     if avail > bytes_end - offset:
                         write_to_pipe(fd, bytes[offset:bytes_end], self._PIPECAPACITY)
+
+#                        write_to_pipe(fd, bytes[offset:bytes_end], self._PIPECAPACITY)
                         offset=bytes_end
                     else:
                         write_to_pipe(fd, bytes[offset:(offset+avail)], self._PIPECAPACITY)
@@ -177,6 +196,7 @@ class PipeWriter:
                 for _ in range(count):
                     self._add_pipe()
             # continue until everything has been written
+        print(f"KDEBUG: WRITTEN, REMAINING {bytes_end}", file=sys.stderr)
         return bytes_end # for compatibility, but it is guaranteed to write as much as there is
 
     def __del__(self):

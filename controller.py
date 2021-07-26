@@ -163,7 +163,7 @@ if __name__ == "__main__":
         theview.destroy()
         cmd = {'cmd': 'stop'}
         to_model_q.put_nowait(cmd)
-        p1.join() # a daemonized process need not be joined?
+        p1.join(30) # a daemonized process need not be joined?
         while not from_model_q.empty():
             msg_from_model = from_model_q.get_nowait()
             print(msg_from_model, file=maindebuglog)

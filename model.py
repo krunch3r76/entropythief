@@ -33,7 +33,7 @@ from yapapi.strategy import *
 
 # internal
 import  utils
-import  worker
+import  worker_public
 import  pipe_writer
 
 
@@ -74,7 +74,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             task.reject_result()
         else:
             # download_bytes and invoke callback at task.data['writer']
-            ctx.download_bytes(worker.RESULT_PATH.as_posix(), task.data['writer'], sys.maxsize)
+            ctx.download_bytes(worker_public.RESULT_PATH.as_posix(), task.data['writer'], sys.maxsize)
             future_result = yield ctx.commit()
             # block/await here before switching to the other tasks otherwise state change
             # on buffer causes more work than necessary in my loop
@@ -330,6 +330,11 @@ async def entropythief(
 
                         count_bytes_requested = taskResultWriter.count_bytes_requesting()
                         if count_bytes_requested > 0:
+                            # TESTING
+                            # if count_bytes_requested > 1024*1024:
+                            #    count_bytes_requested = 1024*1024
+                            # THIS IS TO TEST WHETHER THERE IS A HARD LIMIT ON DOWNLOAD_BYTES IN WORKER CONTEXT
+
                             # estimate how many workers it would take given the EXPECTED_ENTROPY per worker
                             workers_needed = int(count_bytes_requested/MAXWORKERS)
                             if workers_needed == 0:
@@ -362,6 +367,7 @@ async def entropythief(
             #/while not OP_STOP
         #/while not OP_STOP
     except asyncio.CancelledError:
+        taskResultWriter.__del__()
         pass
 
 
