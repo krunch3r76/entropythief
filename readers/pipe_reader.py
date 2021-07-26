@@ -26,13 +26,14 @@ class PipeReader:
 
     def _add_name(self, name):
         # open the named pipe and store name:descriptor in _pipes
-        fd = os.open(self._resolve_name(name), os.O_RDONLY | os.O_NONBLOCK)
+        # fd = os.open(self._resolve_name(name), os.O_RDONLY | os.O_NONBLOCK)
+        fd = os.open(self._resolve_name(name), os.O_RDWR | os.O_NONBLOCK)
         self._pipes[name]=fd
 
     def _update_names(self):
         with open(self._filepathDatFile) as fpDatFile:
             names = json.load(fpDatFile)
-            if names is not None: # testing
+            if names is not None: # testing, this should not happen
                 for name in names:
                     if name not in self._pipes:
                         self._add_name(name)

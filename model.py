@@ -38,7 +38,7 @@ import  pipe_writer
 
 
 ENTRYPOINT_FILEPATH = Path("/golem/run/worker.py")
-kTASK_TIMEOUT = timedelta(minutes=6)
+kTASK_TIMEOUT = timedelta(minutes=10)
 # EXPECTED_ENTROPY = 1044480 # the number of bytes we can expect from any single provider's entropy pool
 # TODO dynamically adjust based on statistical data
 
