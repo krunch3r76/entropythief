@@ -72,6 +72,7 @@ known (to be fixed) issues:
 once the budget has been reached, no more work is provisioned and unfinished work will be processed to completion, after which it is necessary to restart by stopping and rerunning to obtain more bits if desired.
 
 ```
+TO DO: UI view of log messages
 TO DO: a discussion of randomness and the difference between random bits vs random number generators.
 TO DO: modularize view to facilitate porting and daemonization
 TO DO: windows compatible routines for named pipes (and UI)
