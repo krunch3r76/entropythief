@@ -49,16 +49,17 @@ the fields are as described above.
 
 __other components__:
 ```
-/tmp/pilferedbits_# # named pipes pool referred to by pilferebits.dat and utilized via readers API
-/tmp/pilferedbits.dat # stores named pipe pool info
-./stderr			# messages and optionally yapapi logger info messages are written to this file in place of stderr
-./main.log			# development messages that come from the controller are written to this file
-./entropythief-yapapi.log	# INFO and DEBUG messages from yapapi
-./controller.py			# controller-view runnable script that daemonizes the model (Golem executor) and coordinates with the view
-./model.py			# the Golem specific code (daemonized by controller.py)
-./pipe_writer.py # modularized pooled pipe_writer used by model and follows a model that ./readers/pipe_reader.py understands
-./readers/pipe_reader.py # API to named pipe pool
-./rdrand.c # python c extension to access rdrand (utilized upon construction of image)
+./stderr                  # messages and optionally yapapi logger info messages are written to this file in place of stderr
+./main.log                # development messages that come from the controller are written to this file
+./entropythief-yapapi.log # INFO and DEBUG messages from yapapi
+./controller.py           # controller-view runnable script that daemonizes the model (Golem executor) and coordinates with the view
+./model.py                # the Golem specific code (daemonized by controller.py)
+./rdrand.c                # python c extension to access rdrand (utilized upon construction of image)
+./build.sh                # utilized by Docker image to create a c based python extension module (from  rdrand.c)
+./pipe_writer.py          # modularized pooled pipe_writer used by model and follows a model that ./readers/pipe_reader.py understands
+./readers/pipe_reader.py  # API to named pipe pool
+/tmp/pilferedbits_#       # named pipes pool referred to by pilferebits.dat and utilized via readers API
+/tmp/pilferedbits.dat     # stores named pipe pool info (for readers/pipe_reader.py)
 ```
 
 __applications__:
