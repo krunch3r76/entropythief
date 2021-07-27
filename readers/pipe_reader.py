@@ -3,86 +3,111 @@ import json
 import fcntl
 import termios
 import time
+import select
+import sys
 
 #pipe_reader
 
+
+
+
+try:
+    _DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL'])
+except:
+    _DEBUGLEVEL = None
+
+if not _DEBUGLEVEL:
+    _DEBUGLEVEL=0
+
+
+def _log_msg(msg, debug_level=0, file=sys.stderr):
+    pass
+    if debug_level <= _DEBUGLEVEL:
+        print(msg, file=file)
+
+
+
+
+
+
+#****************************************
 def count_bytes_in_pipe(fd):
+#****************************************
     buf = bytearray(4)
     fcntl.ioctl(fd, termios.FIONREAD, buf, 1)
     bytesInPipe = int.from_bytes(buf, "little")
     return bytesInPipe
 
 
+
+
+
+#******************{}********************
 class PipeReader:
-    _pipes = { } # { name: INT }
-    _mtimeDat = 0.0 # last recorded modification time
-    _datfile = None
-    _filepathDatFile = "/tmp/pilferedbits.dat"
+#******************{}********************
+    _kNamedPipeFilePathString = '/tmp/pilferedbits'
+    _fdPipe = None
+    _fdPoll = select.poll()
+    _F_SETPIPE_SZ = 1031
     def __init__(self):
-        pass
+        if not os.path.exists(self._kNamedPipeFilePathString):
+            os.mkfifo(self._kNamedPipeFilePathString)
+        self._fdPipe = os.open(self._kNamedPipeFilePathString, os.O_RDONLY | os.O_NONBLOCK)
+        fcntl.fcntl(self._fdPipe, self._F_SETPIPE_SZ, 2**20)
+        self._fdPoll.register(self._fdPipe)
 
-    def _resolve_name(self, name):
-        return f"/tmp/{name}"
-
-    def _add_name(self, name):
-        # open the named pipe and store name:descriptor in _pipes
-        fd = os.open(self._resolve_name(name), os.O_RDONLY | os.O_NONBLOCK)
-        # fd = os.open(self._resolve_name(name), os.O_RDWR | os.O_NONBLOCK)
-        self._pipes[name]=fd
-
-    def _update_names(self):
-        with open(self._filepathDatFile) as fpDatFile:
-            names = json.load(fpDatFile)
-            if names is not None: # testing, this should not happen
-                for name in names:
-                    if name not in self._pipes:
-                        self._add_name(name)
-                for name in self._pipes.keys():
-                    if name not in names:
-                        del self._pipes[name]
+    # ........................................
+    def _whether_pipe_is_readable(self):
+    # ........................................
+        answer = False
+        pl = self._fdPoll.poll(0)
+        if len(pl) == 1:
+            if pl[0][1] & 1:
+                answer=True
+        return answer
 
     # continuously read pipes until read count satisfied
+    # -------------------------------------------
     def read(self, count) -> bytearray:
-        # TODO, check for exceptions and reopen pipes if necessary
-        # this is needed when the pipes have been closed and reopened under the same name
-        # or different names. try different approaches, examine exceptions on failed read?
-
+    # -------------------------------------------
         rv = bytearray()
-        if not os.path.exists(self._filepathDatFile):
-            return 0
-        # [ datfile exists ]
-
-        mtimeDat = os.path.getmtime(self._filepathDatFile)
-        if mtimeDat > self._mtimeDat:
-            self._mtimeDat = mtimeDat
-            self._update_names()
-        # [ _pipes up to date ]
-
-        
         remainingCount = count
         while remainingCount > 0:
-            for fd in self._pipes.values():
-                bytesInCurrentPipe = count_bytes_in_pipe(fd)
+            if self._whether_pipe_is_readable():
+                bytesInCurrentPipe = count_bytes_in_pipe(self._fdPipe)
                 ba = None
                 if bytesInCurrentPipe >= remainingCount:
                     while ba is None:
                         try:
-                            ba = os.read(fd, remainingCount)
+                            ba = os.read(self._fdPipe, remainingCount)
+                                # _log_msg("read", 1)
                         except BlockingIOError:
+                            _log_msg("error")
                             pass
                         else:
                             remainingCount = 0
                 else:
                     while ba is None:
                         try:
-                            ba = os.read(fd, bytesInCurrentPipe)
+                            ba = os.read(self._fdPipe, bytesInCurrentPipe)
                         except BlockingIOError:
+                            # _log_msg("error")
                             pass
                         else:
                             remainingCount -= bytesInCurrentPipe
                 rv.extend(ba)
-            time.sleep(0.01)
+            time.sleep(0.001)
 
         return rv
 
 
+
+
+
+
+    # -------------------------------------------
+    def __del__(self):
+    # -------------------------------------------
+    # for now, the reader will destroy anything remaining in the pipe
+        os.close(self._fdPipe)
+        os.unlink(self._kNamedPipeFilePathString)

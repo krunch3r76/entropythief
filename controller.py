@@ -23,10 +23,10 @@ import utils
 IMAGE_HASH = "238e362f7b52aa21c3f2a26ade9ba3952ae8c715c9efe37af0ef8258"
 MAXWORKERS = 10
 _MEBIBYTE = 2**20
-_MAXPOOLSIZE = 100 * _MEBIBYTE # this is the theoretical max
+_MAXPOOLSIZE = 500 * _MEBIBYTE # this is the theoretical max
 MINPOOLSIZE = _MAXPOOLSIZE - 4096 # leave one page room to prevent blocking
 #MINPOOLSIZE= 30000 - 4096
-BUDGET = 10.0
+BUDGET = 20.0
 kIPC_FIFO_FP = "/tmp/pilferedbits"
 
 

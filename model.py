@@ -212,7 +212,7 @@ class TaskResultWriter:
     _writerPipe = None
     def __init__(self, to_ctl_q, POOL_LIMIT):
         self.to_ctl_q = to_ctl_q
-        self._writerPipe = pipe_writer.PipeWriter()
+        self._writerPipe = pipe_writer.PipeWriter(POOL_LIMIT)
         self.POOL_LIMIT = POOL_LIMIT
 
     def query_len(self) -> int:
@@ -225,6 +225,9 @@ class TaskResultWriter:
             return self.POOL_LIMIT - bytesInPipes
         else:
             return 0
+
+    def refresh(self):
+        self._writerPipe.refresh()
 
     async def __call__(self, randomBytes):
         written = self._writerPipe.write(randomBytes)
@@ -286,6 +289,7 @@ async def entropythief(
             )
 
             while (not OP_STOP): # can catch OP_STOP here and/or in outer
+                taskResultWriter.refresh()
                 await asyncio.sleep(0.05)
                 if OP_PAUSE: # burn queue messages unless stop message seen
                     if not from_ctl_q.empty():
@@ -308,6 +312,7 @@ async def entropythief(
                 ) as golem:
                     OP_STOP = False
                     while (not OP_STOP and not OP_PAUSE):
+                        taskResultWriter.refresh()
                         await asyncio.sleep(0.05)
                         if not from_ctl_q.empty():
                             qmsg = from_ctl_q.get_nowait()
@@ -329,7 +334,7 @@ async def entropythief(
                         to_ctl_q.put_nowait(msg)
 
                         count_bytes_requested = taskResultWriter.count_bytes_requesting()
-                        if count_bytes_requested > 0:
+                        if count_bytes_requested > 0 and bytesInPipe < int(MINPOOLSIZE/2):
                             # TESTING
                             # if count_bytes_requested > 1024*1024:
                             #    count_bytes_requested = 1024*1024
@@ -354,6 +359,7 @@ async def entropythief(
                             )
                             # generate results
                             async for task in completed_tasks:
+                                taskResultWriter.refresh()
                                 if task.result:
                                     # for now only the callback on task.data is used within steps
                                     pass

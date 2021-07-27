@@ -6,214 +6,412 @@ import json
 import io
 from functools import singledispatchmethod
 import select
+import itertools
+import functools
+
+"""
+    PipeWriter
+    ----------
+    (_maxCapacity)
+    countAvailable()                " how many bytes the object will accept at the moment
+    len()                           " shall report count bytes in buffer
+    write(data)                     " shall buffer input bytes
+    refresh()                       " shall top off buffer as needed
+    _countBytesInInternalBuffers()  " sic
+    __del__()                       " shall close pipe ... cleanup
+
+
+    _buffers = []
+    _fdPipe
+    _pipeCapacity
+    _maxCapacity
+
+    kNamedPipeFilePathString = '/tmp/pilferedbits'
+
+    PipeWriter buffers and continually fills a pipe with bytes input via .write
+    It needs to be reminded to top off the buffer when possible by a call to its refresh method.
+    It shall top off the buffer when possible on every write call.
+    Every frame of bytes is first sliced to top off the named pipe, then added to a stack/list.
+
+"""
+
+# issue: if a pipe is re-opened with data in it, it may exceed max capacity interfering with processing
+
+try:
+    _DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL'])
+except:
+    _DEBUGLEVEL = None
+
+if not _DEBUGLEVEL:
+    _DEBUGLEVEL=0
+
+
+def _log_msg(msg, debug_level=0, file1=sys.stderr):
+    pass
+    if debug_level <= _DEBUGLEVEL:
+        print(msg, file=sys.stderr)
+        # print(msg, file=file1)
+
+
+
+
+
+
+
 
   #-------------------------------------------------#
- #           write_to_pipe                         #
+ #           _write_to_pipe                         #
 #-------------------------------------------------#
 # required by: entropythief()
 # nonblocking io!
-def write_to_pipe(fifoWriteEnd, thebytes, POOL_LIMIT):
+def _write_to_pipe(fifoWriteEnd, thebytes):
     """
     fifoWriteEnd:
     thebytes:
-    POOL_LIMIT:
     """
     WRITTEN = 0
     try:
-
-        buf = bytearray(4)
-        fcntl.ioctl(fifoWriteEnd, termios.FIONREAD, buf, 1)
-        bytesInPipe = int.from_bytes(buf, "little")
-        bytesNeeded = POOL_LIMIT - bytesInPipe
-
-        count_to_write = 0
-        if bytesNeeded > 0:
-            count_to_write = len(thebytes)
-            if count_to_write + bytesInPipe > POOL_LIMIT:
-                count_to_write = POOL_LIMIT - bytesInPipe 
-            if count_to_write > len(thebytes): #review
-                count_to_write = len(thebytes)
-            count_remaining = count_to_write
-            WRITTEN = os.write(fifoWriteEnd, thebytes[:count_remaining])
-        return WRITTEN
+        WRITTEN = os.write(fifoWriteEnd, thebytes)
     except BlockingIOError:
-        print(f"write_to_pipe: COULD NOT WRITE. count_remaining = {count_remaining}. bytes in pipe = {bytesInPipe}", file=sys.stderr)
+        _log_msg(f"_write_to_pipe: BlockingIOError, COULD NOT WRITE {len(thebytes)} bytes.", 0)
         WRITTEN=0
-        pass
     except BrokenPipeError:
         WRITTEN=0
-        print("BROKEN PIPE--------------------------------------", file=sys.stderr)
+        _log_msg("BROKEN PIPE--------------------------------------", file=sys.stderr)
         raise
     except Exception as exception:
-        print("write_to_pipe: UNHANDLED EXCEPTION", file=sys.stderr)
-        print(type(exception).__name__, file=sys.stderr)
-        print(exception, file=sys.stderr)
-        raise asyncio.CancelledError #review
+        _log_msg("_write_to_pipe: UNHANDLED EXCEPTION", file=sys.stderr)
+        _log_msg(type(exception).__name__, file=sys.stderr)
+        _log_msg(exception, file=sys.stderr)
+        raise # asyncio.CancelledError #review
     finally:
         return WRITTEN
 
 
 
-def get_bytes_in_pipe(fd):
-    buf = bytearray(4)
-    fcntl.ioctl(fd, termios.FIONREAD, buf, 1)
-    bytesInPipe = int.from_bytes(buf, "little")
-    return bytesInPipe
 
 
 
 
 
 
+
+  #############################################################
+ #                      PipeWriter{}                         #
+#############################################################
 class PipeWriter:
-    _pipes = { } # { name: INT }
-    _F_SETPIPE_SZ=1031
-    _PIPECAPACITY=2**20 - 4096
-    _datfile = None
+    _buffers = []
+    _fdPipe = None
+    _fdPoll = select.poll()
+    _pipeCapacity = 0
+    _maxCapacity = None
 
-    def __init__(self):
-        # create initial pipe
-        self._datfile = open("/tmp/pilferedbits.dat", "w")
-        self._add_pipe()
-
-    @singledispatchmethod
-    def _report_free(self, fd: int) -> int:
-        bytesInPipe = get_bytes_in_pipe(fd)
-        # print(f"KDEBUG: bytesInPipe: {bytesInPipe}, returning {self._PIPECAPACITY - bytesInPipe}", file=sys.stderr)
-        return self._PIPECAPACITY - bytesInPipe
+    _kNamedPipeFilePathString = '/tmp/pilferedbits'
+    # _F_SETPIPE_SZ=1031
+    _F_GETPIPE_SZ=1032
 
 
-    @_report_free.register
-    def _(self, name: str):
-        fd = self._pipes[name]
-        return self._report_free(fd)
 
+    # -------------------------------------------
+    def __init__(self, maxCapacity=2**20):
+    # -----------------------------------------
+        self._maxCapacity=maxCapacity
+        # _maxCapacity is the limit of bytes total the object will store (across pipe and internal buffers)
+        # enforce a _maxCapacity that is no less than the theoretical maximum named pipe capacity 2**20
+        assert self._maxCapacity >= 2**20
 
-    def _report_total_free(self):
-        total_free=0
-        for fd in self._pipes.values():
-            total_free += self._report_free(fd)
-        return total_free
-
-
-    def len(self):
-        bytesInPipes=0
-        for fd in self._pipes.values():
-            bytesInPipes += get_bytes_in_pipe(fd)
-        return bytesInPipes
-
-    def _resolve_name(self, name):
-        return f"/tmp/{name}"
-
-    def _add_pipe(self):
-        # search for highest numbered suffix in pipe_name or use 1
-        # try to create as candidate, increment until successful
-        max = 0
-        for key in self._pipes.keys():
-            index = int(key.split("_")[1])
-            if index > max:
-                max = index
-        max+=1
-        while os.path.exists("/tmp/pilferedbits_" + str(max)):
-            max+=1
-        name = "pilferedbits_" + str(max)
-        os.mkfifo(self._resolve_name(name))
-        fd = os.open(self._resolve_name(name), os.O_RDWR | os.O_NONBLOCK)
+        self._open_pipe()
+        if self._fdPipe:
+            self._fdPoll.register(self._fdPipe)
+        
+        # attempt to obtain the expected maximum of one mebibyte
         try:
-            fcntl.fcntl(fd, self._F_SETPIPE_SZ, 2**20)
-        except OSError:
-            # could not for whatever reason adjust up the pipe size
-            # nothing to do but accept the system imposed limit
             pass
+            # fcntl.fcntl(self._fdPipe, self._F_SETPIPE_SZ, 2**20)
+        except OSError:
+            pass
+        finally:
+            # record actually pipe size (either requested or left at system default)
+            if self._fdPipe:
+                self._pipeCapacity = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
 
-        self._pipes[name] = fd
-
-        # update dat file
-        namedList = []
-        for key in self._pipes.keys():
-            namedList.append(key)
-        jsonarray = json.dumps(namedList)
-        self._datfile.truncate(0)
-        self._datfile.seek(0)
-        self._datfile.write(jsonarray)
-        self._datfile.flush()
-        print(f"PipeWriter: {jsonarray}", file=sys.stderr)
+        # make sure the current count of bytes in pipe is not in excess of max capacity
+        bytesInPipe = self._count_bytes_in_pipe()
+        assert bytesInPipe <= self._maxCapacity
 
 
-    def _filter_ready_fds(self):
-        candidate_fds = []
-        writable_fds = []
-        for fd in self._pipes.values():
-            candidate_fds.append(fd)
-        s = select.select([], candidate_fds, candidate_fds, 0)
-        wlist = s[1]
-        for wfd in wlist:
-            writable_fds.append(wfd)
-        for efd in s[2]:
-            if efd in writable_fds:
-                writable_fds.remove(efd)
-        return writable_fds
 
-    def _query_pipe_len(self, name) -> int:
-        pass
 
-    def write(self, bytes):
-        print(f"KDEBUG: received request to write {len(bytes)} bytes", file=sys.stderr)
-        # pre, bytes len > 0
-        # iterate to next pipe with available capacity
-        # [ available capacity > bytes ]  write bytes
-        # [!] write available capacity, move offset, continue
 
-        offset = 0
-        bytes_end = len(bytes)
-        while offset < bytes_end:
-            # here we need to filter the fds that are ready for writing (and maybe
-            # not in an exception state)
+    # -------------------------------------------
+    def _set_max_capacity(maxcapacity):
+        assert maxcapacity >= 2**20
+        self._maxCapacity = maxcapacity
+    # -------------------------------------------
 
-#            for fd in self._pipes.values():
-            for fd in self._filter_ready_fds():
-                avail = self._report_free(fd)
-                # write to pipe if not full
-                if avail > 0:
-                    if avail > bytes_end - offset:
-                        write_to_pipe(fd, bytes[offset:bytes_end], self._PIPECAPACITY)
 
-#                        write_to_pipe(fd, bytes[offset:bytes_end], self._PIPECAPACITY)
-                        offset=bytes_end
-                    else:
-                        write_to_pipe(fd, bytes[offset:(offset+avail)], self._PIPECAPACITY)
-                        offset+=avail
-            # current pipes have been filled, any remaining bytes will be added to new pipes
-            if offset < bytes_end:
-                # determine how many more pipes of size _PIPECAPACITY needed to fulfill write request
-                bytes_to_go = bytes_end - offset
-                if bytes_to_go <= self._PIPECAPACITY:
-                    count = 1
-                else:
-                    count = int(bytes_to_go/self._PIPECAPACITY)
-                    if bytes_to_go % self._PIPECAPACITY != 0:
-                        count+=1
-                for _ in range(count):
-                    self._add_pipe()
-            # continue until everything has been written
-        print(f"KDEBUG: WRITTEN, REMAINING {bytes_end}", file=sys.stderr)
-        return bytes_end # for compatibility, but it is guaranteed to write as much as there is
+    # -------------------------------------------
+    def _whether_pipe_is_broken(self):
+    # -------------------------------------------
+        answer = False
+        # consider a non existing fd as a broken pipe
+        if self._fdPipe is None:
+            answer = True
+        else:
+            pl = self._fdPoll.poll(0)
+            # _log_msg(f"_whether_pipe_is_broken: {pl} {bin(pl[0][1])}")
+            if len(pl) == 1:
+                if pl[0][1] & 8: # broken pipe
+                    answer = True
 
-    def __del__(self):
-        print("PipeWriter: DELETING SELF", file=sys.stderr)
-        for key, val in self._pipes.items():
-            try:
-                os.close(val)
-            except:
-                pass
-            try:
-                print(f"PipeWriter: unlinking /tmp/{key}", file=sys.stderr)
-                os.unlink(f"/tmp/{key}")
-            except:
-                pass
+        return answer
+
+
+
+    # -------------------------------------------
+    def _count_bytes_in_pipe(self):
+    # -------------------------------------------
+        if self._whether_pipe_is_broken():
+            return 0
+        buf = bytearray(4)
+        fcntl.ioctl(self._fdPipe, termios.FIONREAD, buf, 1)
+        bytesInPipe = int.from_bytes(buf, "little")
+        return bytesInPipe
+
+
+
+
+
+    # -------------------------------------------
+    def _open_pipe(self):
+    # -------------------------------------------
+        if self._fdPipe is not None:
+            self._fdPoll.unregister(self._fdPipe)
         try:
-            print(f"PipeWriter: unlinking {self._datfile}", file=sys.stderr)
-            os.unlink(self._datfile)
+            self._fdPipe = os.open(self._kNamedPipeFilePathString, os.O_WRONLY | os.O_NONBLOCK)
+        except:
+            self._fdPipe = None
+        else:
+            self._fdPoll.register(self._fdPipe)
+            self._pipeCapacity = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
+            _log_msg("\n_open_pipe: pipe opened!\n")
+
+
+
+
+
+
+
+    # -----------------------------------------
+    def refresh(self):
+    # -----------------------------------------
+        self.write(bytearray())
+
+
+
+
+    # -----------------------------------------
+    def countAvailable(self):
+    # -----------------------------------------
+        return self._maxCapacity - self._count_bytes_in_pipe() - self._countBytesInInternalBuffers()
+
+
+
+
+    # --------------------------------------------
+    def len(self):
+    # -----------------------------------------
+        countBytesInPipe = self._count_bytes_in_pipe()
+        countBytesInInternalBuffers = self._countBytesInInternalBuffers()
+        return countBytesInPipe + countBytesInInternalBuffers
+
+
+
+    # ----------------------------------------------
+    def write(self, data):
+    # -----------------------------------------
+
+        ###############################################################
+        # .........................................
+        def ___store_bytes(self, data):
+        # .........................................
+            # stores as much as the data as permitted in a bytearray added to the internal buffer list
+            countAvailable = self.countAvailable()
+            if len(data) > countAvailable:
+                self._buffers.append(data[:countAvailable])
+            else:
+                self._buffers.append(data)
+
+
+        # .........................................
+        def ___countAvailableInPipe(self) -> int:
+        # .........................................
+            if self._fdPipe:
+                bytesInPipe = self._count_bytes_in_pipe()
+                _log_msg(f"counted {bytesInPipe} in pipe, returning difference from capacity of {self._pipeCapacity}", 4)
+                return self._pipeCapacity - bytesInPipe
+            else:
+                _log_msg(f"___countAvailableInPipe: counted zero because self._fdPipe is {self._fdPipe}", 2)
+                return 0
+
+
+        # .........................................
+        def ___try_write(self, data):
+        # .........................................
+            countBytesAvailableInPipe = ___countAvailableInPipe(self)
+            remaining = len(data)
+            written = 0
+
+            # poll for broken pipe 
+            if self._whether_pipe_is_broken():
+                _log_msg("caught broken pipe!", 11)
+                self._open_pipe()
+
+            else: # pipe exists, try to fill
+                # make sure the pipe is ready for writing
+                sl = [ [], [], [] ]
+                if self._fdPipe:
+                    sl = select.select([], [self._fdPipe], [], 0)
+
+                # TODO handle when pipe is in exception state
+
+                if countBytesAvailableInPipe > 0 and len(sl[1]) > 0:
+                    _log_msg(f"remaining to write to pipe: {remaining}", 2)
+                    if remaining <= countBytesAvailableInPipe:
+                        written = _write_to_pipe(self._fdPipe, data)
+                    else:
+                        written = _write_to_pipe(self._fdPipe, data[:countBytesAvailableInPipe])
+                    _log_msg(f"written to pipe: {written}", 2)
+                    remaining -= written
+                    _log_msg(f"remaining after written to pipe: {remaining}", 2)
+
+                    # _log_msg(f"Written: {written}, remaining: {remaining}")
+
+            # add any remaining to buffer stacklist
+            if remaining > 0:
+                ___store_bytes(self, data[written:])
+        ################################################################
+        # reconnect a broken pipe if applicable
+        if self._whether_pipe_is_broken():
+            self._open_pipe()
+
+        if self.countAvailable() == 0:
+            data=bytearray() # slice to 0
+            _log_msg(f"write: zeroed ... sliced data to {len(data)}", 3)
+        elif len(data) > self.countAvailable():
+            data=data[0:self.countAvailable()] 
+            _log_msg(f"write: sliced data to {len(data)} using countAvailable = {self.countAvailable()}", 3)
+
+        countBytesAvailableInPipe = ___countAvailableInPipe(self)
+        _log_msg(f"count bytes available in pipe: {countBytesAvailableInPipe}", 1)
+
+
+        if len(self._buffers) > 0:
+                _log_msg(f"topping off pipe! bytes available in pipe {___countAvailableInPipe(self)}", 3)
+                # regardless of the amount of data requested to be written, first top off pipe
+                # top off pipe
+                # countBytesInInternalBuffers = self._countBytesInInternalBuffers()
+                # iterate across buffers accumulating length settling where length exceeds what pipe needs
+                runningTotal = 0
+                index = 0
+                while runningTotal < countBytesAvailableInPipe and index < len(self._buffers):
+                    # ->
+                    runningTotal += len(self._buffers[index])
+                    index+=1
+                    # <-
+
+                # index is now one past the last buffer in sequence to satisfy need
+                # it is 1 if buffer[0] would satisfy the requirement
+
+                # now we are interested in the total of buffers besides the last
+                # as these will be emptied completely
+                lastBufferIndex = index-1
+                penUltimateBufferIndex = lastBufferIndex - 1
+                countBytesToPenult = 0
+                if lastBufferIndex > 0:
+                    # count how many bytes would ideally be delivered
+                    countBytesToPenult = 0
+                    if penUltimateBufferIndex > 0:
+                        for i in range(penUltimateBufferIndex):
+                            __try_write(self, self._buffers[i]) # go ahead and write the contents
+                            countBytesToPenult += self._buffers[i]
+                    _log_msg(f"count bytes to penult: {countBytesToPenult}")                    
+                    # lastBufferIndex will be used to as the count to pop the buffers after
+                    # determine how many bytes would be taken from the last buffer if countBytesToPenult were written
+
+                countBytesToTakeFromUlt = countBytesAvailableInPipe - countBytesToPenult
+                    
+                if lastBufferIndex > 0:
+                    _log_msg("POP!")
+                    # now pop and try to write from the buffers up to pen ult
+                    for _ in range(lastBufferIndex):
+                        self._buffers.pop()
+               
+                if countBytesToTakeFromUlt > 0:
+                    _log_msg("topping off pipe using final buffer!", 3)
+                    ___try_write(self, self._buffers[0][:countBytesToTakeFromUlt])
+                    # rewrite buffer to exclude the part handled by the write routine
+                    self._buffers[0] = self._buffers[0][countBytesToTakeFromUlt:-1]
+
+
+        # after topping off, attempt to write new data (which pushed on stack as appropriate)
+        ___try_write(self, data)
+
+
+
+
+
+    # -----------------------------------------
+    def _countBytesInInternalBuffers(self):
+    # -----------------------------------------
+        countBytesInBuffers = 0
+        for ba in self._buffers:
+            countBytesInBuffers += len(ba)
+        return countBytesInBuffers
+
+
+
+
+    # -------------------------------------------
+    def __repr__(self):
+    # -------------------------------------------
+        output=f"""
+max capacity: {self._maxCapacity}
+bytes in pipe: {self._count_bytes_in_pipe()}
+bytes in internal buffers: {self._countBytesInInternalBuffers()}
+total available: {self.countAvailable()}
+number of buffers: {len(self._buffers)}
+"""
+        return output
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # -----------------------------------------
+    def __del__(self):
+    # -----------------------------------------
+        
+        try:
+            os.close(self._fdPipe)
+        except:
+            pass
+        try:
+            pass
+            # os.unlink(self._kNamedPipeFilePathString)
         except:
             pass
 
