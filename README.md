@@ -1,6 +1,10 @@
 # entropythief
 **LINUX little endian (e.g. Intel chips/little endian i.e. not Raspberry Pi/ARM) only**
 
+---
+ADVISORY: entropythief alpha-v6 does not deal well with requests for a massive amount of random bytes atm despite, or in spite of, the recent pooled named pipe model. it is being overhauled and will utilize again a single named pipe -- and more the unix way on the second try -- while using internal memory to buffer and fill it continuously. thank you for your patience. the next version is expected to be published within a week.
+---
+
 get random entropy at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (default). requests are sent whenever the named pipe falls below a half the set threshold. 
 
 usage:
@@ -47,7 +51,7 @@ the fields are as described above.
 
 
 
-__other components__:
+__other components__: note, some of these components are upstream of alpha-v6
 ```
 ./stderr                  # messages and optionally yapapi logger info messages are written to this file in place of stderr
 ./main.log                # development messages that come from the controller are written to this file
@@ -75,7 +79,7 @@ once the budget has been reached, no more work is provisioned and unfinished wor
 ```
 TO DO: UI view of log messages
 TO DO: a discussion of randomness and the difference between random bits vs random number generators.
-TO DO: modularize view to facilitate porting and daemonization
+TO DO: further modularize/abstract view to facilitate porting and daemonization
 TO DO: windows compatible routines for named pipes (and UI)
 TO DO: adjust budget on the fly
 TO DO: detail design e.g. my original, self developed mvc model, etc
