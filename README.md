@@ -77,7 +77,7 @@ once the budget has been reached, no more work is provisioned and unfinished wor
 ```
 TO DO: UI view of log messages
 TO DO: a discussion of randomness and the difference between random bits vs random number generators.
-TO DO: modularize view to facilitate porting and daemonization
+TO DO: further modularize/abstract view to facilitate porting and daemonization
 TO DO: windows compatible routines for named pipes (and UI)
 TO DO: adjust budget on the fly
 TO DO: detail design e.g. my original, self developed mvc model, etc
