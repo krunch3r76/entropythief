@@ -49,7 +49,7 @@ the fields are as described above.
 
 
 
-__other components__:
+__other components__: note, some of these components are upstream of alpha-v6
 ```
 ./stderr                  # messages and optionally yapapi logger info messages are written to this file in place of stderr
 ./main.log                # development messages that come from the controller are written to this file
