@@ -1,7 +1,9 @@
 # entropythief
 **LINUX little endian (e.g. Intel chips/little endian i.e. not Raspberry Pi/ARM) only**
 
-ADVISORY: entropythief alpha-v6 does not deal well atm with requests for a massive amount of random bytes despite, or in spite of, the recent pooled named pipe model. it is being overhauled and will utilize again a single named pipe -- and more the unix way on the second try -- while using internal memory to buffer and fill it continuously. thank you for your patience. the next version is expected to be published within a week.
+---
+ADVISORY: entropythief alpha-v6 does not deal well with requests for a massive amount of random bytes atm despite, or in spite of, the recent pooled named pipe model. it is being overhauled and will utilize again a single named pipe -- and more the unix way on the second try -- while using internal memory to buffer and fill it continuously. thank you for your patience. the next version is expected to be published within a week.
+---
 
 get random entropy at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (default). requests are sent whenever the named pipe falls below a half the set threshold. 
 
