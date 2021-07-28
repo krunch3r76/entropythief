@@ -24,9 +24,10 @@ this requestor runs to pilfer as many bytes of random 1's and 0's from up to as 
 ```
 set buflim=<num>	# the minimum threshold that entropythief should do its best to stay above (refills when it falls beneath half this value)
 set maxworkers=<num>	# the most workers Golem executor can provision  # the more the more exotic!
+set budget=<float>    # the budget above which work should cease (unless this is used to increase the budget)
 stop			# stop/exit
 ```
-NOTE: to increase the budget, please set the script variable BUDGET at the head of controller.py
+
 
 __Usage/API__:
 once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to a named pipe, topping it off. the named pipe can accessed via any programming language and a sample Python API is provided at `readers/pipe_reader.py`, and an example script is in `readers/print_nonce`. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. _If the script is run repeatedly as a loop, it demonstrates how entropythief provisions workers on demand._
@@ -72,15 +73,11 @@ have fun with a unpredictable and exotic stream of 1's and 0's!
 
 this application exposes undocumented parts of the Python API to handle specific events in a novel way and to filter providers. see the code for details (elaboration to follow).
 
-known (to be fixed) issues:
-once the budget has been reached, no more work is provisioned and unfinished work will be processed to completion, after which it is necessary to restart by stopping and rerunning to obtain more bits if desired.
-
 ```
 TO DO: UI view of log messages or other interesting network activity
 TO DO: a discussion of randomness and the difference between random bits vs random number generators.
 TO DO: further modularize/abstract view to facilitate porting and daemonization
 TO DO: windows compatible routines for named pipes (and UI)
-TO DO: adjust budget on the fly
 TO DO: detail design e.g. my original, self developed mvc model, etc
 TO DO: develop a market strategy for better rates
 TO DO: video demonstration
