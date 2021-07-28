@@ -172,9 +172,9 @@ class PipeWriter:
     def _whether_pipe_is_ready_for_writing(self):
     # -------------------------------------------
         answer = False
-        # consider a non existing fd as a broken pipe
+        # consider a non existing fd as a broken/unready pipe
         if self._fdPipe is None:
-            answer = True
+            answer = False
         else:
             pl = self._fdPoll.poll(0)
             if len(pl) == 1:
@@ -275,18 +275,18 @@ class PipeWriter:
         # .........................................
         def ___try_write(self, data):
         # .........................................
-        # pre: pipe unbroken and ready for writing, pipe capacity can accomodate data
+        # try writing first to pipe then whatever could not be written push as a new stack buffer
             countBytesAvailableInPipe = ___countAvailableInPipe(self)
             remaining = len(data)
             written = 0
 
 
-            # if countBytesAvailableInPipe > 0:
-            if remaining <= countBytesAvailableInPipe:
-                written = _write_to_pipe(self._fdPipe, data)
-            else:
-                written = _write_to_pipe(self._fdPipe, data[:countBytesAvailableInPipe])
-                remaining -= written
+            if countBytesAvailableInPipe > 0:
+                if remaining <= countBytesAvailableInPipe:
+                    written = _write_to_pipe(self._fdPipe, data)
+                else:
+                    written = _write_to_pipe(self._fdPipe, data[:countBytesAvailableInPipe])
+                    remaining -= written
 
             # slice anything that was not successfully written to the name pipe and push unto internal stack
             if remaining > 0:
