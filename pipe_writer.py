@@ -48,7 +48,7 @@ if not _DEBUGLEVEL:
 def _log_msg(msg, debug_level=0, stream=sys.stderr):
     pass
     if debug_level <= _DEBUGLEVEL:
-        print(msg, file=stream)
+        print(msg, file=sys.stderr)
 
 
 
