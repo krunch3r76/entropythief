@@ -1,17 +1,13 @@
 # entropythief
 **LINUX little endian (e.g. Intel chips/little endian i.e. not Raspberry Pi/ARM) only**
 
----
-ADVISORY: entropythief alpha-v6 does not deal well with requests for a massive amount of random bytes atm despite, or in spite of, the recent pooled named pipe model. it is being overhauled and will utilize again a single named pipe -- and more the unix way on the second try -- while using internal memory to buffer and fill it continuously. thank you for your patience. the next version is expected to be published within a week.
----
-
 get random entropy at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (default). requests are sent whenever the named pipe falls below a half the set threshold. 
 
 usage:
 ```
 git clone https://github.com/krunch3r76/entropythief.git
 cd entropythief
-git checkout alpha-v6 # note, the (multiple) named pipe model is being revised as too many causes problems
+git checkout alpha-v7.1 # note, the (multiple) named pipe model is being revised as too many causes problems
 python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r requirements.txt
@@ -32,7 +28,7 @@ stop			# stop/exit
 NOTE: to increase the budget, please set the script variable BUDGET at the head of controller.py
 
 __Usage/API__:
-once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to a named pipe pool ring of files. the named pipe ring should be accessed via the API provided at `readers/pipe_reader.py`, and an example script is in `readers/print_nonce`. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. _If the script is run repeatedly as a loop, it demonstrates how entropythief provisions workers on demand._
+once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to a named pipe, topping it off. the named pipe can accessed via any programming language and a sample Python API is provided at `readers/pipe_reader.py`, and an example script is in `readers/print_nonce`. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. _If the script is run repeatedly as a loop, it demonstrates how entropythief provisions workers on demand._
 
 
 __comments/reflections__:
@@ -58,12 +54,15 @@ __other components__: note, some of these components are upstream of alpha-v6
 ./entropythief-yapapi.log # INFO and DEBUG messages from yapapi
 ./controller.py           # controller-view runnable script that daemonizes the model (Golem executor) and coordinates with the view
 ./model.py                # the Golem specific code (daemonized by controller.py)
-./rdrand.c                # python c extension to access rdrand (utilized upon construction of image)
-./build.sh                # utilized by Docker image to create a c based python extension module (from  rdrand.c)
-./pipe_writer.py          # modularized pooled pipe_writer used by model and follows a model that ./readers/pipe_reader.py understands
+./worker_public.py	  # public namespace for variables etc needed by requestor to interact with the provider/vm
+./pipe_writer.py          # buffered named pipe writer
 ./readers/pipe_reader.py  # API to named pipe pool
-/tmp/pilferedbits_#       # named pipes pool referred to by pilferebits.dat and utilized via readers API
+/tmp/pilferedbits         # named pipes pool referred to by pilferebits.dat and utilized via readers API
 /tmp/pilferedbits.dat     # stores named pipe pool info (for readers/pipe_reader.py)
+./Dockerfile	          # for vm creation
+./worker.py		  # for vm creation
+./rdrand.c                # for vm, python c extension to access rdrand (utilized upon construction of image)
+./build.sh                # for vm, utilized by Docker image to create a c based python extension module (from  rdrand.c)
 ```
 
 __applications__:
@@ -77,7 +76,7 @@ known (to be fixed) issues:
 once the budget has been reached, no more work is provisioned and unfinished work will be processed to completion, after which it is necessary to restart by stopping and rerunning to obtain more bits if desired.
 
 ```
-TO DO: UI view of log messages
+TO DO: UI view of log messages or other interesting network activity
 TO DO: a discussion of randomness and the difference between random bits vs random number generators.
 TO DO: further modularize/abstract view to facilitate porting and daemonization
 TO DO: windows compatible routines for named pipes (and UI)
