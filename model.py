@@ -483,7 +483,11 @@ def model__main(args
     finally:
         # send a message back to the controller that the (daemonized) process has cleanly exited
         # consider a more clean exit by checking if task is running first
-        task.cancel() # make sure cancel message has been propagated to EntropyThief (and Golem)
-        loop.run_until_complete(task)
+        try:
+            task.cancel() # make sure cancel message has been propagated to EntropyThief (and Golem)
+            loop.run_until_complete(task)
+        except:
+            pass
+
         msg = {'daemon': "finished"}
         to_ctl_q.put_nowait(msg)
