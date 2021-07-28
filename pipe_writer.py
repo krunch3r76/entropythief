@@ -150,6 +150,10 @@ class PipeWriter:
     # -------------------------------------------
 
 
+
+
+
+
     # -------------------------------------------
     def _whether_pipe_is_broken(self):
     # -------------------------------------------
@@ -165,6 +169,25 @@ class PipeWriter:
                     answer = True
 
         return answer
+
+
+    # -------------------------------------------
+    def _whether_pipe_is_ready_for_writing(self):
+    # -------------------------------------------
+        answer = False
+        # consider a non existing fd as a broken pipe
+        if self._fdPipe is None:
+            answer = True
+        else:
+            pl = self._fdPoll.poll(0)
+            # _log_msg(f"_whether_pipe_is_broken: {pl} {bin(pl[0][1])}")
+            if len(pl) == 1:
+                if pl[0][1] & 4: # writing will not block
+                    answer = True
+
+        return answer
+
+
 
 
 
@@ -266,8 +289,8 @@ class PipeWriter:
             if self._whether_pipe_is_broken():
                 _log_msg("caught broken pipe!", 11)
                 self._open_pipe()
-
-            else: # pipe exists, try to fill
+            else:
+            #elif self._whether_pipe_is_ready_for_writing(): # pipe exists and ready for writing, try to fill
                 # make sure the pipe is ready for writing
                 sl = [ [], [], [] ]
                 if self._fdPipe:
@@ -306,7 +329,7 @@ class PipeWriter:
         _log_msg(f"count bytes available in pipe: {countBytesAvailableInPipe}", 1)
 
 
-        if len(self._buffers) > 0:
+        if len(self._buffers) > 0 and self._whether_pipe_is_ready_for_writing():
                 _log_msg(f"topping off pipe! bytes available in pipe {___countAvailableInPipe(self)}", 3)
                 # regardless of the amount of data requested to be written, first top off pipe
                 # top off pipe
@@ -333,8 +356,8 @@ class PipeWriter:
                     countBytesToPenult = 0
                     if penUltimateBufferIndex > 0:
                         for i in range(penUltimateBufferIndex):
-                            __try_write(self, self._buffers[i]) # go ahead and write the contents
-                            countBytesToPenult += self._buffers[i]
+                            ___try_write(self, self._buffers[i]) # go ahead and write the contents
+                            countBytesToPenult += len(self._buffers[i])
                     _log_msg(f"count bytes to penult: {countBytesToPenult}")                    
                     # lastBufferIndex will be used to as the count to pop the buffers after
                     # determine how many bytes would be taken from the last buffer if countBytesToPenult were written
@@ -406,7 +429,8 @@ number of buffers: {len(self._buffers)}
     # -----------------------------------------
         
         try:
-            os.close(self._fdPipe)
+            pass
+            os.close(self._fdPipe) # closing the only write end might delete the pipe?
         except:
             pass
         try:

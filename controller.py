@@ -21,10 +21,10 @@ import fcntl
 import utils
 
 IMAGE_HASH = "238e362f7b52aa21c3f2a26ade9ba3952ae8c715c9efe37af0ef8258"
-MAXWORKERS = 10
+MAXWORKERS = 3
 _MEBIBYTE = 2**20
-_MAXPOOLSIZE = 500 * _MEBIBYTE # this is the theoretical max
-MINPOOLSIZE = _MAXPOOLSIZE - 4096 # leave one page room to prevent blocking
+_MAXPOOLSIZE = 1000 * _MEBIBYTE # this is the theoretical max
+MINPOOLSIZE = _MAXPOOLSIZE
 #MINPOOLSIZE= 30000 - 4096
 BUDGET = 20.0
 kIPC_FIFO_FP = "/tmp/pilferedbits"
@@ -82,6 +82,7 @@ if __name__ == "__main__":
                     , IMAGE_HASH
                     , args.enable_logging
                     ])
+        payment_failed_count=0
         p1.start()
         u = theview.coro_update_mainwindow()
         next(u)
@@ -130,7 +131,8 @@ if __name__ == "__main__":
                 elif 'info' in msg_from_model and msg_from_model['info'] == 'worker finished':
                     count_workers-=1
                 elif 'info' in msg_from_model and msg_from_model['info'] == "payment failed":
-                    if BUDGET - current_total < 0.01: # review epsilon
+                    payment_failed_count+=1
+                    if BUDGET - current_total < 0.01 or payment_failed_count==25: # review epsilon
                         msg_to_model = {'cmd': 'pause execution'}
                         print(msg_to_model, file=maindebuglog)
                         to_model_q.put_nowait(msg_to_model)
@@ -175,6 +177,3 @@ if __name__ == "__main__":
                 # raise Exception(msg_from_model['exception'])
         print("Costs incurred were: " + str(current_total) + ".\nOn behalf of the Golem Community, thank you for your participation.")
         stderr2file.close()
-        # instead of closing the write end, leave it open for any pending bits that may be needed by a reader
-        # os.close(fifoWriteEnd)
-        os.unlink(kIPC_FIFO_FP)

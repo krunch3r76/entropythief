@@ -49,12 +49,33 @@ class PipeReader:
     _fdPipe = None
     _fdPoll = select.poll()
     _F_SETPIPE_SZ = 1031
+
+
+    
+
+    # --------------------------------------
     def __init__(self):
+    # --------------------------------------
+        self._open_pipe()
+
+    # .......................
+    def _open_pipe(self):
+    # .......................
         if not os.path.exists(self._kNamedPipeFilePathString):
             os.mkfifo(self._kNamedPipeFilePathString)
         self._fdPipe = os.open(self._kNamedPipeFilePathString, os.O_RDONLY | os.O_NONBLOCK)
         fcntl.fcntl(self._fdPipe, self._F_SETPIPE_SZ, 2**20)
         self._fdPoll.register(self._fdPipe)
+
+    """
+    def _reopen_pipe(self):
+        try:
+            os.close(self._fdPipe)
+        except OSError:
+            pass
+        self._fdPoll.unregister(self._fdPipe)
+        self._fdPipe=None
+    """
 
     # ........................................
     def _whether_pipe_is_readable(self):
@@ -65,6 +86,9 @@ class PipeReader:
             if pl[0][1] & 1:
                 answer=True
         return answer
+
+
+
 
     # continuously read pipes until read count satisfied
     # -------------------------------------------
@@ -95,6 +119,10 @@ class PipeReader:
                             pass
                         else:
                             remainingCount -= bytesInCurrentPipe
+                """
+                if len(ba) == 0: # implies write end has been closed
+                    self._reopen_pipe()
+                """
                 rv.extend(ba)
             time.sleep(0.001)
 
@@ -111,3 +139,7 @@ class PipeReader:
     # for now, the reader will destroy anything remaining in the pipe
         os.close(self._fdPipe)
         os.unlink(self._kNamedPipeFilePathString)
+
+
+
+
