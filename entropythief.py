@@ -101,11 +101,12 @@ if __name__ == "__main__":
                 msg_to_model = {'cmd': 'set maxworkers', 'count': MAXWORKERS}
                 to_model_q.put_nowait(msg_to_model)
             elif ucmd=='restart':
-                msg_to_model = {'cmd': 'restart' }
+                payment_failed_count=0 # reset counter
+                msg_to_model = {'cmd': 'unpause execution' }
                 to_model_q.put_nowait(msg_to_model)
             elif 'set budget=' in ucmd:
                 tokens = ucmd.split("=")
-                BUDGET = int(tokens[-1])
+                BUDGET = float(tokens[-1])
                 msg_to_model = {'cmd': 'set budget', 'budget': BUDGET}
                 to_model_q.put_nowait(msg_to_model)
 
@@ -134,7 +135,7 @@ if __name__ == "__main__":
                     count_workers-=1
                 elif 'info' in msg_from_model and msg_from_model['info'] == "payment failed":
                     payment_failed_count+=1
-                    if BUDGET - current_total < 0.01 or payment_failed_count==25: # review epsilon
+                    if BUDGET - current_total < 0.01 or payment_failed_count==10: # review epsilon
                         # to be implemented
                         msg_to_model = {'cmd': 'pause execution'} # give the logs a rest, don't bother requesting until budget is increased
                         to_model_q.put_nowait(msg_to_model)
@@ -157,11 +158,12 @@ if __name__ == "__main__":
         pass # go onto finally
     except Exception as e:
         theview.destroy()
-        print("generic exception")
-        print(f"\n{e}\n")
+        print("generic exception from entropythief controller:")
+        print(f"{e}\n")
     finally:
         theview.destroy()
         print("+=+=+=+=+=+=+=stopping and settling accounts=+=+=+=+=+=+=")
+        bytesPurchased = 0
         if p1.is_alive():
             cmd = {'cmd': 'stop'}
             to_model_q.put_nowait(cmd)
@@ -173,6 +175,8 @@ if __name__ == "__main__":
                     print(msg_from_model, file=maindebuglog)
                     if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
                         current_total += msg_from_model['amount']
+                    if 'bytesPurchased' in msg_from_model:
+                        bytesPurchased = msg_from_model['bytesPurchased']
                     elif 'exception' in msg_from_model:
                         print("unhandled exception reported by model:\n")
                         print(msg_from_model['exception'])
@@ -181,5 +185,8 @@ if __name__ == "__main__":
                         print("DEV MESSAGE: DAEMON EXITED")
                 time.sleep(0.0001)
 
-        print("Costs incurred were: " + str(current_total) + ".\nOn behalf of the Golem Community, thank you for your participation.")
+        print("Costs incurred were: " + str(current_total))
+        print("Bytes purchased were: " + str(bytesPurchased))
+        print("cost/gigabyte: " + str(float(current_total/bytesPurchased)*1000 * _kMEBIBYTE))
+        print("\nOn behalf of the Golem Community, thank you for your participation.")
         stderr2file.close()
