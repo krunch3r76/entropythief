@@ -12,7 +12,7 @@ git checkout alpha-v7.1 # note, the (multiple) named pipe model is being revised
 python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r requirements.txt
-./controller.py # --help # to change the network from the default rinkeby and the subnet-tag from the default devnet-beta.2
+./entropythief.py # --help # to change the network from the default rinkeby and the subnet-tag from the default devnet-beta.2
 
 # in a separate window
 cd readers/print_nonce
@@ -55,14 +55,14 @@ __other components__: note, some of these components are upstream of alpha-v6
 ./stderr                  # messages and optionally yapapi logger info messages are written to this file in place of stderr
 ./main.log                # development messages that come from the controller are written to this file
 ./entropythief-yapapi.log # INFO and DEBUG messages from yapapi
-./controller.py           # controller-view runnable script that daemonizes the model (Golem executor) and coordinates with the view
+./entropythief.py         # controller-view runnable script that daemonizes the model (Golem executor) and coordinates with the view
 ./model.py                # the Golem specific code (daemonized by controller.py)
-./worker_public.py	  # public namespace for variables etc needed by requestor to interact with the provider/vm
+./worker_public.py        # public namespace for variables etc needed by requestor to interact with the provider/vm
 ./pipe_writer.py          # buffered named pipe writer
 ./readers/pipe_reader.py  # API to named pipe
 /tmp/pilferedbits         # named pipe to which the buffered writes continually occur as needed to top off
-./Dockerfile	          # for vm creation
-./worker.py		  # for vm creation
+./Dockerfile              # for vm creation
+./worker.py               # for vm creation
 ./rdrand.c                # for vm, python c extension to access rdrand (utilized upon construction of image)
 ./build.sh                # for vm, utilized by Docker image to create a c based python extension module (from  rdrand.c)
 ```
