@@ -58,7 +58,6 @@ __other components__: note, some of these components are upstream of alpha-v6
 ./pipe_writer.py          # buffered named pipe writer
 ./readers/pipe_reader.py  # API to named pipe pool
 /tmp/pilferedbits         # named pipes pool referred to by pilferebits.dat and utilized via readers API
-/tmp/pilferedbits.dat     # stores named pipe pool info (for readers/pipe_reader.py)
 ./Dockerfile	          # for vm creation
 ./worker.py		  # for vm creation
 ./rdrand.c                # for vm, python c extension to access rdrand (utilized upon construction of image)
