@@ -32,7 +32,7 @@ class Display:
             # makes Splash 1/3 the height of subwindow
             yBegParent, xBegParent = self._parent_display._widget.getbegyx()
             Ymax, Xmax = self._parent_display._widget.getmaxyx()
-            height3rd = int( (Ymax-yBegParent)/3)+1
+            height3rd = int( (Ymax-yBegParent)/2.5)
             width3rd = int( (Xmax-xBegParent)/3)
 
             yBeg = yBegParent + height3rd
@@ -50,14 +50,6 @@ class Display:
             if self._parent_display:
                 self._widget.refresh(*self._refresh_coords())
             
-        """
-        def refresh0(self):
-            if self._parent_display:
-                self._widget.refresh(0, 0, 0, 0, 0, 0)
-
-        def noutrefresh(self):
-            self._widget.noutrefresh(*self._refresh_coords())
-        """
 
 
         #^^^^Splash^^^^^^^^^^^^^^^^^^^^^^#
@@ -128,6 +120,7 @@ class Display:
 """EntropyThief >cmd reference
 >set buflim=<NUM>
 >set maxworkers=<NUM>
+>set budget=<FLOAT>
 >stop
 <ESC> toggle this menu
 """
@@ -284,7 +277,7 @@ class View:
                 msg = yield
                 self.win.appendtxt(msg)
                 self.win.refresh()
-        except GeneratorExit:
+        except GeneratorExit: # review
             pass
 
 
@@ -296,7 +289,6 @@ class View:
     #...............................#
     def refresh(self):
         self.win.refresh()
-        # self.win._widget.refresh()
         self.winbox.refresh()
 
 

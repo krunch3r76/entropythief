@@ -95,18 +95,18 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
   #---------------------------------------------#
  #             MySummaryLogger{}               #
 #---------------------------------------------#
-# Required by: entropythief
+# Required by: model__entropythief
 # the log method is provided as the event-consumer for yapapi.Golem to intercept events
 """
     to_ctl_q:   the msg queue back to the controller
 """
 class MySummaryLogger(yapapi.log.SummaryLogger):
-    costRunning = 0.0
+    # costRunning = 0.0
     event_log_file=open('/dev/null')
     to_ctl_q = None
 
     def __init__(self, to_ctl_q):
-        self.costRunning = 0.0
+        # self.costRunning = 0.0
         self.to_ctl_q = to_ctl_q
         super().__init__()
         self.event_log_file = open("events.log", "w")
@@ -114,9 +114,12 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
     def log(self, event: yapapi.events.Event) -> None:
         to_controller_msg = None
         if isinstance(event, yapapi.events.PaymentAccepted):
-            self.costRunning += float(event.amount)
+            # self.costRunning += float(event.amount)
+            # to_controller_msg = {
+            #    'cmd': 'update_total_cost', 'amount': self.costRunning}
+            added_cost=float(event.amount)
             to_controller_msg = {
-                'cmd': 'update_total_cost', 'amount': self.costRunning}
+                'cmd': 'add cost', 'amount': added_cost}
         elif isinstance(event, yapapi.events.PaymentFailed):
             to_controller_msg = {
                 'info': 'payment failed'
@@ -173,7 +176,9 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
 
 
 @dataclass
+############################ {} #########################
 class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, object):
+#########################################################
     """
         expected_time_secs: ? TODO, copied from api, required for super
         max_fixed_price: ? TODO, copied from api, required for super
@@ -268,10 +273,10 @@ class TaskResultWriter:
 
 
   ###############################################
- #             entropythief()                  #
+ #             model__entropythief()           #
 ###############################################
 # execute tasks on the vm
-async def entropythief(
+async def model__entropythief(
         args
         , from_ctl_q
         , taskResultWriter
@@ -427,7 +432,7 @@ def model__main(args
     # create the task
     taskResultWriter = TaskResultWriter(to_ctl_q, MINPOOLSIZE)
     task = loop.create_task(
-        entropythief(
+        model__entropythief(
             args
             , from_ctl_q
             , taskResultWriter

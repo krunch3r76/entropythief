@@ -109,18 +109,23 @@ if __name__ == "__main__":
                 msg_to_model = {'cmd': 'set budget', 'budget': BUDGET}
                 to_model_q.put_nowait(msg_to_model)
 
-            if msg_to_model:
-                if not ('cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes'):
-                    print(msg_to_model, file=maindebuglog)
+
             #/if
             if not from_model_q.empty():
                 msg_from_model = from_model_q.get_nowait()
-                print(msg_from_model, file=maindebuglog)
+                # log msg to maindebuglog (main.log)
+                if msg_from_model:
+                    if not ('cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes'):
+                        print(msg_from_model, file=maindebuglog)
+                    else:
+                        concat_msg = { msg_from_model['cmd']: len(msg_from_model['hexstring']) }
+                        print(concat_msg, file=maindebuglog)
+
                 if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes':
                     msg = msg_from_model['hexstring']
                     result = u.send(msg)
-                elif 'cmd' in msg_from_model and msg_from_model['cmd'] == 'update_total_cost':
-                    current_total = msg_from_model['amount']
+                if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
+                    current_total += msg_from_model['amount']
                 elif 'exception' in msg_from_model:
                     raise Exception(msg_from_model['exception'])
                 elif 'info' in msg_from_model and msg_from_model['info'] == 'worker started':
@@ -166,8 +171,8 @@ if __name__ == "__main__":
                 if not from_model_q.empty(): # revise boolean efficiency
                     msg_from_model = from_model_q.get_nowait()
                     print(msg_from_model, file=maindebuglog)
-                    if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'update_total_cost':
-                        current_total = msg_from_model['amount']
+                    if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
+                        current_total += msg_from_model['amount']
                     elif 'exception' in msg_from_model:
                         print("unhandled exception reported by model:\n")
                         print(msg_from_model['exception'])
