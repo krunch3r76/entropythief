@@ -57,7 +57,7 @@ __other components__: note, some of these components are upstream of alpha-v6
 ./model.py                # the Golem specific code (daemonized by controller.py)
 ./worker_public.py	  # public namespace for variables etc needed by requestor to interact with the provider/vm
 ./pipe_writer.py          # buffered named pipe writer
-./readers/pipe_reader.py  # API to named pipe pool
+./readers/pipe_reader.py  # API to named pipe
 /tmp/pilferedbits         # named pipe to which the buffered writes continually occur as needed to top off
 ./Dockerfile	          # for vm creation
 ./worker.py		  # for vm creation
