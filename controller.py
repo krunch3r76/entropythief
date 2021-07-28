@@ -133,7 +133,7 @@ if __name__ == "__main__":
                     bytesInPipe = msg_from_model['bytesInPipe']
                 elif 'model exception' in msg_from_model:
                     theview.destroy()
-                    print(msg_from_model)
+                    print(utils.TEXT_COLOR_BLUE + "The model threw the following exception:" + utils.TEXT_COLOR_DEFAULT + "\n" + msg_from_model['model exception']['name'] + "\n" + msg_from_model['model exception']['what'])
                     break
             #/if
             theview.refresh()
@@ -148,23 +148,24 @@ if __name__ == "__main__":
     finally:
         theview.destroy()
         print("+=+=+=+=+=+=+=stopping and settling accounts=+=+=+=+=+=+=")
-        cmd = {'cmd': 'stop'}
-        to_model_q.put_nowait(cmd)
-        # get pending messages from the model to update total cost or report on "returned" exceptions (may not be implemented yet)
-        daemon_exited = False
-        while not daemon_exited:
-            if not from_model_q.empty(): # revise boolean efficiency
-                msg_from_model = from_model_q.get_nowait()
-                print(msg_from_model, file=maindebuglog)
-                if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'update_total_cost':
-                    current_total = msg_from_model['amount']
-                elif 'exception' in msg_from_model:
-                    print("unhandled exception reported by model:\n")
-                    print(msg_from_model['exception'])
-                elif 'daemon' in msg_from_model:
-                    daemon_exited = True
-                    print("DEV MESSAGE: DAEMON EXITED")
-            time.sleep(0.0001)
+        if p1.is_alive():
+            cmd = {'cmd': 'stop'}
+            to_model_q.put_nowait(cmd)
+            # get pending messages from the model to update total cost or report on "returned" exceptions (may not be implemented yet)
+            daemon_exited = False
+            while not daemon_exited:
+                if not from_model_q.empty(): # revise boolean efficiency
+                    msg_from_model = from_model_q.get_nowait()
+                    print(msg_from_model, file=maindebuglog)
+                    if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'update_total_cost':
+                        current_total = msg_from_model['amount']
+                    elif 'exception' in msg_from_model:
+                        print("unhandled exception reported by model:\n")
+                        print(msg_from_model['exception'])
+                    elif 'daemon' in msg_from_model:
+                        daemon_exited = True
+                        print("DEV MESSAGE: DAEMON EXITED")
+                time.sleep(0.0001)
 
         print("Costs incurred were: " + str(current_total) + ".\nOn behalf of the Golem Community, thank you for your participation.")
         stderr2file.close()

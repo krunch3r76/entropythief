@@ -478,7 +478,7 @@ def model__main(args
         to_ctl_q.put_nowait(msg)
     except Exception as e:
         # this should not happen
-        msg = {'model exception': str(type(e)) + ": " + str(e) }
+        msg = {'model exception': {'name': e.__class__.__name__, 'what': str(e) } }
         to_ctl_q.put_nowait(msg)
     finally:
         # send a message back to the controller that the (daemonized) process has cleanly exited
