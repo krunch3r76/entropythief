@@ -87,3 +87,5 @@ TO DO: video demonstration
 TO DO: improve comments
 TO DO: document flow
 ```
+
+CREDITS TO ADD TO SOURCE: Intel provided the inline assembly to obtain random int64's from the processor.
