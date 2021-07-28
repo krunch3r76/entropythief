@@ -77,6 +77,7 @@ class PipeReader:
         self._fdPipe=None
     """
 
+    """
     # ........................................
     def _whether_pipe_is_readable(self):
     # ........................................
@@ -86,7 +87,7 @@ class PipeReader:
             if pl[0][1] & 1:
                 answer=True
         return answer
-
+    """
 
 
 
@@ -97,28 +98,28 @@ class PipeReader:
         rv = bytearray()
         remainingCount = count
         while remainingCount > 0:
-            if self._whether_pipe_is_readable():
-                bytesInCurrentPipe = count_bytes_in_pipe(self._fdPipe)
-                ba = None
-                if bytesInCurrentPipe >= remainingCount:
-                    while ba is None:
-                        try:
-                            ba = os.read(self._fdPipe, remainingCount)
-                                # _log_msg("read", 1)
-                        except BlockingIOError:
-                            _log_msg("error")
-                            pass
-                        else:
-                            remainingCount = 0
-                else:
-                    while ba is None:
-                        try:
-                            ba = os.read(self._fdPipe, bytesInCurrentPipe)
-                        except BlockingIOError:
-                            # _log_msg("error")
-                            pass
-                        else:
-                            remainingCount -= bytesInCurrentPipe
+            # if self._whether_pipe_is_readable():
+            bytesInCurrentPipe = count_bytes_in_pipe(self._fdPipe)
+            ba = None
+            if bytesInCurrentPipe >= remainingCount:
+                while ba is None:
+                    try:
+                        ba = os.read(self._fdPipe, remainingCount)
+                            # _log_msg("read", 1)
+                    except BlockingIOError:
+                        pass
+                    else:
+                        remainingCount = 0
+            else:
+                while ba is None:
+                    try:
+                        ba = os.read(self._fdPipe, bytesInCurrentPipe)
+                    except BlockingIOError:
+                        # _log_msg("error")
+                        pass
+                    else:
+                        remainingCount -= bytesInCurrentPipe
+
                 """
                 if len(ba) == 0: # implies write end has been closed
                     self._reopen_pipe()
@@ -142,4 +143,6 @@ class PipeReader:
 
 
 
+# potential issues
+# undefined behavior if named pipe is deleted elsewhere
 
