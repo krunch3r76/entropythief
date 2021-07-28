@@ -89,3 +89,6 @@ TO DO: document flow
 ```
 
 CREDITS TO ADD TO SOURCE: Intel provided the inline assembly to obtain random int64's from the processor.
+
+Reflections:
+Randomness (exotic) is expensive. To get enough of it I think you literally have to steal it! This is a problem entropy thief is working on but as of yet it serves as a POC with components that can be implemented in other apps where randomness or other features need to be leveraged.
