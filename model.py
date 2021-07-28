@@ -310,7 +310,6 @@ async def entropythief(
     while not OP_STOP:
         taskResultWriter.refresh()
 
-
         if not from_ctl_q.empty():
             qmsg = from_ctl_q.get_nowait()
             print(qmsg, file=sys.stderr)
@@ -323,6 +322,8 @@ async def entropythief(
                 MAXWORKERS = qmsg['count']
             elif 'cmd' in qmsg and qmsg['cmd'] == 'pause execution':
                 OP_PAUSE=True
+            elif 'cmd' in qmsg and qmsg['cmd'] == 'set budget':
+                BUDGET=qmsg['budget']
         #/if not from_ctl_q.empty()
 
         # query length of pipe -> bytesInPipe

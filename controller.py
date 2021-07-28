@@ -86,11 +86,13 @@ if __name__ == "__main__":
         while True:
             ucmd = theview.getinput(current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, bytesInPipe)
             msg_to_model = None
+
+
             if ucmd == "stop":
                 break
             elif 'set buflim=' in ucmd:
                 tokens = ucmd.split("=")
-                MINPOOLSIZE = int(tokens[-1])
+                MINPOOLSIZE = int(eval(tokens[-1]))
                 msg_to_model = {'cmd': 'set buflim', 'limit': MINPOOLSIZE}
                 to_model_q.put_nowait(msg_to_model)
             elif 'set maxworkers=' in ucmd:
@@ -101,6 +103,12 @@ if __name__ == "__main__":
             elif ucmd=='restart':
                 msg_to_model = {'cmd': 'restart' }
                 to_model_q.put_nowait(msg_to_model)
+            elif 'set budget=' in ucmd:
+                tokens = ucmd.split("=")
+                BUDGET = int(tokens[-1])
+                msg_to_model = {'cmd': 'set budget', 'budget': BUDGET}
+                to_model_q.put_nowait(msg_to_model)
+
             if msg_to_model:
                 if not ('cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes'):
                     print(msg_to_model, file=maindebuglog)
@@ -122,9 +130,10 @@ if __name__ == "__main__":
                 elif 'info' in msg_from_model and msg_from_model['info'] == "payment failed":
                     payment_failed_count+=1
                     if BUDGET - current_total < 0.01 or payment_failed_count==25: # review epsilon
-                        msg_to_model = {'cmd': 'pause execution'}
-                        print(msg_to_model, file=maindebuglog)
+                        # to be implemented
+                        msg_to_model = {'cmd': 'pause execution'} # give the logs a rest, don't bother requesting until budget is increased
                         to_model_q.put_nowait(msg_to_model)
+                        # print(msg_to_model, file=maindebuglog)
                 elif 'event' in msg_from_model:
                     print(msg_from_model, file=maindebuglog)
                 elif 'debug' in msg_from_model:
