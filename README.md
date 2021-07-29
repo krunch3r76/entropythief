@@ -23,12 +23,16 @@ python3 print_nonce.py # watch how the status line changes!
 this requestor runs to pilfer as many bytes of random 1's and 0's from up to as many providers as the user specifies. these parameter(s) can be adjusted on the fly by the user with the following commands:
 ```
 set buflim=<num>      # the minimum threshold that entropythief should do its best to stay above (refills when it falls beneath half this value)
-set maxworkers=<num>	# the most workers Golem executor can provision  # the more the more exotic!
+set maxworkers=<num>  # the most workers Golem executor can provision  # the more the more exotic!
 set budget=<float>    # the budget above which work should cease (unless this is used to increase the budget)
 restart               # after so many payment failures or after budget is exceeded, budget is implied to be over the limit. after setting run this.
-stop			            # stop/exit
+stop                  # stop/exit
 ```
 
+try:
+`set buflim=2**20*1000` for 1 gigabyte of random data
+
+and `set maxworkers=13` across 13 workers
 
 __Usage/API__:
 once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to a named pipe, topping it off. the named pipe can accessed via any programming language and a sample Python API is provided at `readers/pipe_reader.py`, and an example script is in `readers/print_nonce`. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. _If the script is run repeatedly as a loop, it demonstrates how entropythief provisions workers on demand._
