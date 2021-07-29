@@ -120,7 +120,7 @@ if __name__ == "__main__":
                 if msg_from_model:
                     if 'bytesInPipe' in msg_from_model:
                         pass # don't fill up log file with this
-                    if not ('cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes'):
+                    elif not ('cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes'):
                         print(msg_from_model, file=maindebuglog)
                     else:
                         concat_msg = { msg_from_model['cmd']: len(msg_from_model['hexstring']) }
