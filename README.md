@@ -8,7 +8,7 @@ usage:
 ```
 git clone https://github.com/krunch3r76/entropythief.git
 cd entropythief
-git checkout alpha-v7.2 # note, the (multiple) named pipe model is being revised as too many causes problems
+git checkout alpha-v7.3 # note, the (multiple) named pipe model is being revised as too many causes problems
 python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r requirements.txt
