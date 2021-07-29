@@ -237,6 +237,7 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
 class TaskResultWriter:
     _bytesSeen = 0
     _writerPipe = None
+
     def __init__(self, to_ctl_q, POOL_LIMIT):
         self.to_ctl_q = to_ctl_q
         self._writerPipe = pipe_writer.PipeWriter(POOL_LIMIT)
@@ -343,6 +344,7 @@ async def model__entropythief(
 
         if not OP_PAUSE: # currently, OP_PAUSE is set whenever there are many rejections due to insufficient funds, it can be released by sending the command to restart (from the view)
             # query length of pipe -> bytesInPipe
+            taskResultWriter.refresh()
             bytesInPipe = taskResultWriter.query_len()
             msg = {'bytesInPipe': bytesInPipe}
             to_ctl_q.put_nowait(msg)

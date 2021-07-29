@@ -115,8 +115,11 @@ if __name__ == "__main__":
             #/if
             if not from_model_q.empty():
                 msg_from_model = from_model_q.get_nowait()
-                # log msg to maindebuglog (main.log)
+
+                # log most msg's to maindebuglog (main.log)
                 if msg_from_model:
+                    if 'bytesInPipe' in msg_from_model:
+                        pass # don't fill up log file with this
                     if not ('cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes'):
                         print(msg_from_model, file=maindebuglog)
                     else:
@@ -190,7 +193,8 @@ if __name__ == "__main__":
         print("Costs incurred were: " + str(current_total))
         locale.setlocale(locale.LC_NUMERIC, '')
         print("Bytes purchased were: " + locale.format_string("%d", bytesPurchased, grouping=True))
-        rate = float(current_total/bytesPurchased)*1000*_kMEBIBYTE
-        print("cost/gigabyte: " + ("%6f" % rate) )
+        if bytesPurchased > 0:
+            rate = float(current_total/bytesPurchased)*1000*_kMEBIBYTE
+            print("cost/gigabyte: " + ("%6f" % rate) )
         print("\nOn behalf of the Golem Community, thank you for your participation.")
         stderr2file.close()
