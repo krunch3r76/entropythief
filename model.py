@@ -19,6 +19,7 @@ from    typing      import AsyncIterable, Iterator
 from    decimal     import  Decimal
 from    dataclasses import dataclass, field
 import  json
+import  concurrent.futures
 
 ## 3rd party
 import  yapapi
@@ -250,11 +251,13 @@ class TaskResultWriter:
         # check if the POOL_LIMIT has not been reached
         return self._writerPipe.countAvailable()
 
-    def refresh(self, pool_limit=None):
+    async def refresh(self, pool_limit=None):
         # since the PipeWriter object must be manually refreshed regularly
         if pool_limit:
             self._writerPipe._set_max_capacity(pool_limit)
-        self._writerPipe.refresh()
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(), self._writerPipe.refresh)
+        #self._writerPipe.refresh()
 
     async def __call__(self, randomBytes):
         self._bytesSeen += len(randomBytes)
@@ -325,7 +328,7 @@ async def model__entropythief(
     mySummaryLogger = MySummaryLogger(to_ctl_q)
     bytesInPipe = taskResultWriter.query_len() # note bytesInPipe is the lazy count
     while not OP_STOP:
-        taskResultWriter.refresh()
+        await taskResultWriter.refresh()
 
         if not from_ctl_q.empty():
             qmsg = from_ctl_q.get_nowait()
@@ -335,7 +338,7 @@ async def model__entropythief(
                 continue
             elif 'cmd' in qmsg and qmsg['cmd'] == 'set buflim':
                 MINPOOLSIZE = qmsg['limit']
-                taskResultWriter.refresh(MINPOOLSIZE)
+                await taskResultWriter.refresh(MINPOOLSIZE)
             elif 'cmd' in qmsg and qmsg['cmd'] == 'set maxworkers':
                 MAXWORKERS = qmsg['count']
             elif 'cmd' in qmsg and qmsg['cmd'] == 'pause execution':
@@ -348,7 +351,6 @@ async def model__entropythief(
 
         if not OP_PAUSE: # currently, OP_PAUSE is set whenever there are many rejections due to insufficient funds, it can be released by sending the command to restart (from the view)
             # query length of pipe -> bytesInPipe
-            taskResultWriter.refresh()
             bytesInPipe_last = bytesInPipe
             bytesInPipe = taskResultWriter.query_len()
             if bytesInPipe != bytesInPipe_last:
@@ -360,23 +362,21 @@ async def model__entropythief(
             if count_bytes_requested > 0 and bytesInPipe < int(MINPOOLSIZE/2) and mySummaryLogger.costRunning < BUDGET:
                 # this inner loop is for future handling of a stop op that is asking for a reset
                 # as from a request to rerun with a different budget or to just stop advertising for offers
-                await asyncio.sleep(0.01)
+                # await asyncio.sleep(0.01)
                 # setup executor
                 package = await vm.repo(
-                        image_hash=IMAGE_HASH, min_mem_gib=0.001, min_storage_gib=0.001
+                        image_hash=IMAGE_HASH, min_mem_gib=0.3, min_storage_gib=0.3
                         )
 
                 # this loop continually monitors offers then if more workers are needed (below buflim), provisions accordingly
                 # the efficiency / noise factor is being reviewed
-                taskResultWriter.refresh()
 
-                await asyncio.sleep(0.01)
+                # await asyncio.sleep(0.01)
 
                 async with yapapi.Golem(budget=BUDGET-mySummaryLogger.costRunning,      subnet_tag=args.subnet_tag,         network=args.network
                                       , driver=args.driver, event_consumer=mySummaryLogger.log, strategy=strat
                         ) as golem:
-                    taskResultWriter.refresh()
-                    await asyncio.sleep(0.05)
+                    await asyncio.sleep(0.01)
 
                     bytes_needed_per_worker = int(count_bytes_requested/MAXWORKERS)
                     # execute tasks
@@ -389,19 +389,19 @@ async def model__entropythief(
                             )
                     # generate results
                     async for task in completed_tasks:
-                        taskResultWriter.refresh()
+                        await taskResultWriter.refresh()
                         if task.result:
                             # the result has already been handled in steps, this is here for debugging purposes
                             pass
                         else:
                             print("entropythief: a task result was not set!", file=sys.stderr)
 
-                        await asyncio.sleep(0.003)
+                        await asyncio.sleep(0.01)
                         #/async for
                     #/golem:
                 #/if count_bytes_requested...
             #/if not OP_PAUSE
-            await asyncio.sleep(0.0001)
+            await asyncio.sleep(0.01)
         #/while not OP_STOP
     msg = {'bytesPurchased': taskResultWriter._bytesSeen}
     to_ctl_q.put_nowait(msg)
