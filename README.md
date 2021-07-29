@@ -30,7 +30,7 @@ stop                  # stop/exit
 ```
 
 try:
-`set buflim=2**20*1000` for 1 gigabyte of random data
+`set buflim=1000*2**20` for 1 gigabyte of random data
 
 and `set maxworkers=13` across 13 workers
 
