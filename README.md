@@ -23,10 +23,10 @@ python3 print_nonce.py # watch how the status line changes!
 this requestor runs to pilfer as many bytes of random 1's and 0's from up to as many providers as the user specifies. these parameter(s) can be adjusted on the fly by the user with the following commands:
 ```
 set buflim=<num>      # the minimum threshold that entropythief should do its best to stay above (refills when it falls beneath half this value)
-set maxworkers=<num>	# the most workers Golem executor can provision  # the more the more exotic!
+set maxworkers=<num>  # the most workers Golem executor can provision  # the more the more exotic!
 set budget=<float>    # the budget above which work should cease (unless this is used to increase the budget)
 restart               # after so many payment failures or after budget is exceeded, budget is implied to be over the limit. after setting run this.
-stop			            # stop/exit
+stop                  # stop/exit
 ```
 
 
