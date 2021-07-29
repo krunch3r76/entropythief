@@ -396,7 +396,12 @@ async def model__entropythief(
                     async for task in completed_tasks:
                         await taskResultWriter.refresh()
                         if task.result:
-                            # the result has already been handled in steps, this is here for debugging purposes
+                            bytesInPipe_last = bytesInPipe
+                            bytesInPipe = taskResultWriter.query_len()
+                            if bytesInPipe != bytesInPipe_last:
+                                msg = {'bytesInPipe': bytesInPipe}
+                                # prevent message congestion by only sending updates
+                                to_ctl_q.put_nowait(msg)
                             pass
                         else:
                             pass
