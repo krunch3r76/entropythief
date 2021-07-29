@@ -17,6 +17,7 @@ import time
 import argparse
 import view
 import fcntl
+import locale
 
 import utils
 
@@ -131,7 +132,8 @@ if __name__ == "__main__":
                     raise Exception(msg_from_model['exception'])
                 elif 'info' in msg_from_model and msg_from_model['info'] == 'worker started':
                     count_workers+=1
-                elif 'info' in msg_from_model and msg_from_model['info'] == 'worker finished':
+#                elif 'info' in msg_from_model and msg_from_model['info'] == 'worker finished':
+                elif 'event' in msg_from_model and msg_from_model['event'] == 'AgreementTerminated':
                     count_workers-=1
                 elif 'info' in msg_from_model and msg_from_model['info'] == "payment failed":
                     payment_failed_count+=1
@@ -186,7 +188,9 @@ if __name__ == "__main__":
                 time.sleep(0.0001)
 
         print("Costs incurred were: " + str(current_total))
-        print("Bytes purchased were: " + str(bytesPurchased))
-        print("cost/gigabyte: " + str(float(current_total/bytesPurchased)*1000 * _kMEBIBYTE))
+        locale.setlocale(locale.LC_NUMERIC, '')
+        print("Bytes purchased were: " + locale.format_string("%d", bytesPurchased, grouping=True))
+        rate = float(current_total/bytesPurchased)*1000*_kMEBIBYTE
+        print("cost/gigabyte: " + ("%6f" % rate) )
         print("\nOn behalf of the Golem Community, thank you for your participation.")
         stderr2file.close()

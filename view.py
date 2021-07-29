@@ -122,6 +122,7 @@ class Display:
 >set maxworkers=<NUM>
 >set budget=<FLOAT>
 >stop
+>restart    # after pause due to budget limit
 <ESC> toggle this menu
 """
         self._splash.text(txt)

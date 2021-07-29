@@ -131,6 +131,10 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
             to_controller_msg = {
                 'info': 'worker finished'
             }
+        elif isinstance(event, yapapi.events.AgreementTerminated):
+            to_controller_msg = {
+                'event': 'AgreementTerminated'
+            }
         elif isinstance(event, yapapi.events.AgreementCreated):
             to_controller_msg = {
                 'event': 'AgreementCreated'
