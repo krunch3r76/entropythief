@@ -244,7 +244,7 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
 class TaskResultWriter:
     _bytesSeen = 0
     _writerPipe = None
-
+    to_ctl_q = None
     def __init__(self, to_ctl_q, POOL_LIMIT):
         self.to_ctl_q = to_ctl_q
         self._writerPipe = pipe_writer.PipeWriter(POOL_LIMIT)
@@ -273,6 +273,12 @@ class TaskResultWriter:
         msg = randomBytes[:written].hex()
         to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
         self.to_ctl_q.put(to_ctl_cmd)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(), self._writerPipe.refresh)
+
+        bytesInPipe = self.query_len()
+        msg = {'bytesInPipe': bytesInPipe}
+        self.to_ctl_q.put_nowait(msg)
 
     def __del__(self):
         if self._writerPipe:
