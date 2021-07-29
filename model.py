@@ -341,6 +341,14 @@ async def model__entropythief(
     while not OP_STOP:
         await taskResultWriter.refresh()
 
+        bytesInPipe_last = bytesInPipe
+        bytesInPipe = taskResultWriter.query_len()
+        if bytesInPipe != bytesInPipe_last:
+            msg = {'bytesInPipe': bytesInPipe}
+            # prevent message congestion by only sending updates
+            to_ctl_q.put_nowait(msg)
+
+
         if not from_ctl_q.empty():
             qmsg = from_ctl_q.get_nowait()
             print(f"message to model: {qmsg}", file=sys.stderr)
@@ -360,14 +368,10 @@ async def model__entropythief(
                 OP_PAUSE=False
         #/if not from_ctl_q.empty()
 
+
+
+
         if not OP_PAUSE: # currently, OP_PAUSE is set whenever there are many rejections due to insufficient funds, it can be released by sending the command to restart (from the view)
-            # query length of pipe -> bytesInPipe
-            bytesInPipe_last = bytesInPipe
-            bytesInPipe = taskResultWriter.query_len()
-            if bytesInPipe != bytesInPipe_last:
-                msg = {'bytesInPipe': bytesInPipe}
-                # prevent message congestion by only sending updates
-                to_ctl_q.put_nowait(msg)
 
             count_bytes_requested = taskResultWriter.count_bytes_requesting()
             if count_bytes_requested > 0 and bytesInPipe < int(MINPOOLSIZE/2) and mySummaryLogger.costRunning < BUDGET:
@@ -401,6 +405,12 @@ async def model__entropythief(
                     # generate results
                     async for task in completed_tasks:
                         await taskResultWriter.refresh()
+
+                        
+                        # TODO check for messages to stop and see if these
+                        # can be cancelled to prevent hangs
+                        # modularize message handling routine and use here and above?
+
                         if task.result:
                             bytesInPipe_last = bytesInPipe
                             bytesInPipe = taskResultWriter.query_len()
