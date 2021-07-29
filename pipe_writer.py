@@ -335,7 +335,7 @@ class PipeWriter:
                     if penUltimateBufferIndex > 0:
                         for i in range(penUltimateBufferIndex):
                             ___try_write(self, self._buffers[i]) # go ahead and write the contents
-                            time.sleep(0.0001)
+                            time.sleep(0.001)
                             countBytesToPenult += len(self._buffers[i])
                     # lastBufferIndex will be used to as the count to pop the buffers after
                     # determine how many bytes would be taken from the last buffer if countBytesToPenult were written
@@ -349,7 +349,7 @@ class PipeWriter:
                
                 if countBytesToTakeFromUlt > 0:
                     ___try_write(self, self._buffers[0][:countBytesToTakeFromUlt])
-                    time.sleep(0.0001)
+                    time.sleep(0.001)
                     # rewrite buffer to exclude the part handled by the write routine
                     self._buffers[0] = self._buffers[0][countBytesToTakeFromUlt:-1]
 

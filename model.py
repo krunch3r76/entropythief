@@ -76,6 +76,12 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             # download_bytes and invoke callback at task.data['writer']
             ctx.download_bytes(worker_public.RESULT_PATH.as_posix(), task.data['writer'], sys.maxsize)
             # TODO instead of waiting on the download, yield and check if results were valid...
+            try:
+                yield ctx.commit(timeout=timedelta(minutes=6))
+                task_accept(result=True) # for now blindly accept results
+            except:
+                task.reject_result("timeout")
+            """
             future_result = yield ctx.commit()
             try:
                 result = await asyncio.wait_for(future_result, timeout=60)
@@ -85,7 +91,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             except asyncio.TimeoutError:
                 print("steps: TIMEOUT", file=sys.stderr)
                 task.reject_result("timeout")
-
+            """
 
 
 
@@ -257,7 +263,6 @@ class TaskResultWriter:
             self._writerPipe._set_max_capacity(pool_limit)
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(), self._writerPipe.refresh)
-        #self._writerPipe.refresh()
 
     async def __call__(self, randomBytes):
         self._bytesSeen += len(randomBytes)
@@ -394,7 +399,8 @@ async def model__entropythief(
                             # the result has already been handled in steps, this is here for debugging purposes
                             pass
                         else:
-                            print("entropythief: a task result was not set!", file=sys.stderr)
+                            pass
+                            # print("entropythief: a task result was not set!", file=sys.stderr)
 
                         await asyncio.sleep(0.01)
                         #/async for
