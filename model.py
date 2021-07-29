@@ -250,8 +250,10 @@ class TaskResultWriter:
         # check if the POOL_LIMIT has not been reached
         return self._writerPipe.countAvailable()
 
-    def refresh(self):
+    def refresh(self, pool_limit=None):
         # since the PipeWriter object must be manually refreshed regularly
+        if pool_limit:
+            self._writerPipe._set_max_capacity(pool_limit)
         self._writerPipe.refresh()
 
     async def __call__(self, randomBytes):
@@ -321,17 +323,19 @@ async def model__entropythief(
             ) 
 
     mySummaryLogger = MySummaryLogger(to_ctl_q)
+    bytesInPipe = taskResultWriter.query_len() # note bytesInPipe is the lazy count
     while not OP_STOP:
         taskResultWriter.refresh()
 
         if not from_ctl_q.empty():
             qmsg = from_ctl_q.get_nowait()
-            print(qmsg, file=sys.stderr)
+            print(f"message to model: {qmsg}", file=sys.stderr)
             if 'cmd' in qmsg and qmsg['cmd'] == 'stop':
                 OP_STOP = True
                 continue
             elif 'cmd' in qmsg and qmsg['cmd'] == 'set buflim':
                 MINPOOLSIZE = qmsg['limit']
+                taskResultWriter.refresh(MINPOOLSIZE)
             elif 'cmd' in qmsg and qmsg['cmd'] == 'set maxworkers':
                 MAXWORKERS = qmsg['count']
             elif 'cmd' in qmsg and qmsg['cmd'] == 'pause execution':
@@ -345,9 +349,13 @@ async def model__entropythief(
         if not OP_PAUSE: # currently, OP_PAUSE is set whenever there are many rejections due to insufficient funds, it can be released by sending the command to restart (from the view)
             # query length of pipe -> bytesInPipe
             taskResultWriter.refresh()
+            bytesInPipe_last = bytesInPipe
             bytesInPipe = taskResultWriter.query_len()
-            msg = {'bytesInPipe': bytesInPipe}
-            to_ctl_q.put_nowait(msg)
+            if bytesInPipe != bytesInPipe_last:
+                msg = {'bytesInPipe': bytesInPipe}
+                # prevent message congestion by only sending updates
+                to_ctl_q.put_nowait(msg)
+
             count_bytes_requested = taskResultWriter.count_bytes_requesting()
             if count_bytes_requested > 0 and bytesInPipe < int(MINPOOLSIZE/2) and mySummaryLogger.costRunning < BUDGET:
                 # this inner loop is for future handling of a stop op that is asking for a reset

@@ -108,15 +108,16 @@ class PipeWriter:
     _F_GETPIPE_SZ=1032
 
 
-
+    # TODO make maxCapacity a required argument
     # -------------------------------------------
     def __init__(self, maxCapacity=2**20):
     # -----------------------------------------
+        if maxCapacity < 2**20:
+            maxCapacity = 2**20
         self._maxCapacity=maxCapacity
         # _maxCapacity is the limit of bytes total the object will store (across pipe and internal buffers)
         # enforce a _maxCapacity that is no less than the theoretical maximum named pipe capacity 2**20
-        assert self._maxCapacity >= 2**20
-
+        # assert maxcapacity >= 2**20, f"the minimum buffer size is 1 mebibyte or {int(eval('2**20'))}"
         self._open_pipe()
         if self._fdPipe:
             self._fdPoll.register(self._fdPipe)
@@ -141,8 +142,10 @@ class PipeWriter:
 
 
     # -------------------------------------------
-    def _set_max_capacity(maxcapacity):
-        assert maxcapacity >= 2**20
+    def _set_max_capacity(self, maxcapacity):
+        # assert maxcapacity >= 2**20, f"the minimum buffer size is 1 mebibyte or {int(eval('2**20'))}"
+        if maxcapacity < 2**20:
+            maxcapacity = 2**20
         self._maxCapacity = maxcapacity
     # -------------------------------------------
 

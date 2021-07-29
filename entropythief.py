@@ -94,6 +94,10 @@ if __name__ == "__main__":
             elif 'set buflim=' in ucmd:
                 tokens = ucmd.split("=")
                 MINPOOLSIZE = int(eval(tokens[-1]))
+                if MINPOOLSIZE < 2**20:
+                    MINPOOLSIZE = 2**20 # the pool writer minimum buffer size is set to 1 MiB
+                    # ideally this requirement would be done on the model end and an update occur over the wire
+                    # TODO
                 msg_to_model = {'cmd': 'set buflim', 'limit': MINPOOLSIZE}
                 to_model_q.put_nowait(msg_to_model)
             elif 'set maxworkers=' in ucmd:
@@ -117,19 +121,12 @@ if __name__ == "__main__":
                 msg_from_model = from_model_q.get_nowait()
 
                 # log most msg's to maindebuglog (main.log)
-                if msg_from_model:
-                    if 'bytesInPipe' in msg_from_model:
-                        pass # don't fill up log file with this
-                    elif not ('cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes'):
-                        print(msg_from_model, file=maindebuglog)
-                    else:
-                        concat_msg = { msg_from_model['cmd']: len(msg_from_model['hexstring']) }
-                        print(concat_msg, file=maindebuglog)
-
                 if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes':
                     msg = msg_from_model['hexstring']
                     result = u.send(msg)
-                if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
+                    concat_msg = { msg_from_model['cmd']: len(msg_from_model['hexstring']) }
+                    print(concat_msg, file=maindebuglog)
+                elif 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
                     current_total += msg_from_model['amount']
                 elif 'exception' in msg_from_model:
                     raise Exception(msg_from_model['exception'])
@@ -144,7 +141,6 @@ if __name__ == "__main__":
                         # to be implemented
                         msg_to_model = {'cmd': 'pause execution'} # give the logs a rest, don't bother requesting until budget is increased
                         to_model_q.put_nowait(msg_to_model)
-                        # print(msg_to_model, file=maindebuglog)
                 elif 'event' in msg_from_model:
                     print(msg_from_model, file=maindebuglog)
                 elif 'debug' in msg_from_model:
@@ -170,6 +166,7 @@ if __name__ == "__main__":
         print("+=+=+=+=+=+=+=stopping and settling accounts=+=+=+=+=+=+=")
         bytesPurchased = 0
         if p1.is_alive():
+            print("asking entropythief golem executor to stop provisioning")
             cmd = {'cmd': 'stop'}
             to_model_q.put_nowait(cmd)
             # get pending messages from the model to update total cost or report on "returned" exceptions (may not be implemented yet)
@@ -177,7 +174,6 @@ if __name__ == "__main__":
             while not daemon_exited:
                 if not from_model_q.empty(): # revise boolean efficiency
                     msg_from_model = from_model_q.get_nowait()
-                    print(msg_from_model, file=maindebuglog)
                     if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
                         current_total += msg_from_model['amount']
                     if 'bytesPurchased' in msg_from_model:
@@ -187,14 +183,15 @@ if __name__ == "__main__":
                         print(msg_from_model['exception'])
                     elif 'daemon' in msg_from_model:
                         daemon_exited = True
-                        print("DEV MESSAGE: DAEMON EXITED")
+                        # print("DEV MESSAGE: DAEMON EXITED")
                 time.sleep(0.0001)
 
-        print("Costs incurred were: " + str(current_total))
         locale.setlocale(locale.LC_NUMERIC, '')
         print("Bytes purchased were: " + locale.format_string("%d", bytesPurchased, grouping=True))
         if bytesPurchased > 0:
             rate = float(current_total/bytesPurchased)*1000*_kMEBIBYTE
             print("cost/gigabyte: " + ("%6f" % rate) )
-        print("\nOn behalf of the Golem Community, thank you for your participation.")
+        print()
+        print(utils.TEXT_COLOR_GREEN + "Costs incurred were: " + str(current_total) + utils.TEXT_COLOR_DEFAULT)
+        print(utils.TEXT_COLOR_WHITE + "\nOn behalf of the Golem Community, thank you for your participation." + utils.TEXT_COLOR_DEFAULT)
         stderr2file.close()
