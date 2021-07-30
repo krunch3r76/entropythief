@@ -206,6 +206,11 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
             super().__init__(expected_time_secs, max_fixed_price, max_price_for)
             self.use_rdrand=use_rdrand
 
+    async def decorate_demand(self, demand: DemandBuilder) -> None:
+        if self.use_rdrand:
+            demand.ensure("(golem.inf.cpu.architecture=x86_64)")
+        # print(f"******************\n{demand}\n", file=sys.stderr)
+        await super().decorate_demand(demand)
     
     async def score_offer(
         self, offer: rest.market.OfferProposal, history: Optional[ComputationHistory] = None
@@ -222,16 +227,26 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
         
         # this would normally be a contrainst added to decorate_demand, but is here
         # for now as a convenience TODO implement via decorate_demand
+        """
         if self.use_rdrand:
             if offer.props["golem.inf.cpu.architecture"] == "x86_64":
                 if 'rdrand' in offer.props["golem.inf.cpu.capabilities"]:
                     score = await super().score_offer(offer, history)
         else:
             score = await super().score_offer(offer, history)
-
         return score
+        """
 
-
+        if self.use_rdrand:
+            # it is not clear at this time how to create a demand that constrains according to cpu
+            # features, therefore, we inspect the offer itself and score only if the offer
+            # meets this constraint.
+            if 'rdrand' in offer.props["golem.inf.cpu.capabilities"]:
+                score = await super().score_offer(offer, history)
+        else:
+            # we are not using rdrand (using system entropy) so proceed as normal without filtering
+            score = await super().score_offer(offer, history)
+        return score
 
 
 
@@ -389,7 +404,7 @@ async def model__entropythief(
                 # await asyncio.sleep(0.01)
 
                 async with yapapi.Golem(budget=BUDGET-mySummaryLogger.costRunning,      subnet_tag=args.subnet_tag,         network=args.network
-                                      , driver=args.driver, event_consumer=mySummaryLogger.log, strategy=strat
+                                      , driver=args.driver,                             event_consumer=mySummaryLogger.log, strategy=strat
                         ) as golem:
                     await asyncio.sleep(0.01)
 
