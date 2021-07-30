@@ -305,12 +305,14 @@ class PipeWriter:
             self._open_pipe()
 
         if self.countAvailable() == 0:
-            data=bytearray() # slice to 0
+            data=bytearray() # no space, slice to 0
         elif len(data) > self.countAvailable():
-            data=data[0:self.countAvailable()] 
+            data=data[0:self.countAvailable()] # slice up to capacity available
+            #...just in case the caller did not check first
 
         countBytesAvailableInPipe = ___countAvailableInPipe(self)
 
+        # here we move data in the buffers into any available capacity of the named pipe
         if len(self._buffers) > 0 and self._whether_pipe_is_ready_for_writing():
                 # iterate across buffers accumulating length settling where length exceeds what pipe needs
                 runningTotal = 0
@@ -342,19 +344,21 @@ class PipeWriter:
 
                 countBytesToTakeFromUlt = countBytesAvailableInPipe - countBytesToPenult
                     
+                # buffers up to but not including end buffer have been consumed
+                # pop them \/
                 if lastBufferIndex > 0:
-                    # now pop and try to write from the buffers up to pen ult
                     for _ in range(lastBufferIndex):
                         self._buffers.pop()
                
                 if countBytesToTakeFromUlt > 0:
+                # [ remaining buffer bytes can now be taken and placed in named pipe up to the calculate amount ]
                     ___try_write(self, self._buffers[0][:countBytesToTakeFromUlt])
                     time.sleep(0.001)
                     # rewrite buffer to exclude the part handled by the write routine
                     self._buffers[0] = self._buffers[0][countBytesToTakeFromUlt:-1]
 
 
-        # after topping off, attempt to write new data (which pushed on stack as appropriate)
+        # after topping off, attempt to write new data (which is pushed on stack as appropriate)
         ___try_write(self, data)
 
 

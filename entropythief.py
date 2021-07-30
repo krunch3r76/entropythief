@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# controller.py
+# entropythief.py
 # author: krunch3r (KJM)
 # license: poetic/GPL 3
 
@@ -21,11 +21,11 @@ import locale
 
 import utils
 
-IMAGE_HASH = "238e362f7b52aa21c3f2a26ade9ba3952ae8c715c9efe37af0ef8258"
-MAXWORKERS = 5                       # ideal number of workers to provision to at a time
-_kMEBIBYTE = 2**20                   # constant count
+IMAGE_HASH  = "238e362f7b52aa21c3f2a26ade9ba3952ae8c715c9efe37af0ef8258"
+MAXWORKERS  = 5                       # ideal number of workers to provision to at a time
+_kMEBIBYTE  = 2**20                   # constant count
 MINPOOLSIZE = 100 * _kMEBIBYTE       # as as buflim, the most random bytes that will be buffered at time
-BUDGET = 2.0                         # maximum budget (as of this version runtime constant)
+BUDGET      = 2.0                         # maximum budget (as of this version runtime constant)
 
 
 
