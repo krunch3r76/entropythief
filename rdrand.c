@@ -1,3 +1,7 @@
+// rdrand.c
+/* author: krunch3r (KJM github.com/krunch3r76) */
+/* license: General Poetic License (GPL3) */
+
 #include <Python.h>
 #include <stddef.h>
 // #include <stdio.h>

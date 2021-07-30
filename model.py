@@ -346,9 +346,9 @@ async def model__entropythief(
     OP_STOP = False
     OP_PAUSE = False
     strat = MyLeastExpensiveLinearPayMS( # these MS parameters are not clearly documented ?
-            max_fixed_price=Decimal("0.01"), # testing, ideally this works with the epsilon in model...
-            # max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.001"), yapapi.props.com.Counter.TIME: Decimal("0.001")}
-            use_rdrand = args.rdrand
+                max_fixed_price=Decimal("0.00") # testing, ideally this works with the epsilon in model...
+                , max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.5"), yapapi.props.com.Counter.TIME: Decimal("0.02")}
+                , use_rdrand = args.rdrand
             ) 
 
     mySummaryLogger = MySummaryLogger(to_ctl_q)

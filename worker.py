@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # worker
 # pull all available entropy from /dev/random and store in text file as base64 for requestor retrieval
+# author: krunch3r (KJM github.com/krunch3r76)
+# license: General Poetic License (GPL3)
+
+
 from worker_public import *
 from pathlib import *
 import base64

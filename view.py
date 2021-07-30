@@ -9,6 +9,39 @@ import sys
 import fcntl
 import termios
 import string
+import time # debug
+
+
+
+
+
+
+
+
+
+##############################################
+# partition                            #
+##############################################
+def partition(total_length, first_length, lengthmax):
+    parts = [first_length]
+    # how much of the length remains beyond first length
+    remaining = total_length - first_length
+    if remaining > 0:
+        # how many times does lengthmax measure remaining
+        measures = int(remaining/lengthmax)
+    if measures == 0:
+        parts.append(remaining)
+    else:
+        for _ in range(measures):
+            parts.append(lengthmax)
+    # how much remains after remaining is measured by lengthmax
+    mod = remaining % lengthmax
+    if mod != 0:
+        parts.append(mod)
+
+    return parts
+
+
 
 
 
@@ -130,16 +163,81 @@ class Display:
 
 
 
-
     #....Display....................#
     #.          appendtxt          .#
     #. append to end of last       .#
     #...............................#
     def appendtxt(self, line):
-        Y, X = self._widget.getyx()
-        self._widget.addstr(Y, X, line)
 
-    
+        # generate lines that would fill each successive line in the window
+        # yields however many characters would fill up to the end of the current line
+        # then each full line part that remains
+        # then the remaining of the what would fill the last line
+        # notes: this itself does not improve anything but may facilitate someday
+        # generating only that which would be seen if written (thus saving time)
+        def gen_next_line(self, line):
+            Y, X = self._widget.getyx()
+            maxY, maxX = self._widget.getmaxyx()
+            lengthFull = len(line)
+            offset=0
+            part = maxX - X
+            unmeasured = lengthFull - part
+            countMeasures = int(unmeasured / maxX)
+            excessCountMeasures = None
+            tail = unmeasured % maxX
+            yield line[offset:(offset+part)]
+            offset+=part
+
+            # a simple formula to just add on the tail end to the first
+            # part to help make ui more responsive (a quick fix, considering async later)
+            if countMeasures > maxY:
+                excessCountMeasures = countMeasures - maxY
+                offset += excessCountMeasures 
+
+            while True:
+                for _ in range(countMeasures):
+                    yield line[offset:(offset+part)]
+                    offset+=part
+                if tail != 0:
+                    yield line[offset:(offset+tail)]
+                break
+
+        u = gen_next_line(self, line)
+        first = u.send(None)
+        while True:
+            try:
+                fullline = u.send(None)
+            except StopIteration:
+                break
+            else:
+                self._widget.addstr(fullline)
+
+    """
+    # remove, deprecated version
+    #....Display....................#
+    #.          appendtxt          .#
+    #. append to end of last       .#
+    #...............................#
+    def appendtxt_(self, line):
+        Y, X = self._widget.getyx()
+        maxY, maxX = self._widget.getmaxyx()
+        # determine length of first partition (remaining between X and maxX
+        lengthpartition1=maxX - X
+        parts = partition(len(line), lengthpartition1, maxX)
+
+        offset=0
+        self._widget.addstr(line[0:parts[0]])
+        offset+=parts[0]
+        if len(parts) > 1:
+            for part in parts[1:]:
+                self._widget.addstr(line[offset:(offset+part)])
+                # self._widget.addstr(Y, X, line[offset:part])
+                offset+=part
+
+
+        #self._widget.addstr(Y, X, line)
+    """
+
     #....Display....................#
     #.          refresh            .#
     #...............................#
@@ -185,14 +283,6 @@ class Display:
 def view__create_windows(view):
     win = Display()
     _splash = win._widget.subwin(int(curses.LINES/5), int(curses.COLS/4), int(curses.LINES/2), int(curses.COLS/4))
-    """
-    popupwin.box()
-    Y, X = popupwin.getmaxyx()
-    msg = "what's up doc?"
-    print(Y,X,len(msg) + 3, file=sys.stderr)
-    popupwin.addstr(int(Y/2), 3, msg)
-    popupwin.refresh()
-    """
 
     winbox = curses.newwin(1, curses.COLS, curses.LINES-1, 0)
     winbox.addstr(0, 0, ">")
@@ -275,7 +365,7 @@ class View:
     def coro_update_mainwindow(self):
         try:
             while True:
-                msg = yield
+                msg = yield # whatever is sent to this generator is assigned to msg here and loop starts
                 self.win.appendtxt(msg)
                 self.win.refresh()
         except GeneratorExit: # review
@@ -351,7 +441,6 @@ class View:
                     self.winbox.addstr(0, 1, "")
             elif result == curses.ascii.ESC:
                 self.win.toggle__splash()
-                # self.win.ENABLE_SPLASH = not self.win.ENABLE_SPLASH
         elif result == curses.KEY_RESIZE:
             self.winbox.move(0,0)
             self.winbox.addstr('>')
