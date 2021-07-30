@@ -75,8 +75,10 @@ async def main():
         current_total = 0.0
         count_workers=0
         bytesInPipe = 0
+        u_update_mainwindow = theview.coro_update_mainwindow()
+        next(u_update_mainwindow)
         while True:
-            ucmd = await theview.getinput(current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, bytesInPipe)
+            ucmd = theview.getinput(current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, bytesInPipe)
 
             msg_to_model = None
             if ucmd == "stop":
@@ -113,7 +115,7 @@ async def main():
                 # log most msg's to maindebuglog (main.log)
                 if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes':
                     msg = msg_from_model['hexstring']
-                    await theview.async_update_mainwindow(msg)
+                    u_update_mainwindow.send(msg) # TODO coroutine only updates one line at a time, buffering between calls
                     concat_msg = { msg_from_model['cmd']: len(msg_from_model['hexstring']) }
                     print(concat_msg, file=maindebuglog)
                 elif 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
