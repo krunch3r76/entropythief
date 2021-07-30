@@ -171,7 +171,7 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
         #/if
 
         if to_controller_msg:
-            self.to_ctl_q.put(to_controller_msg)
+            self.to_ctl_q.put_nowait(to_controller_msg)
 
         super().log(event)
 
@@ -287,7 +287,7 @@ class TaskResultWriter:
         # inform controller
         msg = randomBytes[:written].hex()
         to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
-        self.to_ctl_q.put(to_ctl_cmd)
+        self.to_ctl_q.put_nowait(to_ctl_cmd)
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(), self._writerPipe.refresh)
 
@@ -343,6 +343,7 @@ async def model__entropythief(
         rdrand_arg = ''
 
     loop = asyncio.get_running_loop()
+    # loop = asyncio.get_event_loop()
     OP_STOP = False
     OP_PAUSE = False
     strat = MyLeastExpensiveLinearPayMS( # these MS parameters are not clearly documented ?
@@ -462,7 +463,7 @@ async def model__entropythief(
 #   main entry for the model                                              #
 #   launches entropythief attaching message queues                        #
 ###########################################################################
-def model__main(args
+async def model__main(args
         , from_ctl_q
         , fifoWriteEnd
         , to_ctl_q
@@ -481,9 +482,7 @@ def model__main(args
         BUDGET := the maxmum amount of GLM spendable per run
         IMAGE_HASH := the hash link to the vm that providers will run
     """
-
-    # loop
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     # uncomment to output yapapi logger INFO events to stderr and INFO+DEBUG to args.log_fle
     if use_default_logger:
@@ -495,6 +494,7 @@ def model__main(args
 
     # create the task
     taskResultWriter = TaskResultWriter(to_ctl_q, MINPOOLSIZE)
+
     task = loop.create_task(
         model__entropythief(
             args
@@ -507,10 +507,9 @@ def model__main(args
             , IMAGE_HASH
             )
     )
-
     # gracefully conclude the task
     try:
-        loop.run_until_complete(task)
+        await task
     except KeyboardInterrupt:
         pass # if the task has not exited in response to this already, finally will propagate a cancel
     except yapapi.NoPaymentAccountError as e:
@@ -540,7 +539,7 @@ def model__main(args
         # consider a more clean exit by checking if task is running first
         try:
             task.cancel() # make sure cancel message has been propagated to EntropyThief (and Golem)
-            loop.run_until_complete(task)
+            # loop.run_until_complete(task)
         except:
             pass
 

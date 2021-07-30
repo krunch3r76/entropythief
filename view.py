@@ -10,8 +10,8 @@ import fcntl
 import termios
 import string
 import time # debug
-
-
+import asyncio
+import concurrent
 
 
 
@@ -167,15 +167,16 @@ class Display:
     #.          appendtxt          .#
     #. append to end of last       .#
     #...............................#
-    def appendtxt(self, line):
-
+    async def appendtxt(self, line):
+        loop = asyncio.get_running_loop()
         # generate lines that would fill each successive line in the window
         # yields however many characters would fill up to the end of the current line
         # then each full line part that remains
         # then the remaining of the what would fill the last line
         # notes: this itself does not improve anything but may facilitate someday
         # generating only that which would be seen if written (thus saving time)
-        def gen_next_line(self, line):
+        # -+-+-+-+-+-
+        async def gen_next_line(self, line):
             Y, X = self._widget.getyx()
             maxY, maxX = self._widget.getmaxyx()
             lengthFull = len(line)
@@ -190,9 +191,11 @@ class Display:
 
             # a simple formula to just add on the tail end to the first
             # part to help make ui more responsive (a quick fix, considering async later)
+            """
             if countMeasures > maxY:
                 excessCountMeasures = countMeasures - maxY
                 offset += excessCountMeasures 
+            """
 
             while True:
                 for _ in range(countMeasures):
@@ -200,17 +203,21 @@ class Display:
                     offset+=part
                 if tail != 0:
                     yield line[offset:(offset+tail)]
-                break
 
-        u = gen_next_line(self, line)
-        first = u.send(None)
-        while True:
-            try:
-                fullline = u.send(None)
-            except StopIteration:
                 break
-            else:
-                self._widget.addstr(fullline)
+        # -+-+-+-+-+-
+
+        #u = gen_next_line(self, line)
+        #first = u.send(None)
+        async for full_line in gen_next_line(self, line):
+            try:
+                # full_line = u.send(None)
+#                for ch in full_line:
+#                    self._widget.addch(ch)
+                self._widget.addstr(full_line)
+                #self._widget.addstr(full_line)
+            except StopAsyncIteration:
+                break
 
     """
     # remove, deprecated version
@@ -354,6 +361,15 @@ class View:
 
 
 
+    #..View.......................................#
+    #.          async_update_mainwindow           .#
+    #.............................................#
+    async def async_update_mainwindow(self, msg):
+        loop = asyncio.get_running_loop()
+        await self.win.appendtxt(msg)
+        # await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(), self.win.refresh)
+        self.win.refresh()
+
 
 
 
@@ -390,7 +406,7 @@ class View:
     #..View.........................#
     #.          getinput           .#
     #...............................#
-    def getinput(self, current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, bytesInPipe=0):
+    async def getinput(self, current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, bytesInPipe=0):
         # update status line
         Y, X = self.winbox.getyx()
         yMax, xMax = self.winbox.getmaxyx()

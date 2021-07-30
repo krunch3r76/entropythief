@@ -20,12 +20,7 @@ import fcntl
 import locale
 
 import utils
-
-IMAGE_HASH  = "238e362f7b52aa21c3f2a26ade9ba3952ae8c715c9efe37af0ef8258"
-MAXWORKERS  = 5                       # ideal number of workers to provision to at a time
-_kMEBIBYTE  = 2**20                   # constant count
-MINPOOLSIZE = 100 * _kMEBIBYTE       # as as buflim, the most random bytes that will be buffered at time
-BUDGET      = 2.0                         # maximum budget (as of this version runtime constant)
+import asyncio
 
 
 
@@ -37,17 +32,16 @@ BUDGET      = 2.0                         # maximum budget (as of this version r
 
 
 
+async def main():
+
+    IMAGE_HASH  = "238e362f7b52aa21c3f2a26ade9ba3952ae8c715c9efe37af0ef8258"
+    MAXWORKERS  = 5                       # ideal number of workers to provision to at a time
+    _kMEBIBYTE  = 2**20                   # constant count
+    MINPOOLSIZE = 100 * _kMEBIBYTE       # as as buflim, the most random bytes that will be buffered at time
+    BUDGET      = 2.0                         # maximum budget (as of this version runtime constant)
 
 
 
-
-
-
-
-##########################################################
-#                      __main__                          #
-##########################################################
-if __name__ == "__main__":
     # parse cli arguments (viz utils.py)
     args = argparse.Namespace()
     parser = utils.build_parser("pipe entropy to the named pipe /tmp/pilferedbits")
@@ -58,16 +52,16 @@ if __name__ == "__main__":
     sys.stderr = stderr2file
 
     # set up {to_,from_}_model_queue
-    to_model_q = multiprocessing.Queue()  # message queue TO golem executor process
-    from_model_q = multiprocessing.Queue()  # message queue FROM golem executor process
+    to_model_q = asyncio.Queue()  # message queue TO golem executor process
+    from_model_q = asyncio.Queue()  # message queue FROM golem executor process
 
 
     try:
         # instantiate and setup view
         theview = view.View()
         # invoke model__main on separate process
-        p1 = multiprocessing.Process(target=model.model__main, daemon=True
-                , args=[args
+        loop = asyncio.get_running_loop()
+        loop.create_task(model.model__main( args
                     , to_model_q
                     , None
                     , from_model_q
@@ -76,19 +70,15 @@ if __name__ == "__main__":
                     , BUDGET
                     , IMAGE_HASH
                     , args.enable_logging
-                    ])
+                    ))
         payment_failed_count=0
-        p1.start()
-        u = theview.coro_update_mainwindow()
-        next(u)
         current_total = 0.0
         count_workers=0
         bytesInPipe = 0
         while True:
-            ucmd = theview.getinput(current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, bytesInPipe)
+            ucmd = await theview.getinput(current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, bytesInPipe)
+
             msg_to_model = None
-
-
             if ucmd == "stop":
                 break
             elif 'set buflim=' in ucmd:
@@ -123,7 +113,7 @@ if __name__ == "__main__":
                 # log most msg's to maindebuglog (main.log)
                 if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes':
                     msg = msg_from_model['hexstring']
-                    result = u.send(msg)
+                    await theview.async_update_mainwindow(msg)
                     concat_msg = { msg_from_model['cmd']: len(msg_from_model['hexstring']) }
                     print(concat_msg, file=maindebuglog)
                 elif 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
@@ -132,7 +122,6 @@ if __name__ == "__main__":
                     raise Exception(msg_from_model['exception'])
                 elif 'info' in msg_from_model and msg_from_model['info'] == 'worker started':
                     count_workers+=1
-#                elif 'info' in msg_from_model and msg_from_model['info'] == 'worker finished':
                 elif 'event' in msg_from_model and msg_from_model['event'] == 'AgreementTerminated':
                     count_workers-=1
                 elif 'info' in msg_from_model and msg_from_model['info'] == "payment failed":
@@ -153,19 +142,21 @@ if __name__ == "__main__":
                     break
             #/if
             theview.refresh()
-            time.sleep(0.005)
+            await asyncio.sleep(0.005)
         #/while
-    except KeyboardInterrupt:
-        pass # go onto finally
+    except asyncio.CancelledError:
+        pass
     except Exception as e:
         theview.destroy()
         print("generic exception from entropythief controller:")
         print(f"{e}\n")
+    except asyncio.CancelledError:
+        print("\n\nasyncio cancellederror\n\n")
     finally:
         theview.destroy()
         print("+=+=+=+=+=+=+=stopping and settling accounts=+=+=+=+=+=+=")
         bytesPurchased = 0
-        if p1.is_alive():
+        if True:
             print("asking entropythief golem executor to stop provisioning")
             cmd = {'cmd': 'stop'}
             to_model_q.put_nowait(cmd)
@@ -183,8 +174,7 @@ if __name__ == "__main__":
                         print(msg_from_model['exception'])
                     elif 'daemon' in msg_from_model:
                         daemon_exited = True
-                        # print("DEV MESSAGE: DAEMON EXITED")
-                time.sleep(0.0001)
+                await asyncio.sleep(0.0001)
 
         locale.setlocale(locale.LC_NUMERIC, '')
         print("Bytes purchased were: " + locale.format_string("%d", bytesPurchased, grouping=True))
@@ -195,3 +185,22 @@ if __name__ == "__main__":
         print(utils.TEXT_COLOR_GREEN + "Costs incurred were: " + str(current_total) + utils.TEXT_COLOR_DEFAULT)
         print(utils.TEXT_COLOR_WHITE + "\nOn behalf of the Golem Community, thank you for your participation." + utils.TEXT_COLOR_DEFAULT)
         stderr2file.close()
+
+
+
+
+##########################################################
+#                      __main__                          #
+##########################################################
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    task = loop.create_task(main())
+    try:
+        loop.run_until_complete(task)
+    except KeyboardInterrupt:
+        task.cancel()
+        loop.run_until_complete(task)
+        print(task.exception(), file=sys.stderr)
+    finally:
+        pass
+
