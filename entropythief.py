@@ -79,7 +79,7 @@ async def main():
         next(u_update_mainwindow)
         while True:
             ucmd = theview.getinput(current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, bytesInPipe)
-
+            next(u_update_mainwindow)
             msg_to_model = None
             if ucmd == "stop":
                 break
@@ -176,7 +176,7 @@ async def main():
                         print(msg_from_model['exception'])
                     elif 'daemon' in msg_from_model:
                         daemon_exited = True
-                await asyncio.sleep(0.0001)
+                await asyncio.sleep(0.005)
 
         locale.setlocale(locale.LC_NUMERIC, '')
         print("Bytes purchased were: " + locale.format_string("%d", bytesPurchased, grouping=True))

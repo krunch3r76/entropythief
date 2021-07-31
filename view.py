@@ -178,6 +178,7 @@ class Display:
         def gen_next_line(self, line):
             Y, X = self._widget.getyx()
             maxY, maxX = self._widget.getmaxyx()
+            maxX+=20
             lengthFull = len(line)
             offset=0
             part = maxX - X
@@ -202,9 +203,10 @@ class Display:
                 if tail != 0:
                     yield line[offset:(offset+tail)]
                 break
-
         u = gen_next_line(self, line)
         first = u.send(None)
+        self._widget.addstr(first)
+        """
         while True:
             try:
                 fullline = u.send(None)
@@ -212,6 +214,7 @@ class Display:
                 break
             else:
                 self._widget.addstr(fullline)
+        """
 
     """
     # remove, deprecated version
@@ -288,7 +291,6 @@ def view__create_windows(view):
     winbox = curses.newwin(1, curses.COLS, curses.LINES-1, 0)
     winbox.addstr(0, 0, ">")
     winbox.nodelay(True)
-
     return { 'outputfield': win, 'inputfield': winbox, 'popup': _splash }
 
 
@@ -330,7 +332,7 @@ class View:
             windir = view__create_windows(self)
             self.win = windir['outputfield']
             self.winbox = windir['inputfield']
-
+            
             # self.win, self.winbox, self.popupwin = view__create_windows(self)
         except Exception as e:
             curses.nocbreak()
@@ -364,11 +366,25 @@ class View:
     #.          coro_update_mainwindow           .#
     #.............................................#
     def coro_update_mainwindow(self):
+        # here we keep a concatenated string from which we remove portions from the front to fill a line on each call
+        messageBuffered = "" 
         try:
             while True:
-                msg = yield # whatever is sent to this generator is assigned to msg here and loop starts
-                self.win.appendtxt(msg)
-                self.win.refresh()
+                msg_in = yield  # whatever is sent to this generator is assigned to msg here and loop starts
+                if msg_in:
+                    messageBuffered+=msg_in
+                    if len(messageBuffered) < 255:
+                        rangeEnd = messageBuffered
+                    else:
+                        rangeEnd = 255 
+                if len(messageBuffered) > 0:
+                    line = messageBuffered[:rangeEnd]
+                    messageBuffered=messageBuffered[rangeEnd:]
+                    if len(messageBuffered) > 0:
+                        self.win._widget.addstr(line)
+                        #self.win._widget.addch(messageBuffered.pop(0))
+                    # self.win.appendtxt(msg)
+                        self.win.refresh()
         except GeneratorExit: # review
             pass
 
