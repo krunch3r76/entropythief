@@ -163,84 +163,6 @@ class Display:
 
 
 
-    #....Display....................#
-    #.          appendtxt          .#
-    #. append to end of last       .#
-    #...............................#
-    def appendtxt(self, line):
-
-        # generate lines that would fill each successive line in the window
-        # yields however many characters would fill up to the end of the current line
-        # then each full line part that remains
-        # then the remaining of the what would fill the last line
-        # notes: this itself does not improve anything but may facilitate someday
-        # generating only that which would be seen if written (thus saving time)
-        def gen_next_line(self, line):
-            Y, X = self._widget.getyx()
-            maxY, maxX = self._widget.getmaxyx()
-            maxX+=20
-            lengthFull = len(line)
-            offset=0
-            part = maxX - X
-            unmeasured = lengthFull - part
-            countMeasures = int(unmeasured / maxX)
-            excessCountMeasures = None
-            tail = unmeasured % maxX
-            yield line[offset:(offset+part)]
-            offset+=part
-
-            # a simple formula to just add on the tail end to the first
-            # part to help make ui more responsive (a quick fix, considering async later)
-            """
-            if countMeasures > maxY:
-                excessCountMeasures = countMeasures - maxY
-                offset += excessCountMeasures 
-            """
-            while True:
-                for _ in range(countMeasures):
-                    yield line[offset:(offset+part)]
-                    offset+=part
-                if tail != 0:
-                    yield line[offset:(offset+tail)]
-                break
-        u = gen_next_line(self, line)
-        first = u.send(None)
-        self._widget.addstr(first)
-        """
-        while True:
-            try:
-                fullline = u.send(None)
-            except StopIteration:
-                break
-            else:
-                self._widget.addstr(fullline)
-        """
-
-    """
-    # remove, deprecated version
-    #....Display....................#
-    #.          appendtxt          .#
-    #. append to end of last       .#
-    #...............................#
-    def appendtxt_(self, line):
-        Y, X = self._widget.getyx()
-        maxY, maxX = self._widget.getmaxyx()
-        # determine length of first partition (remaining between X and maxX
-        lengthpartition1=maxX - X
-        parts = partition(len(line), lengthpartition1, maxX)
-
-        offset=0
-        self._widget.addstr(line[0:parts[0]])
-        offset+=parts[0]
-        if len(parts) > 1:
-            for part in parts[1:]:
-                self._widget.addstr(line[offset:(offset+part)])
-                # self._widget.addstr(Y, X, line[offset:part])
-                offset+=part
-
-
-        #self._widget.addstr(Y, X, line)
-    """
 
     #....Display....................#
     #.          refresh            .#
@@ -373,19 +295,17 @@ class View:
                 msg_in = yield  # whatever is sent to this generator is assigned to msg here and loop starts
                 if msg_in:
                     messageBuffered+=msg_in
-                    if len(messageBuffered) < 255:
+                    if len(messageBuffered) < 4096:
                         rangeEnd = messageBuffered
                     else:
-                        rangeEnd = 255 
+                        rangeEnd = 4096 
                 if len(messageBuffered) > 0:
                     line = messageBuffered[:rangeEnd]
                     messageBuffered=messageBuffered[rangeEnd:]
                     if len(messageBuffered) > 0:
                         self.win._widget.addstr(line)
-                        #self.win._widget.addch(messageBuffered.pop(0))
-                    # self.win.appendtxt(msg)
                         self.win.refresh()
-        except GeneratorExit: # review
+        except GeneratorExit: # this generator is infinite and may want to be closed as some point?
             pass
 
 

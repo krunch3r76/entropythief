@@ -30,15 +30,14 @@ import asyncio
 
 
 
-
-
 async def main():
 
     IMAGE_HASH  = "238e362f7b52aa21c3f2a26ade9ba3952ae8c715c9efe37af0ef8258"
     MAXWORKERS  = 5                       # ideal number of workers to provision to at a time
     _kMEBIBYTE  = 2**20                   # constant count
-    MINPOOLSIZE = 100 * _kMEBIBYTE       # as as buflim, the most random bytes that will be buffered at time
+    MINPOOLSIZE = 10 * _kMEBIBYTE       # as as buflim, the most random bytes that will be buffered at time
     BUDGET      = 2.0                         # maximum budget (as of this version runtime constant)
+    DEVELOPERDEBUG=False
 
 
 
@@ -61,6 +60,9 @@ async def main():
         theview = view.View()
         # invoke model__main on separate process
         loop = asyncio.get_running_loop()
+        if MINPOOLSIZE < 2**20:
+            MINPOOLSIZE = 2**20
+
         loop.create_task(model.model__main( args
                     , to_model_q
                     , None
@@ -167,6 +169,8 @@ async def main():
             while not daemon_exited:
                 if not from_model_q.empty(): # revise boolean efficiency
                     msg_from_model = from_model_q.get_nowait()
+                    if DEVELOPERDEBUG:
+                        print(msg_from_model)
                     if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
                         current_total += msg_from_model['amount']
                     if 'bytesPurchased' in msg_from_model:
