@@ -33,9 +33,9 @@ import asyncio
 async def main():
 
     IMAGE_HASH  = "238e362f7b52aa21c3f2a26ade9ba3952ae8c715c9efe37af0ef8258"
-    MAXWORKERS  = 5                       # ideal number of workers to provision to at a time
+    MAXWORKERS  = 10                      # ideal number of workers to provision to at a time
     _kMEBIBYTE  = 2**20                   # constant count
-    MINPOOLSIZE = 10 * _kMEBIBYTE       # as as buflim, the most random bytes that will be buffered at time
+    MINPOOLSIZE = 30 * _kMEBIBYTE       # as as buflim, the most random bytes that will be buffered at time
     BUDGET      = 2.0                         # maximum budget (as of this version runtime constant)
     DEVELOPERDEBUG=False
 
