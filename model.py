@@ -35,8 +35,7 @@ from yapapi.strategy import *
 # internal
 import  utils
 import  worker_public
-import  pipe_writer
-
+from TaskResultWriter import TaskResultWriter
 
 ENTRYPOINT_FILEPATH = Path("/golem/run/worker.py")
 kTASK_TIMEOUT = timedelta(minutes=10)
@@ -247,58 +246,6 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
             # we are not using rdrand (using system entropy) so proceed as normal without filtering
             score = await super().score_offer(offer, history)
         return score
-
-
-
-
-  ###################################
- # TaskResultWriter{}              #
-###################################
-# a callable wrapper around the pipe_writer module utilized by ctx.download_bytes in steps (a copy of which is stored in the task data)
-# provides an interface for inspection of the buffer from elsewhere in the app
-class TaskResultWriter:
-    _bytesSeen = 0
-    _writerPipe = None
-    to_ctl_q = None
-    def __init__(self, to_ctl_q, POOL_LIMIT):
-        self.to_ctl_q = to_ctl_q
-        self._writerPipe = pipe_writer.PipeWriter(POOL_LIMIT)
-
-    def query_len(self) -> int:
-        return self._writerPipe.len()
-
-    def count_bytes_requesting(self) -> int:
-        # return how many bytes the buffer can accept
-        # check if the POOL_LIMIT has not been reached
-        return self._writerPipe.countAvailable()
-
-    async def refresh(self, pool_limit=None):
-        # since the PipeWriter object must be manually refreshed regularly
-        if pool_limit:
-            self._writerPipe._set_max_capacity(pool_limit)
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(), self._writerPipe.refresh)
-
-    async def __call__(self, randomBytes):
-        self._bytesSeen += len(randomBytes)
-        written = self._writerPipe.write(randomBytes)
-        await asyncio.sleep(0.001) # may help yield cpu time (but steps async generator may be sufficient) REVIEW
-
-        # inform controller
-        msg = randomBytes[:written].hex()
-        to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
-        self.to_ctl_q.put_nowait(to_ctl_cmd)
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(), self._writerPipe.refresh)
-
-        bytesInPipe = self.query_len()
-        msg = {'bytesInPipe': bytesInPipe}
-        self.to_ctl_q.put_nowait(msg)
-
-    def __del__(self):
-        if self._writerPipe:
-            self._writerPipe.__del__()
-
 
 
 
