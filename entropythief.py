@@ -145,7 +145,7 @@ async def main():
                     break
             #/if
             theview.refresh()
-            await asyncio.sleep(0.005)
+            await asyncio.sleep(0.01)
         #/while
     except asyncio.CancelledError:
         pass
@@ -179,7 +179,7 @@ async def main():
                         print(msg_from_model['exception'])
                     elif 'daemon' in msg_from_model:
                         daemon_exited = True
-                await asyncio.sleep(0.005)
+                await asyncio.sleep(0.01)
 
         locale.setlocale(locale.LC_NUMERIC, '')
         print("Bytes purchased were: " + locale.format_string("%d", bytesPurchased, grouping=True))

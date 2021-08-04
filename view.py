@@ -300,7 +300,7 @@ class View:
                     if len(messageBuffered) < 4096:
                         rangeEnd = messageBuffered
                     else:
-                        rangeEnd = 4096 
+                        rangeEnd = 4096
                 if len(messageBuffered) > 0:
                     line = messageBuffered[:rangeEnd]
                     messageBuffered=messageBuffered[rangeEnd:]

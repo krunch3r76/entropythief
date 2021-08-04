@@ -407,6 +407,7 @@ async def model__entropythief(
             #/if not OP_PAUSE
             await asyncio.sleep(0.01)
         #/while not OP_STOP
+        await asyncio.sleep(0.01)
     msg = {'bytesPurchased': taskResultWriter._bytesSeen}
     to_ctl_q.put_nowait(msg)
 
