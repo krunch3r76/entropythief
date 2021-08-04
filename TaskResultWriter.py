@@ -219,7 +219,7 @@ class Interleaver(TaskResultWriter):
         
 
     def update_capacity(self, new_capacity):
-        self._WriterPipe._set_max_capacity(new_capacity)
+        self._writerPipe._set_max_capacity(new_capacity)
 
 
 
