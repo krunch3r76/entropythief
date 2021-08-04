@@ -204,6 +204,8 @@ class Interleaver(TaskResultWriter):
             for page in pages:
                 page.close()
 
+            loop = asyncio.get_running_loop()
+            # written = await loop.run_in_executor( None , self._writerPipe.write , book.getvalue())
             written = self._writerPipe.write(book.getvalue())
             # share with controller a view of the bytes written
             randomBytesView = book.getbuffer()
@@ -212,9 +214,8 @@ class Interleaver(TaskResultWriter):
             self.to_ctl_q.put_nowait(to_ctl_cmd)
 
         loop = asyncio.get_running_loop()
-        
-        await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(), self._writerPipe.refresh)
-
+        self._writerPipe.refresh()
+        # await loop.run_in_executor(None, self._writerPipe.refresh)
         
 
     def update_capacity(self, new_capacity):
