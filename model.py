@@ -441,7 +441,7 @@ async def model__main(args
             , debug_payment_api=True)
 
     # create the task
-    taskResultWriter = Interleaver(to_ctl_q, MINPOOLSIZE, 4096*10)
+    taskResultWriter = Interleaver(to_ctl_q, MINPOOLSIZE)
 
     task = loop.create_task(
         model__entropythief(

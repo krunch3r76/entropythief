@@ -70,36 +70,29 @@ class Interleaver__Source():
     _file = None
     _filePath = None
     _file_len = None
-    _page_size = None
 
-    def __init__(self, filePath, page_size):
+    def __init__(self, filePath):
         self._file_len = os.path.getsize(filePath)
         self._file = open(filePath, 'rb', opener=lambda path, flags: os.open(path, os.O_RDONLY | os.O_NONBLOCK))
         self._filePath = filePath
-        self._page_size = page_size
 
-    def hasPageAvailable(self):
+    def hasPageAvailable(self, page_size):
 
         def ___remaining():
             told = self._file.tell()
-            remaining = self._file_len - told - 1
+            remaining = self._file_len - told
             return remaining
+        return ___remaining() >= page_size
 
-        return ___remaining() >= self._page_size
+    def read(self, page_size):
+        return self._file.read(page_size)
 
-    def read(self):
-        return self._file.read(self._page_size)
 
-    
     def __del__(self):
         self._file.close()
         os.unlink(self._filePath)
 
-"""
-    def delete(self):
-        self._file.close()
-        os.unlink(self._filePath)
-"""
+    
 
 
 
@@ -111,44 +104,81 @@ class Interleaver__Source():
 ######################{}########################
 class Interleaver(TaskResultWriter):
 ################################################
-    _page_size = None
+    __page_size = None
     _source_groups = [] # all groups added
     _source_next_group = []
-    def __init__(self, to_ctl_q, POOL_LIMIT, page_size=4096):
-        super().__init__(to_ctl_q, POOL_LIMIT)
-        self._page_size = page_size
 
+    @property
+    def page_size(self):
+        if len(self._source_groups) == 0: # stub, TODO REVIEW
+            return 4096
+
+        if len(self._source_groups[0]) > 0: # kludge, TODO REVIEW
+            minimum_from_first_group = min(self._source_groups[0], key=lambda source: source._file_len)._file_len
+
+        if self.__page_size is not None:
+            minimum_length = self.__page_size
+            # check that minimum length would not exceed the min
+            if minimum_length > minimum_from_first_group:
+                minimum_length = minimum_from_first_group
+        else:
+            minimum_length = minimum_from_first_group
+
+        return minimum_length 
+            
+    @page_size.setter
+    def page_size(self, size):
+        self.__page_size = size
+
+    # ------------------------------------------------------
+    def __init__(self, to_ctl_q, POOL_LIMIT, page_size=None):
+    # ------------------------------------------------------
+        super().__init__(to_ctl_q, POOL_LIMIT)
+        self.__page_size = page_size
+
+    # ----------------------------------
     def add_file(self, filepathstring):
-        source = Interleaver__Source(filepathstring, self._page_size)
+    # ----------------------------------
+        source = Interleaver__Source(filepathstring)
         self._source_next_group.append(source)
 
     # called when a new group of files have been added
     # expected: at least 2 files have been added
+    # ------------------------------------------------------
     def commit_added_files(self):
+    # ------------------------------------------------------
         self._source_groups.append(self._source_next_group)
 
+
+
+
+
     # post: if a group is available and readable, the _writerPipe receives a page
+    # ---------------------------------------
     async def refresh(self):
+    # ---------------------------------------
         def ___refresh_source_groups():
             if len(self._source_groups) > 0:
                 sources = self._source_groups[0] # just treat first
-                shortlist = [ source for source in sources if not source.hasPageAvailable() ]
+                shortlist = [ source for source in sources if not source.hasPageAvailable(self.page_size) ]
                 # prune first source group (always the only one read from)
                 for source_list_item in shortlist:
                     self._source_groups[0].remove(source_list_item)
                     del source_list_item
-                    # source_list_item.delete()
 
             # after pruning, it is possible there are less than 2 items
             # in which case the group is popped
             if len(self._source_groups) > 0:
                 current_group = self._source_groups[0]
 
-                if len(current_group) > 0 and len(current_group) < 2:
-                    popped_source_group = self._source_groups.pop(0)
-                    popped_source_group.clear()
-#                    for source in popped_source_group:
-#                        source.delete()
+                if len(current_group) == 0:
+                    self._source_groups.pop(0)
+                elif len(current_group) < 2: # dangling group has only one member
+                    popped_dangling_source_group = self._source_groups.pop(0)
+                    popped_dangling_source_group.clear()
+
+        # ........................................
+
 
         ___refresh_source_groups() # viable source list (2+ members with all having at least a page of bytes) now at head of _source_groups
 
@@ -158,11 +188,11 @@ class Interleaver(TaskResultWriter):
 
             for source in self._source_groups[0]:
                 try:
-                    pages.append(io.BytesIO(source.read()))
+                    pages.append(io.BytesIO(source.read(self.page_size)))
                 except Exception as e:
                     print(f"WTF: {e}", file=sys.stderr)
             book=io.BytesIO()
-            for _ in range(self._page_size):
+            for _ in range(self.page_size):
                 for page in pages:
                     book.write(page.read(1))
 
@@ -190,7 +220,3 @@ class Interleaver(TaskResultWriter):
     def __del__(self):
         for source_group in self._source_groups:
             source_group.clear()
-            """
-            for source in source_group:
-                source.delete()
-            """
