@@ -10,7 +10,11 @@ sys.path.append(PATH_TO_PIPE_MODULE)
 import pipe_reader
 
 readerPipe = pipe_reader.PipeReader()
-result = readerPipe.read(8)
-int64 = int.from_bytes(result, byteorder="little")
-print(int64)
+
+while True:
+    count = int(input("How many nonces? "))
+    for _ in range(count):
+        result = readerPipe.read(8)
+        int64 = int.from_bytes(result, byteorder="little")
+        print(int64)
 

@@ -95,25 +95,26 @@ class PipeReader:
     # -------------------------------------------
     def read(self, count) -> bytearray:
     # -------------------------------------------
-        rv = bytearray()
+        _ba = bytearray()
         remainingCount = count
         while remainingCount > 0:
             # if self._whether_pipe_is_readable():
             bytesInCurrentPipe = count_bytes_in_pipe(self._fdPipe)
-            ba = None
             if bytesInCurrentPipe >= remainingCount:
-                while ba is None:
+                while len(_ba) == 0:
                     try:
-                        ba = os.read(self._fdPipe, remainingCount)
-                            # _log_msg("read", 1)
+                        _ba = os.read(self._fdPipe, remainingCount)
                     except BlockingIOError:
+                        _log_msg("BLOCKING ERROR", 5)
                         pass
+                    except Exception as e:
+                        _log_msg(f"Other exception: {e}", 5)
                     else:
                         remainingCount = 0
             else:
-                while ba is None:
+                while _ba is None:
                     try:
-                        ba = os.read(self._fdPipe, bytesInCurrentPipe)
+                        _ba = os.read(self._fdPipe, bytesInCurrentPipe)
                     except BlockingIOError:
                         # _log_msg("error")
                         pass
@@ -124,10 +125,8 @@ class PipeReader:
                 if len(ba) == 0: # implies write end has been closed
                     self._reopen_pipe()
                 """
-                rv.extend(ba)
             time.sleep(0.001)
-
-        return rv
+        return _ba
 
 
 

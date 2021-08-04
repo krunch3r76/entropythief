@@ -53,7 +53,7 @@ if not _DEBUGLEVEL:
 def _log_msg(msg, debug_level=0, stream=sys.stderr):
     pass
     if debug_level <= _DEBUGLEVEL:
-        print(msg, file=sys.stderr)
+        print(f"\n{msg}\n", file=sys.stderr)
 
 
 
@@ -127,20 +127,10 @@ class PipeWriter:
         if self._fdPipe:
             self._fdPoll.register(self._fdPipe)
         
-        # attempt to obtain the expected maximum of one mebibyte
-        try:
-            pass
-            # fcntl.fcntl(self._fdPipe, self._F_SETPIPE_SZ, 2**20)
-        except OSError:
-            pass
-        finally:
-            # record actually pipe size (either requested or left at system default)
             if self._fdPipe:
                 self._pipeCapacity = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
-
-        # make sure the current count of bytes in pipe is not in excess of max capacity
-        bytesInPipe = self._count_bytes_in_pipe()
-        assert bytesInPipe <= self._maxCapacity
+            bytesInPipe = self._count_bytes_in_pipe()
+            assert bytesInPipe <= self._maxCapacity
 
 
 
@@ -203,6 +193,7 @@ class PipeWriter:
         buf = bytearray(4)
         fcntl.ioctl(self._fdPipe, termios.FIONREAD, buf, 1)
         bytesInPipe = int.from_bytes(buf, "little")
+        
         return bytesInPipe
 
 
@@ -221,7 +212,7 @@ class PipeWriter:
         else:
             self._fdPoll.register(self._fdPipe)
             self._pipeCapacity = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
-            _log_msg("\n_open_pipe: pipe opened!\n", 3)
+            _log_msg("_open_pipe: pipe opened!", 3)
 
 
 
@@ -285,6 +276,7 @@ class PipeWriter:
         # .........................................
         # try writing first to pipe then whatever could not be written push as a new stack buffer
             countBytesAvailableInPipe = ___countAvailableInPipe(self)
+            print(f"pipe needs {countBytesAvailableInPipe}\n\n", file=sys.stderr)
             remaining = len(data)
             written = 0
 
