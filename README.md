@@ -62,6 +62,7 @@ __other components__: note, some of these components are upstream of alpha-v6
 ./entropythief.py         # controller-view runnable script that daemonizes the model (Golem executor) and coordinates with the view
 ./model.py                # the Golem specific code (daemonized by controller.py)
 ./worker_public.py        # public namespace for variables etc needed by requestor to interact with the provider/vm
+./TaskResultWriter.py	  # base and derived TaskResultWriter (including Interleaver)
 ./pipe_writer.py          # buffered named pipe writer
 ./readers/pipe_reader.py  # API to named pipe
 /tmp/pilferedbits         # named pipe to which the buffered writes continually occur as needed to top off
