@@ -76,7 +76,7 @@ def _write_to_pipe(fifoWriteEnd, thebytes):
     try:
         WRITTEN = os.write(fifoWriteEnd, thebytes)
     except BlockingIOError:
-        _log_msg(f"_write_to_pipe: BlockingIOError, COULD NOT WRITE {len(thebytes)} bytes.")
+        _log_msg(f"_write_to_pipe: BlockingIOError, COULD NOT WRITE {len(thebytes)} bytes.", 1)
         WRITTEN=0
     except BrokenPipeError:
         WRITTEN=0
