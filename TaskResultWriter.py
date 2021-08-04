@@ -2,6 +2,7 @@ import os
 import io
 import asyncio
 import concurrent.futures
+import functools
 
 import pipe_writer
 import sys # for output to sys.stderr
@@ -147,8 +148,12 @@ class Interleaver(TaskResultWriter):
     # ------------------------------------------------------
     def commit_added_files(self):
     # ------------------------------------------------------
+        accum = 0
+        for source in self._source_next_group:
+            accum += source._file_len
+        self._bytesSeen+=accum
         self._source_groups.append(self._source_next_group)
-
+        self._source_next_group = []
 
 
 
