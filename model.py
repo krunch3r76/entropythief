@@ -20,6 +20,9 @@ from    decimal     import  Decimal
 from    dataclasses import dataclass, field
 import  json
 import  concurrent.futures
+from    tempfile    import gettempdir
+from uuid import uuid4
+
 
 ## 3rd party
 import  yapapi
@@ -35,7 +38,7 @@ from yapapi.strategy import *
 # internal
 import  utils
 import  worker_public
-from TaskResultWriter import TaskResultWriter
+from TaskResultWriter import Interleaver
 
 ENTRYPOINT_FILEPATH = Path("/golem/run/worker.py")
 kTASK_TIMEOUT = timedelta(minutes=10)
@@ -57,10 +60,12 @@ kTASK_TIMEOUT = timedelta(minutes=10)
 async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     loop = asyncio.get_running_loop()
     async for task in tasks:
+        await task.data['writer'].refresh()
         # start_time = datetime.now()
         # expiration = datetime.now(timezone.utc) + timedelta(seconds=30)
         # request <count> bytes from provider and wait
         ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']), task.data['rdrand_arg'])
+        """
         future_results = yield ctx.commit()
         results = await future_results
 
@@ -72,25 +77,18 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
         elif results[-1].success == False:
             task.reject_result()
         else:
-            # download_bytes and invoke callback at task.data['writer']
-            ctx.download_bytes(worker_public.RESULT_PATH.as_posix(), task.data['writer'], sys.maxsize)
-            # TODO instead of waiting on the download, yield and check if results were valid...
-            try:
-                yield ctx.commit(timeout=timedelta(minutes=6))
-                task_accept(result=True) # for now blindly accept results
-            except:
-                task.reject_result("timeout")
-            """
-            future_result = yield ctx.commit()
-            try:
-                result = await asyncio.wait_for(future_result, timeout=60)
-                if result:
-                    task.accept_result(True)
-                    print("STEPS: accepting result", file=sys.stderr)
-            except asyncio.TimeoutError:
-                print("steps: TIMEOUT", file=sys.stderr)
-                task.reject_result("timeout")
-            """
+        """
+        output_file = Path(gettempdir()) / str(uuid4())
+        try:
+            ctx.download_file(worker_public.RESULT_PATH, str(output_file))
+            yield ctx.commit(timeout=timedelta(minutes=2))
+            # print(f"CALLING ACCEPT RESULT {output_file}", file=sys.stderr)
+            task.accept_result(result=str(output_file))
+        except Exception as e: # define exception TODO
+            print(f"TRIED AND FAILED TO ACCEPT {str(output_file)}", file=sys.stderr)
+            print(e, file=sys.stderr)
+            task.reject_result() # timeout maybe?
+
 
 
 
@@ -320,7 +318,7 @@ async def model__entropythief(
                 continue
             elif 'cmd' in qmsg and qmsg['cmd'] == 'set buflim':
                 MINPOOLSIZE = qmsg['limit']
-                await taskResultWriter.refresh(MINPOOLSIZE)
+                taskResultWriter.update_capacity(MINPOOLSIZE)
             elif 'cmd' in qmsg and qmsg['cmd'] == 'set maxworkers':
                 MAXWORKERS = qmsg['count']
             elif 'cmd' in qmsg and qmsg['cmd'] == 'pause execution':
@@ -375,6 +373,8 @@ async def model__entropythief(
                         # modularize message handling routine and use here and above?
 
                         if task.result:
+                            taskResultWriter.add_file(task.result)
+
                             bytesInPipe_last = bytesInPipe
                             bytesInPipe = taskResultWriter.query_len()
                             if bytesInPipe != bytesInPipe_last:
@@ -388,6 +388,7 @@ async def model__entropythief(
 
                         await asyncio.sleep(0.01)
                         #/async for
+                    taskResultWriter.commit_added_files()
                     #/golem:
                 #/if count_bytes_requested...
             #/if not OP_PAUSE
@@ -440,7 +441,7 @@ async def model__main(args
             , debug_payment_api=True)
 
     # create the task
-    taskResultWriter = TaskResultWriter(to_ctl_q, MINPOOLSIZE)
+    taskResultWriter = Interleaver(to_ctl_q, MINPOOLSIZE, 4096*10)
 
     task = loop.create_task(
         model__entropythief(

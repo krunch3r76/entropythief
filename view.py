@@ -98,7 +98,6 @@ class Display:
             # self._widget.immedok(True)
 
 
-
         #^^^^Splash^^^^^^^^^^^^^^^^^^^^^^#
         #^      replace contents        ^#
         #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
@@ -160,7 +159,10 @@ class Display:
 """
         self._splash.text(txt)
         self._widget.leaveok(True)
-
+    
+        # debug
+        # curses.endwin()     
+        # /debug
 
 
 
