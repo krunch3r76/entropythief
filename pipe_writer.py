@@ -276,7 +276,6 @@ class PipeWriter:
         # .........................................
         # try writing first to pipe then whatever could not be written push as a new stack buffer
             countBytesAvailableInPipe = ___countAvailableInPipe(self)
-            print(f"pipe needs {countBytesAvailableInPipe}\n\n", file=sys.stderr)
             remaining = len(data)
             written = 0
 
