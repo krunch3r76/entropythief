@@ -83,11 +83,24 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             ctx.download_file(worker_public.RESULT_PATH, str(output_file))
             yield ctx.commit(timeout=timedelta(minutes=2))
             # print(f"CALLING ACCEPT RESULT {output_file}", file=sys.stderr)
-            task.accept_result(result=str(output_file))
+        except BatchTimeoutError: # credit to Golem's blender.py
+            print(
+                    f"{utils.TEXT_COLOR_RED}"
+                    f"Task {task} timed out on {ctx.provider_name}, time: {task.running_time}"
+                    f"{utils.TEXT_COLOR_DEFAULT}"
+                    )
+            task.reject_result("timeout")
         except Exception as e: # define exception TODO
-            print(f"TRIED AND FAILED TO ACCEPT {str(output_file)}", file=sys.stderr)
+            print(
+                    f"{utils.TEXT_COLOR_RED}"
+                    f"A task threw an exception."
+                    f"{utils.TEXT_COLOR_DEFAULT}"
+            )
             print(e, file=sys.stderr)
-            task.reject_result() # timeout maybe?
+            task.reject_result("unspecified error") # timeout maybe?
+        else:
+            task.accept_result(result=str(output_file))
+
 
 
 
