@@ -10,7 +10,7 @@ import fcntl
 import termios
 import string
 import time # debug
-
+import io
 
 
 
@@ -147,6 +147,7 @@ class Display:
     def __init__(self):
         self._widget = curses.newwin(curses.LINES-1, curses.COLS, 0, 0)
         self._widget.idlok(True); self._widget.scrollok(True)
+        self._widget.syncok(False) # testing for UI improvement
         self._splash = self.Splash(self)
         txt=\
 """EntropyThief >cmd reference
@@ -252,11 +253,10 @@ class View:
             self.screen = curses.initscr() 
             curses.noecho()
             curses.cbreak()
-
+            
             windir = view__create_windows(self)
             self.win = windir['outputfield']
             self.winbox = windir['inputfield']
-            
             # self.win, self.winbox, self.popupwin = view__create_windows(self)
         except Exception as e:
             curses.nocbreak()
@@ -291,22 +291,20 @@ class View:
     #.............................................#
     def coro_update_mainwindow(self):
         # here we keep a concatenated string from which we remove portions from the front to fill a line on each call
-        messageBuffered = "" 
+        messageBuffered = io.StringIO()
+        # low values make messageBuffered super heavy, next revision will use a memory stream
         try:
             while True:
                 msg_in = yield  # whatever is sent to this generator is assigned to msg here and loop starts
                 if msg_in:
-                    messageBuffered+=msg_in
-                    if len(messageBuffered) < 4096:
-                        rangeEnd = messageBuffered
-                    else:
-                        rangeEnd = 4096
-                if len(messageBuffered) > 0:
-                    line = messageBuffered[:rangeEnd]
-                    messageBuffered=messageBuffered[rangeEnd:]
-                    if len(messageBuffered) > 0:
-                        self.win._widget.addstr(line)
-                        self.win.refresh()
+                    written = messageBuffered.write(msg_in)
+                messageBuffered.seek(0, io.SEEK_SET)
+                lines = messageBuffered.read(4096)
+                messageBuffered.seek(0, io.SEEK_END)
+                if len(lines) > 0:
+                    self.win._widget.addstr(lines)
+                    self.win._widget.redrawwin() #testing
+                    self.win.refresh()
         except GeneratorExit: # this generator is infinite and may want to be closed as some point?
             pass
 
