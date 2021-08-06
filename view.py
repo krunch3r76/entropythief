@@ -182,8 +182,9 @@ class Display:
             self._splash.refresh()
         else:
             if self.ENABLE_SPLASH_1 == True:
-                self._widget.overwrite(self._splash._widget)
-                self._widget.redrawwin()
+                self._widget.overlay(self._splash._widget)
+                # self._widget.overwrite(self._splash._widget)
+                # self._widget.redrawwin()
                 self.ENABLE_SPLASH_1 = False
                 # prevents flickering by only filling in the blank when needed
 

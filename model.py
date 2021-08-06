@@ -22,7 +22,7 @@ import  json
 import  concurrent.futures
 from    tempfile    import gettempdir
 from uuid import uuid4
-
+import  yapapi.rest
 
 ## 3rd party
 import  yapapi
@@ -83,7 +83,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             ctx.download_file(worker_public.RESULT_PATH, str(output_file))
             yield ctx.commit(timeout=timedelta(minutes=2))
             # print(f"CALLING ACCEPT RESULT {output_file}", file=sys.stderr)
-        except BatchTimeoutError: # credit to Golem's blender.py
+        except rest.activity.BatchTimeoutError: # credit to Golem's blender.py
             print(
                     f"{utils.TEXT_COLOR_RED}"
                     f"Task {task} timed out on {ctx.provider_name}, time: {task.running_time}"
