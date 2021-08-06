@@ -173,7 +173,7 @@ class Display:
     def refresh(self):
         if self.ENABLE_SPLASH:
             if not self.ENABLE_SPLASH_1:
-                self._splash.text(self._splash._txt)
+                # self._splash.text(self._splash._txt)
                 self.ENABLE_SPLASH_1 = True 
             self._splash.refresh()
         else:
