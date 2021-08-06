@@ -173,24 +173,16 @@ class Display:
     def refresh(self):
         if self.ENABLE_SPLASH:
             if not self.ENABLE_SPLASH_1:
-                pass
                 self._splash.text(self._splash._txt)
                 self.ENABLE_SPLASH_1 = True 
-                # ENABLE_SPLASH_1 indicates that the text has been rewritten at least once
-                # to avoid unncessarily rewriting the whole text and prevent flickering
-            self._widget.refresh()
             self._splash.refresh()
         else:
             if self.ENABLE_SPLASH_1 == True:
-                self._widget.overlay(self._splash._widget)
-                # self._widget.overwrite(self._splash._widget)
-                # self._widget.redrawwin()
+                self._widget.redrawwin()
                 self.ENABLE_SPLASH_1 = False
-                # prevents flickering by only filling in the blank when needed
-
-            self._widget.refresh()
             pass
 
+        self._widget.refresh()
 
 
     #....Display....................#

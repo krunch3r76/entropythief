@@ -88,6 +88,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                     f"{utils.TEXT_COLOR_RED}"
                     f"Task {task} timed out on {ctx.provider_name}, time: {task.running_time}"
                     f"{utils.TEXT_COLOR_DEFAULT}"
+                    , file=sys.stderr
                     )
             task.reject_result("timeout")
         except Exception as e: # define exception TODO
@@ -95,6 +96,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                     f"{utils.TEXT_COLOR_RED}"
                     f"A task threw an exception."
                     f"{utils.TEXT_COLOR_DEFAULT}"
+                    , file=sys.stderr
             )
             print(e, file=sys.stderr)
             task.reject_result("unspecified error") # timeout maybe?
