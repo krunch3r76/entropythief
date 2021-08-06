@@ -204,12 +204,11 @@ class Display:
 # required by View::_init_screen
 def view__create_windows(view):
     win = Display()
-    _splash = win._widget.subwin(int(curses.LINES/5), int(curses.COLS/4), int(curses.LINES/2), int(curses.COLS/4))
 
     winbox = curses.newwin(1, curses.COLS, curses.LINES-1, 0)
     winbox.addstr(0, 0, ">")
     winbox.nodelay(True)
-    return { 'outputfield': win, 'inputfield': winbox, 'popup': _splash }
+    return { 'outputfield': win, 'inputfield': winbox }
 
 
 
@@ -296,8 +295,8 @@ class View:
                 messageBuffered.seek(0, io.SEEK_END)
                 if len(lines) > 0:
                     self.win._widget.addstr(lines)
-                    self.win._widget.redrawwin() #testing
-                    self.win.refresh()
+                #    self.win._widget.redrawwin() #testing
+                self.win.refresh()
         except GeneratorExit: # this generator is infinite and may want to be closed as some point?
             pass
 
