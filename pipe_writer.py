@@ -77,7 +77,13 @@ def _write_to_pipe(fifoWriteEnd, thebytes):
         WRITTEN = os.write(fifoWriteEnd, thebytes)
     except BlockingIOError:
         _log_msg(f"_write_to_pipe: BlockingIOError, COULD NOT WRITE {len(thebytes)} bytes.", 1)
-        WRITTEN=0
+        for _ in range(10):
+            try:
+                WRITTEN = os.write(fifoWriteEnd, thebytes)
+            except BlockingIOError:
+                WRITTEN=0
+            else:
+                break
     except BrokenPipeError:
         WRITTEN=0
         _log_msg("BROKEN PIPE--------------------------------------", 0)
@@ -279,17 +285,12 @@ class PipeWriter:
             remaining = len(data)
             written = 0
 
-            tryCount=0
-            while True:
-                if countBytesAvailableInPipe > 0:
-                    if remaining <= countBytesAvailableInPipe:
-                        written = _write_to_pipe(self._fdPipe, data)
-                    else:
-                        written = _write_to_pipe(self._fdPipe, data[:countBytesAvailableInPipe])
-                        remaining -= written
-                    tryCount+=1
-                    if written != 0 or tryCount==5:
-                        break
+            if countBytesAvailableInPipe > 0:
+                if remaining <= countBytesAvailableInPipe:
+                    written = _write_to_pipe(self._fdPipe, data)
+                else:
+                    written = _write_to_pipe(self._fdPipe, data[:countBytesAvailableInPipe])
+                    remaining -= written
 
 
             # slice anything that was not successfully written to the name pipe and push unto internal stack
