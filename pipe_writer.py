@@ -310,7 +310,8 @@ class PipeWriter:
         # here we move data in the buffers into any available capacity of the named pipe
         # waiting until the pipe has been completely emptied prevents blocking io
         #  reduces lost bytes due to simultaneous read writes. TODO experiment with nonzero values
-        if len(self._buffers) > 0 and self._whether_pipe_is_ready_for_writing() and self._count_bytes_in_pipe() == 0:
+        # if len(self._buffers) > 0 and self._whether_pipe_is_ready_for_writing() and self._count_bytes_in_pipe() == 0:
+        if len(self._buffers) > 0 and self._whether_pipe_is_ready_for_writing():
                 # iterate across buffers accumulating length settling where length exceeds what pipe needs
                 runningTotal = 0
                 index = 0
