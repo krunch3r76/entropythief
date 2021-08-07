@@ -8,7 +8,7 @@ usage:
 ```
 git clone https://github.com/krunch3r76/entropythief.git
 cd entropythief
-git checkout alpha-v7.12 # note, the (multiple) named pipe model is being revised as too many causes problems
+git checkout alpha-v7.13 # note, the (multiple) named pipe model is being revised as too many causes problems
 python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r requirements.txt
@@ -68,8 +68,7 @@ __other components__: note, some of these components are upstream of alpha-v6
 /tmp/pilferedbits         # named pipe to which the buffered writes continually occur as needed to top off
 ./Dockerfile              # for vm creation
 ./worker.py               # for vm creation
-./rdrand.c                # for vm, python c extension to access rdrand (utilized upon construction of image)
-./build.sh                # for vm, utilized by Docker image to create a c based python extension module (from  rdrand.c)
+./randwriter.c            # for vm, compiled into worker executable
 ```
 
 __applications__:
