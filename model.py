@@ -300,7 +300,7 @@ async def model__entropythief(
     if args.rdrand == 1:
         rdrand_arg = 'rdrand'
     else:
-        rdrand_arg = ''
+        rdrand_arg = 'devrand'
 
     loop = asyncio.get_running_loop()
     # loop = asyncio.get_event_loop()

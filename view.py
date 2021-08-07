@@ -11,7 +11,7 @@ import termios
 import string
 import time # debug
 import io
-
+from queue import SimpleQueue
 
 
 
@@ -282,23 +282,46 @@ class View:
     #.          coro_update_mainwindow           .#
     #.............................................#
     def coro_update_mainwindow(self):
+
+
+        def whether_stream_is_at_end(stream):
+            print(type(stream), file=sys.stderr)
+            rv = True
+            if not stream.closed:
+                current_pos = stream.tell()
+                stream.seek(0, io.SEEK_END)
+                end_pos = stream.tell()
+                stream.seek(current_pos, io.SEEK_SET)
+                rv = (current_pos == end_pos)
+            return rv
+
         # here we keep a concatenated string from which we remove portions from the front to fill a line on each call
-        messageBuffered = io.StringIO()
-        offset = 0
         # low values make messageBuffered super heavy, next revision will use a memory stream
+        q = SimpleQueue()
+        offset=0
+        messageBuffered = io.StringIO()
         try:
             while True:
                 msg_in = yield  # whatever is sent to this generator is assigned to msg here and loop starts
                 if msg_in:
-                    written = messageBuffered.write(msg_in)
-                messageBuffered.seek(offset, io.SEEK_SET)
-                lines = messageBuffered.read(4096)
-                offset+=len(lines)
-                # messageBuffered.seek(0, io.SEEK_END)
-                if len(lines) > 0:
-                    self.win._widget.addstr(lines)
-                #    self.win._widget.redrawwin() #testing
-                self.win.refresh()
+                    q.put( io.StringIO(msg_in) )
+
+                if whether_stream_is_at_end(messageBuffered):
+                    messageBuffered.close()
+                    if not q.empty():
+                        messageBuffered = q.get()
+                        offset=0
+
+                if not messageBuffered.closed:
+                    messageBuffered.seek(offset, io.SEEK_SET)
+                    lines = messageBuffered.read(4096)
+                    offset+=len(lines)
+                    if len(lines) > 0:
+                        self.win._widget.addstr(lines)
+                    #    self.win._widget.redrawwin() #testing
+                    self.win.refresh()
+                else:
+                    print("4.1", file=sys.stderr)
         except GeneratorExit: # this generator is infinite and may want to be closed as some point?
             pass
 
