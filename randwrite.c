@@ -13,7 +13,6 @@
 
 
 char const * kFilename = "/golem/output/result.bin";
-
 // char const * kFilename = "/tmp/w2/result.bin";
 
 
