@@ -157,6 +157,8 @@ class Display:
 >stop
 >restart    # after pause due to budget limit
 <ESC> toggle this menu
+*to view Yagna INFO messages and see any exceptions,
+ tail -f stderr file in another console
 """
         self._splash.text(txt)
         self._widget.leaveok(True)
