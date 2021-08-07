@@ -285,7 +285,6 @@ class View:
 
 
         def whether_stream_is_at_end(stream):
-            print(type(stream), file=sys.stderr)
             rv = True
             if not stream.closed:
                 current_pos = stream.tell()
