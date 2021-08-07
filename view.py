@@ -320,8 +320,6 @@ class View:
                         self.win._widget.addstr(lines)
                     #    self.win._widget.redrawwin() #testing
                     self.win.refresh()
-                else:
-                    print("4.1", file=sys.stderr)
         except GeneratorExit: # this generator is infinite and may want to be closed as some point?
             pass
 
