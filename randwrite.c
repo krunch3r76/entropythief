@@ -13,7 +13,7 @@
 
 
 
-char const * kFilename = "/tmp/w2/result.bin";
+char const * const kFilename = "/golem/output/result.bin";
 
 
 
@@ -69,7 +69,6 @@ int from_rdrand(uint64_t *buf_holding_random_bytes, uint64_t count_bytes)
 	{
 		while (rdrand_step(&next_random_value) != 1) {};
 		*buf_holding_random_bytes++=next_random_value;
-		printf("%llu\n", next_random_value);
 	}
 	return STATUS;
 	
@@ -102,7 +101,6 @@ int main(int argc, char *argv[])
 		STATUS = from_rdrand(buf_holding_random_bytes, count_bytes);
 		if (STATUS) fprintf(stderr, "Error calling routine to read from cpu.");
 	} else if (strncmp(argv[2], "devrand", 7) == 0) {
-		fprintf(stderr, "HERE GOES\n");
 		STATUS = from_devrand(buf_holding_random_bytes, count_bytes);
 		if (STATUS) fprintf(stderr, "Error calling routine to read from kernel.");
 	}
