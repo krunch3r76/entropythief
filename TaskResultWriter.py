@@ -19,7 +19,6 @@ class TaskResultWriter:
     def __init__(self, to_ctl_q, POOL_LIMIT):
         self.to_ctl_q = to_ctl_q
         self._writerPipe = pipe_writer.PipeWriter(POOL_LIMIT)
-
     def query_len(self) -> int:
         return self._writerPipe.len()
 

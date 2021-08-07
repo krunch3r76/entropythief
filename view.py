@@ -284,15 +284,17 @@ class View:
     def coro_update_mainwindow(self):
         # here we keep a concatenated string from which we remove portions from the front to fill a line on each call
         messageBuffered = io.StringIO()
+        offset = 0
         # low values make messageBuffered super heavy, next revision will use a memory stream
         try:
             while True:
                 msg_in = yield  # whatever is sent to this generator is assigned to msg here and loop starts
                 if msg_in:
                     written = messageBuffered.write(msg_in)
-                messageBuffered.seek(0, io.SEEK_SET)
+                messageBuffered.seek(offset, io.SEEK_SET)
                 lines = messageBuffered.read(4096)
-                messageBuffered.seek(0, io.SEEK_END)
+                offset+=len(lines)
+                # messageBuffered.seek(0, io.SEEK_END)
                 if len(lines) > 0:
                     self.win._widget.addstr(lines)
                 #    self.win._widget.redrawwin() #testing

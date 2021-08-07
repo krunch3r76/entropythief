@@ -37,10 +37,8 @@ rdrand(PyObject *self, PyObject *args) {
 	}
 
 
-	for(int i=0; success==0 && i < 10; ++i)
-	{
-		success = rdrand_step(&ull);
-	}
+	
+	while (rdrand_step(&ull) != 1) {};
 
 	return Py_BuildValue("K", ull);
 }
