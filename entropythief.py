@@ -30,7 +30,7 @@ import view
 
 async def main():
 
-    IMAGE_HASH  = "73521a1895707a68c9981e75e77c54632450bbf3838bd8915c0a9c97"
+    IMAGE_HASH  = "8368bcdf98c55eeb218bf9e11c396cfe17871b708821375734d7f7b8"
     MAXWORKERS  = 5                      # ideal number of workers to provision to at a time
     _kMEBIBYTE  = 2**20                   # constant count
     MINPOOLSIZE = 10 * _kMEBIBYTE       # as as buflim, the most random bytes that will be buffered at time
