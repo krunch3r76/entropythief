@@ -57,6 +57,30 @@ def _log_msg(msg, debug_level=0, stream=sys.stderr):
 
 
 
+# MyBytesIO wraps StringIO so that reads advance the stream to behavior like a file stream
+class MyBytesIO(io.BytesIO):
+
+    def __init__(self, initial_value):
+        super().__init__(initial_value)
+        self.seek(0, io.SEEK_END)
+        self.__end = self.tell()
+        self.seek(0, io.SEEK_SET)
+
+    @property
+    def end(self):
+        return self.__end
+
+    def len(self):
+        # distance from end to current
+        return self.__end - self.tell()
+
+    def __len__(self):
+        return self.len()
+
+    def __del__(self):
+        self.close()
+
+
 
 
 
@@ -109,7 +133,7 @@ def _write_to_pipe(fifoWriteEnd, thebytes):
  #                      PipeWriter{}                         #
 #############################################################
 class PipeWriter:
-    _buffers = []
+    _buffers = [] # of MyBytesIO
     _fdPipe = None
     _fdPoll = select.poll()
     _pipeCapacity = 0
@@ -262,9 +286,9 @@ class PipeWriter:
             # stores as much as the data as permitted in a bytearray added to the internal buffer list
             countAvailable = self.countAvailable()
             if len(data) > countAvailable:
-                self._buffers.append(data[:countAvailable])
+                self._buffers.append(MyBytesIO(data[:countAvailable]))
             else:
-                self._buffers.append(data)
+                self._buffers.append(MyBytesIO(data))
 
 
         # .........................................
@@ -355,10 +379,10 @@ class PipeWriter:
                
                 if countBytesToTakeFromUlt > 0:
                 # [ remaining buffer bytes can now be taken and placed in named pipe up to the calculate amount ]
-                    ___try_write(self, self._buffers[0][:countBytesToTakeFromUlt])
-                    # time.sleep(0.001)
+                    # ___try_write(self, self._buffers[0][:countBytesToTakeFromUlt])
+                    ___try_write(self, self._buffers[0].read(countBytesToTakeFromUlt))
                     # rewrite buffer to exclude the part handled by the write routine
-                    self._buffers[0] = self._buffers[0][countBytesToTakeFromUlt:-1]
+                    # self._buffers[0] = self._buffers[0][countBytesToTakeFromUlt:-1]
 
 
         # after topping off, attempt to write new data (which is pushed on stack as appropriate)
