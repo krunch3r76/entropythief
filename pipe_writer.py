@@ -279,13 +279,18 @@ class PipeWriter:
             remaining = len(data)
             written = 0
 
+            tryCount=0
+            while True:
+                if countBytesAvailableInPipe > 0:
+                    if remaining <= countBytesAvailableInPipe:
+                        written = _write_to_pipe(self._fdPipe, data)
+                    else:
+                        written = _write_to_pipe(self._fdPipe, data[:countBytesAvailableInPipe])
+                        remaining -= written
+                    tryCount+=1
+                    if written != 0 or tryCount==5:
+                        break
 
-            if countBytesAvailableInPipe > 0:
-                if remaining <= countBytesAvailableInPipe:
-                    written = _write_to_pipe(self._fdPipe, data)
-                else:
-                    written = _write_to_pipe(self._fdPipe, data[:countBytesAvailableInPipe])
-                    remaining -= written
 
             # slice anything that was not successfully written to the name pipe and push unto internal stack
             if remaining > 0:
@@ -334,7 +339,6 @@ class PipeWriter:
                     countBytesToPenult = 0
                     if penUltimateBufferIndex > 0:
                         for i in range(penUltimateBufferIndex):
-                            ___try_write(self, self._buffers[i]) # go ahead and write the contents
                             # time.sleep(0.001)
                             countBytesToPenult += len(self._buffers[i])
                     # lastBufferIndex will be used to as the count to pop the buffers after

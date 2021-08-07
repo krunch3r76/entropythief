@@ -90,7 +90,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                     f"{utils.TEXT_COLOR_DEFAULT}"
                     , file=sys.stderr
                     )
-            task.reject_result("timeout")
+            task.reject_result("timeout", retry=True) # need to ensure a retry occurs! TODO
         except Exception as e: # define exception TODO
             print(
                     f"{utils.TEXT_COLOR_RED}"
@@ -99,7 +99,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                     , file=sys.stderr
             )
             print(e, file=sys.stderr)
-            task.reject_result("unspecified error") # timeout maybe?
+            task.reject_result("unspecified error", retry-Tru) # timeout maybe?
         else:
             task.accept_result(result=str(output_file))
 

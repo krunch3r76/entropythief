@@ -123,7 +123,7 @@ class PipeReader:
                 try:
                     _ba = os.read(self._fdPipe, remainingCount)
                 except BlockingIOError:
-                    _log_msg("BLOCKING ERROR", 5)
+                    _log_msg("pipe reader: BLOCKING ERROR", 5)
                     pass
                 except Exception as e:
                     _log_msg(f"Other exception: {e}", 5)
