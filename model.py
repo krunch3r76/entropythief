@@ -40,7 +40,7 @@ import  utils
 import  worker_public
 from TaskResultWriter import Interleaver
 
-ENTRYPOINT_FILEPATH = Path("/golem/run/worker.py")
+ENTRYPOINT_FILEPATH = Path("/golem/run/worker")
 kTASK_TIMEOUT = timedelta(minutes=10)
 # EXPECTED_ENTROPY = 1044480 # the number of bytes we can expect from any single provider's entropy pool
 # TODO dynamically adjust based on statistical data
@@ -368,7 +368,7 @@ async def model__entropythief(
                                       , driver=args.driver,                             event_consumer=mySummaryLogger.log, strategy=strat
                         ) as golem:
                     await asyncio.sleep(0.01)
-
+                    
                     bytes_needed_per_worker = int(count_bytes_requested/MAXWORKERS)
                     # execute tasks
                     completed_tasks = golem.execute_tasks(
