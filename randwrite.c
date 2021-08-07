@@ -12,12 +12,13 @@
 #include <sys/random.h>
 
 
+char const * kFilename = "/golem/output/result.bin";
 
-char const * const kFilename = "/golem/output/result.bin";
+// char const * kFilename = "/tmp/w2/result.bin";
 
 
 
-int from_devrand(uint64_t *buf_holding_random_bytes, uint64_t count_bytes)
+int from_devrand(char *buf_holding_random_bytes, uint64_t count_bytes)
 {
 	int STATUS=0;
 	char getrandomBuf[256]; // getrandom guarantees up to 256 bytes per read
@@ -31,7 +32,7 @@ int from_devrand(uint64_t *buf_holding_random_bytes, uint64_t count_bytes)
 			}
 			bytes_acquired = getrandom(getrandomBuf, next_len_requested, GRND_RANDOM);
 			memcpy((void *)buf_holding_random_bytes, (void *)getrandomBuf, bytes_acquired);
-			*(char *)&buf_holding_random_bytes += bytes_acquired;
+			buf_holding_random_bytes += bytes_acquired;
 
 			count_bytes-=bytes_acquired;
 	}
@@ -60,7 +61,7 @@ int rdrand_step (uint64_t *rand)
 
 
 // pre: count_bytes is measured by 8
-int from_rdrand(uint64_t *buf_holding_random_bytes, uint64_t count_bytes)
+int from_rdrand(char *buf_holding_random_bytes, uint64_t count_bytes)
 {
 	int STATUS = 0;
 	uint64_t next_random_value;
@@ -68,7 +69,8 @@ int from_rdrand(uint64_t *buf_holding_random_bytes, uint64_t count_bytes)
 	for (uint64_t i=0; i < count_of_eights; ++i)
 	{
 		while (rdrand_step(&next_random_value) != 1) {};
-		*buf_holding_random_bytes++=next_random_value;
+		*(uint64_t *)buf_holding_random_bytes=next_random_value;
+		buf_holding_random_bytes+=sizeof(uint64_t);
 	}
 	return STATUS;
 	
@@ -93,8 +95,8 @@ int main(int argc, char *argv[])
 	// for now, remove any measure less than 8
 	uint64_t remainder_less_than_eight = count_bytes % 8;
 	count_bytes-=remainder_less_than_eight;
-	uint64_t *buf_holding_random_bytes = (uint64_t*)calloc(count_bytes, 1);
-	uint64_t *beg = buf_holding_random_bytes;
+	char *buf_holding_random_bytes = (char*)calloc(count_bytes, 1);
+	char *beg = buf_holding_random_bytes;
 
 	// determine entropy source
 	if (strncmp(argv[2], "rdrand", 6) == 0) {
