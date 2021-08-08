@@ -36,8 +36,7 @@ class TaskResultWriter:
         if pool_limit:
             self._writerPipe._set_max_capacity(pool_limit)
         loop = asyncio.get_running_loop()
-        await self._writerPipe.refresh()
-        # await loop.run_in_executor(None, self._writerPipe.refresh)
+        self._writerPipe.refresh()
 
 
     # deprecated
@@ -51,8 +50,7 @@ class TaskResultWriter:
         to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
         self.to_ctl_q.put_nowait(to_ctl_cmd)
         loop = asyncio.get_running_loop()
-        await self._writerPipe.refresh()
-        # await loop.run_in_executor(None, self._writerPipe.refresh)
+        self._writerPipe.refresh()
 
         bytesInPipe = self.query_len()
         msg = {'bytesInPipe': bytesInPipe}
@@ -205,7 +203,6 @@ class Interleaver(TaskResultWriter):
                 page.close()
 
             loop = asyncio.get_running_loop()
-            # written = await loop.run_in_executor( None , self._writerPipe.write , book.getvalue())
             written = self._writerPipe.write(book.getvalue())
             # share with controller a view of the bytes written
             randomBytesView = book.getbuffer()
@@ -215,9 +212,7 @@ class Interleaver(TaskResultWriter):
 
 
         loop = asyncio.get_running_loop()
-        # self._writerPipe.refresh()
-        # await loop.run_in_executor(None, self._writerPipe.refresh)
-        await self._writerPipe.refresh()
+        self._writerPipe.refresh()
 
     def update_capacity(self, new_capacity):
         self._writerPipe._set_max_capacity(new_capacity)

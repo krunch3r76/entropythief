@@ -251,7 +251,7 @@ class PipeWriter:
 
 
     # -----------------------------------------
-    async def refresh(self):
+    def refresh(self):
     # -----------------------------------------
         self.write(bytearray())
 

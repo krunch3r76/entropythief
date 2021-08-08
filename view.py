@@ -317,6 +317,7 @@ class View:
                     offset+=len(lines)
                     if len(lines) > 0:
                         self.win._widget.addstr(lines)
+                        self.win.refresh()
         except GeneratorExit: # this generator is infinite and may want to be closed as some point?
             pass
 
