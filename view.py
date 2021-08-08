@@ -102,42 +102,45 @@ class Display:
         #^      replace contents        ^#
         #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
         def text(self, txt):
-            coords = self._refresh_coords()
-            heightSplash = coords[4]-coords[2] # height of splash
-            widthSplash = coords[5]-coords[3] # width of splash
+
 
             self._txt = txt
             txtLines = self._txt.split('\n')
             txtLines_len = len(txtLines) + 1 # include horizontal bar
 
-            # resize overfit on height to fit
-            # account for 1: top bar, 2 separator, 3 bottom bar
-            if heightSplash > txtLines_len + 3:
-                heightSplash = txtLines_len + 3
-            self._widget.resize(heightSplash, widthSplash)
-            self._widget.clear()
-            self._widget.box()
+            if curses.LINES > 3:
+                coords = self._refresh_coords()
+                heightSplash = coords[4]-coords[2] # height of splash
+                widthSplash = coords[5]-coords[3] # width of splash
 
-            yBeg, xBeg = self._widget.getbegyx()
-            height = heightSplash
-            width = widthSplash
-            # height, width = self._widget.getmaxyx()
-            y=1; x=1
-            if txtLines_len > 0 and height > 3:
-                # draw first line
-                self._widget.addstr(y, x, f"%.{width-2}s" % txtLines[0])
-                y=y+1
-                # draw separator
-                self._widget.hline(y,0, curses.ACS_LTEE, 1)
-                self._widget.hline(y,1, curses.ACS_HLINE, width-2)
-                self._widget.hline(y,width-1, curses.ACS_RTEE, 1)
+                # resize overfit on height to fit
+                # account for 1: top bar, 2 separator, 3 bottom bar
+                if heightSplash > txtLines_len + 3:
+                    heightSplash = txtLines_len + 3
+                self._widget.resize(heightSplash, widthSplash)
+                self._widget.clear()
+                self._widget.box()
 
-                # how many of the remaining lines can fit
-                rangeMax = height - 3 - 1
-                # 1: topbar, 2:sep, 3:bot bar, 1: first line
-                # write text
-                for i in range(1, rangeMax):
-                    self._widget.addstr(y+i, x, f"%.{width-2}s" % txtLines[i])
+                yBeg, xBeg = self._widget.getbegyx()
+                height = heightSplash
+                width = widthSplash
+                # height, width = self._widget.getmaxyx()
+                y=1; x=1
+                if txtLines_len > 0 and height > 3:
+                    # draw first line
+                    self._widget.addstr(y, x, f"%.{width-2}s" % txtLines[0])
+                    y=y+1
+                    # draw separator
+                    self._widget.hline(y,0, curses.ACS_LTEE, 1)
+                    self._widget.hline(y,1, curses.ACS_HLINE, width-2)
+                    self._widget.hline(y,width-1, curses.ACS_RTEE, 1)
+
+                    # how many of the remaining lines can fit
+                    rangeMax = height - 3 - 1
+                    # 1: topbar, 2:sep, 3:bot bar, 1: first line
+                    # write text
+                    for i in range(1, rangeMax):
+                        self._widget.addstr(y+i, x, f"%.{width-2}s" % txtLines[i])
 
 
 
@@ -392,13 +395,15 @@ class View:
             elif result == curses.ascii.ESC:
                 self.win.toggle__splash()
         elif result == curses.KEY_RESIZE:
+            curses.update_lines_cols()
             self.winbox.move(0,0)
             self.winbox.addstr('>')
             self.winbox.addnstr(0, 1, "".join(self.linebuf), len(self.linebuf))
 
-            curses.update_lines_cols()
             self.win._widget.resize(curses.LINES-1,curses.COLS)
             self.win._widget.redrawwin()
+
+            # if curses.LINES > 3: 
             self.win._splash.text(self.win._splash._txt)
             self.winbox.mvwin(curses.LINES-1, 0)
             self.winbox.redrawwin()

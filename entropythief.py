@@ -154,6 +154,7 @@ async def main():
         theview.destroy()
         print("generic exception from entropythief controller:")
         msg = {'model exception': {'name': e.__class__.__name__, 'what': str(e) } }
+        print(msg)
     except asyncio.CancelledError:
         print("\n\nasyncio cancellederror\n\n")
     finally:
