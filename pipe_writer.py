@@ -111,7 +111,7 @@ def _write_to_pipe(fifoWriteEnd, thebytes):
     except BrokenPipeError:
         WRITTEN=0
         _log_msg("BROKEN PIPE--------------------------------------", 0)
-        raise
+        raise # review whether the exception should be raised TODO
     except Exception as exception:
         _log_msg("_write_to_pipe: UNHANDLED EXCEPTION")
         _log_msg(type(exception).__name__)
