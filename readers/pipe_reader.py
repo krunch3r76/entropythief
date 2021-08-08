@@ -1,3 +1,7 @@
+#pipe_reader
+# author: krunch3r (KJM github.com/krunch3r76)
+# license: General Poetic License (GPL3)
+
 import os
 import json
 import fcntl
@@ -6,7 +10,6 @@ import time
 import select
 import sys
 import io
-#pipe_reader
 
 
 
@@ -96,7 +99,7 @@ class PipeReader:
                 if pl[0][1] & 1:
                     answer=True
         return answer
-
+    """
     def _whether_pipe_is_open(self):
         answer = True
         if not self._fdPipe:
@@ -107,6 +110,7 @@ class PipeReader:
                 if pl[0][1] & 64:
                     answer = False
         return answer
+    """
 
     # continuously read pipes until read count satisfied
     # -------------------------------------------
@@ -115,9 +119,11 @@ class PipeReader:
         byte_stream = io.BytesIO()
         remainingCount = count
         while remainingCount > 0:
+            """
             while not self._whether_pipe_is_open():
                 self._reopen_pipe()
                 time.sleep(0.01)
+            """
             bytesInCurrentPipe = count_bytes_in_pipe(self._fdPipe)
             if bytesInCurrentPipe >= remainingCount:
                 try:

@@ -36,10 +36,11 @@ class TaskResultWriter:
         if pool_limit:
             self._writerPipe._set_max_capacity(pool_limit)
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(), self._writerPipe.refresh)
+        await self._writerPipe.refresh()
+        # await loop.run_in_executor(None, self._writerPipe.refresh)
 
 
-
+    # deprecated
     async def __call__(self, randomBytes):
         self._bytesSeen += len(randomBytes)
         written = self._writerPipe.write(randomBytes)
@@ -50,7 +51,8 @@ class TaskResultWriter:
         to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
         self.to_ctl_q.put_nowait(to_ctl_cmd)
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(), self._writerPipe.refresh)
+        await self._writerPipe.refresh()
+        # await loop.run_in_executor(None, self._writerPipe.refresh)
 
         bytesInPipe = self.query_len()
         msg = {'bytesInPipe': bytesInPipe}
@@ -186,7 +188,6 @@ class Interleaver(TaskResultWriter):
 
         ___refresh_source_groups() # viable source list (2+ members with all having at least a page of bytes) now at head of _source_groups
 
-        # print(self._source_groups, file=sys.stderr)
         if len(self._source_groups) > 0:
             pages = []
 
@@ -194,7 +195,7 @@ class Interleaver(TaskResultWriter):
                 try:
                     pages.append(io.BytesIO(source.read(self.page_size)))
                 except Exception as e:
-                    print(f"WTF: {e}", file=sys.stderr)
+                    pass # unexpected, remove later
             book=io.BytesIO()
             for _ in range(self.page_size):
                 for page in pages:
@@ -212,10 +213,11 @@ class Interleaver(TaskResultWriter):
             to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
             self.to_ctl_q.put_nowait(to_ctl_cmd)
 
+
         loop = asyncio.get_running_loop()
-        self._writerPipe.refresh()
+        # self._writerPipe.refresh()
         # await loop.run_in_executor(None, self._writerPipe.refresh)
-        
+        await self._writerPipe.refresh()
 
     def update_capacity(self, new_capacity):
         self._writerPipe._set_max_capacity(new_capacity)

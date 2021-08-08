@@ -144,6 +144,7 @@ async def main():
                     print(utils.TEXT_COLOR_BLUE + "The model threw the following exception:" + utils.TEXT_COLOR_DEFAULT + "\n" + msg_from_model['model exception']['name'] + "\n" + msg_from_model['model exception']['what'])
                     break
             #/if
+            next(u_update_mainwindow) # write pending to ui
             theview.refresh()
             await asyncio.sleep(0.01)
         #/while

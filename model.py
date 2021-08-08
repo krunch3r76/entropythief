@@ -221,7 +221,6 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
     async def decorate_demand(self, demand: DemandBuilder) -> None:
         if self.use_rdrand:
             demand.ensure("(golem.inf.cpu.architecture=x86_64)")
-        # print(f"******************\n{demand}\n", file=sys.stderr)
         await super().decorate_demand(demand)
     
     async def score_offer(
@@ -237,8 +236,6 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
         """
         # print(offer.props, file=sys.stderr) # it may be useful to log and review offers
         
-        # this would normally be a contrainst added to decorate_demand, but is here
-        # for now as a convenience TODO implement via decorate_demand
         """
         if self.use_rdrand:
             if offer.props["golem.inf.cpu.architecture"] == "x86_64":
