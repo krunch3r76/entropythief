@@ -332,17 +332,15 @@ class PipeWriter:
         if self.countAvailable() == 0:
             data=bytearray() # no space, slice to 0
         elif len(data) > self.countAvailable():
-            data=data[0:self.countAvailable()] # slice up to capacity available
+            data=data[0:self.countAvailable()] # slice up to capacity available inefficient to copy TODO REVIEW refactor
             #...just in case the caller did not check first
 
-        countBytesAvailableInPipe = ___countAvailableInPipe(self)
+        countBytesAvailableInPipe = ___countAvailableInPipe(self) # empty count
 
-        # here we move data in the buffers into any available capacity of the named pipe
-        # waiting until the pipe has been completely emptied prevents blocking io
-        #  reduces lost bytes due to simultaneous read writes. TODO experiment with nonzero values
-        # if len(self._buffers) > 0 and self._whether_pipe_is_ready_for_writing() and self._count_bytes_in_pipe() == 0:
+        # move contents of buffers into named pipe
         if len(self._buffers) > 0 and self._whether_pipe_is_ready_for_writing():
-                # iterate across buffers accumulating length settling where length exceeds what pipe needs
+                bufferstream = io.BytesIO()
+                # iterate until total length >= empty count
                 runningTotal = 0
                 index = 0
                 while runningTotal < countBytesAvailableInPipe and index < len(self._buffers):
@@ -350,42 +348,41 @@ class PipeWriter:
                     runningTotal += len(self._buffers[index])
                     index+=1
                     # <-
+                # one based index is now one past the last buffer in sequence to satisfy need
+                lastBufferIndex = index-1 # >= 0
 
-                # index is now one past the last buffer in sequence to satisfy need
-                # it is 1 if buffer[0] would satisfy the requirement
-
-                # now we are interested in the total of buffers besides the last
-                # as these will be emptied completely
-                lastBufferIndex = index-1
-                penUltimateBufferIndex = lastBufferIndex - 1
-                countBytesToPenult = 0
+                # calculate what will remain when the last buffer is partially emptied
+                countBytesToPenult = 0 # stores how much will come from all the completely emptied buffers
                 if lastBufferIndex > 0:
-                    # count how many bytes would ideally be delivered
-                    countBytesToPenult = 0
+                    penUltimateBufferIndex = lastBufferIndex - 1
                     if penUltimateBufferIndex > 0:
                         for i in range(penUltimateBufferIndex):
-                            # time.sleep(0.001)
                             countBytesToPenult += len(self._buffers[i])
-                    # lastBufferIndex will be used to as the count to pop the buffers after
-                    # determine how many bytes would be taken from the last buffer if countBytesToPenult were written
+                            bufferstream.write(self._buffers[i].getbuffer())
 
+                # difference gives how much to partially empty the last buffer
                 countBytesToTakeFromUlt = countBytesAvailableInPipe - countBytesToPenult
                     
                 # buffers up to but not including end buffer have been consumed
-                # pop them \/
+                # pop them \/ for garbage collection
                 if lastBufferIndex > 0:
                     for _ in range(lastBufferIndex):
-                        self._buffers.pop()
-               
+                        popped = self._buffers.pop()
+                        bufferstream.write(popped.getbuffer())
+                        del(popped) 
+
                 if countBytesToTakeFromUlt > 0:
                 # [ remaining buffer bytes can now be taken and placed in named pipe up to the calculate amount ]
                     # ___try_write(self, self._buffers[0][:countBytesToTakeFromUlt])
-                    ___try_write(self, self._buffers[0].read(countBytesToTakeFromUlt))
+                    bufferstream.write(self._buffers[0].read(countBytesToTakeFromUlt))
+                    ___try_write(self, bufferstream.getbuffer())
+                    bufferstream.close()
+                    # ___try_write(self, self._buffers[0].read(countBytesToTakeFromUlt))
                     # rewrite buffer to exclude the part handled by the write routine
                     # self._buffers[0] = self._buffers[0][countBytesToTakeFromUlt:-1]
 
 
-        # after topping off, attempt to write new data (which is pushed on stack as appropriate)
+        # after topping off, attempt to write incoming `data` (which is pushed on stack as appropriate)
         ___try_write(self, data)
 
 
