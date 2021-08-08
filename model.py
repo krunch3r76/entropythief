@@ -99,7 +99,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                     , file=sys.stderr
             )
             print(e, file=sys.stderr)
-            task.reject_result("unspecified error", retry-Tru) # timeout maybe?
+            task.reject_result("unspecified error", retry=True) # timeout maybe?
         else:
             task.accept_result(result=str(output_file))
 

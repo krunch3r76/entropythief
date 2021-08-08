@@ -33,7 +33,7 @@ async def main():
     IMAGE_HASH  = "81e0a936ef13f89622e1b59f3934caf8109244c5f8f6998f0f338ed6"
     MAXWORKERS  = 5                      # ideal number of workers to provision to at a time
     _kMEBIBYTE  = 2**20                   # constant count
-    MINPOOLSIZE = 10 * _kMEBIBYTE       # as as buflim, the most random bytes that will be buffered at time
+    MINPOOLSIZE = 10 * _kMEBIBYTE + 5      # as as buflim, the most random bytes that will be buffered at time
     BUDGET      = 2.0                         # maximum budget (as of this version runtime constant)
     DEVELOPERDEBUG=False
 
