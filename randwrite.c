@@ -11,6 +11,7 @@
 #include <string.h>
 #include <sys/random.h>
 
+#define TRUE 1
 
 char const * kFilename = "/golem/output/result.bin";
 // char const * kFilename = "/tmp/w2/result.bin";
@@ -20,7 +21,7 @@ char const * kFilename = "/golem/output/result.bin";
 int from_devrand(char *buf_holding_random_bytes, uint64_t count_bytes)
 {
 	int STATUS=0;
-	char getrandomBuf[256]; // getrandom guarantees up to 256 bytes per read
+	char temp_buf[256]; // getrandom guarantees up to 256 bytes per read
 	ssize_t bytes_acquired;
 	size_t next_len_requested;
 	while(count_bytes !=0) {
@@ -29,15 +30,14 @@ int from_devrand(char *buf_holding_random_bytes, uint64_t count_bytes)
 			} else {
 				next_len_requested=count_bytes;
 			}
-			bytes_acquired = getrandom(getrandomBuf, next_len_requested, GRND_RANDOM);
-			memcpy((void *)buf_holding_random_bytes, (void *)getrandomBuf, bytes_acquired);
+			bytes_acquired = getrandom(temp_buf, next_len_requested, GRND_RANDOM);
+			memcpy((void *)buf_holding_random_bytes, (void *)temp_buf, bytes_acquired);
 			buf_holding_random_bytes += bytes_acquired;
 
 			count_bytes-=bytes_acquired;
 	}
 	return STATUS;
 }
-
 
 
 
@@ -59,17 +59,39 @@ int rdrand_step (uint64_t *rand)
 
 
 
+
 // pre: count_bytes is measured by 8
 int from_rdrand(char *buf_holding_random_bytes, uint64_t count_bytes)
 {
+
+		typedef union sixtyfour_union {
+			uint64_t data;
+			unsigned char bytes[8];
+		} sixtyfour_u;
+
 	int STATUS = 0;
 	uint64_t next_random_value;
 	uint64_t count_of_eights = count_bytes / 8; 
+	uint64_t remainder = count_bytes % 8;
 	for (uint64_t i=0; i < count_of_eights; ++i)
 	{
-		while (rdrand_step(&next_random_value) != 1) {};
+		while (rdrand_step(&next_random_value) != TRUE) {};
 		*(uint64_t *)buf_holding_random_bytes=next_random_value;
 		buf_holding_random_bytes+=sizeof(uint64_t);
+	}
+
+	// rdrand returns 64 random bytes or 8 bytes at a time
+	// therefore, if the count is short, a union
+	// is used to read the remaining count of bytes
+	// in little endian order (beg with highest offset)
+	if (remainder > 0) {
+		while (rdrand_step(&next_random_value) != TRUE) {};
+		sixtyfour_u 		sixtyfour;
+		sixtyfour.data	=	next_random_value;
+		// read from highest offset
+		for(int i=remainder-1; i >= 0; --i) {
+			*buf_holding_random_bytes++=sixtyfour.bytes[i];
+		}
 	}
 	return STATUS;
 	
@@ -92,8 +114,8 @@ int main(int argc, char *argv[])
 	}
 
 	// for now, remove any measure less than 8
-	uint64_t remainder_less_than_eight = count_bytes % 8;
-	count_bytes-=remainder_less_than_eight;
+	// uint64_t remainder_less_than_eight = count_bytes % 8;
+	// count_bytes-=remainder_less_than_eight;
 	char *buf_holding_random_bytes = (char*)calloc(count_bytes, 1);
 	char *beg = buf_holding_random_bytes;
 
