@@ -304,6 +304,7 @@ class View:
         messageBuffered = io.StringIO()
         try:
             while True:
+                REFRESHED = False
                 msg_in = yield  # whatever is sent to this generator is assigned to msg here and loop starts
                 if msg_in:
                     q.put( io.StringIO(msg_in) )
