@@ -43,7 +43,7 @@ _DEBUGLEVEL = True if 'PYTHONDEBUGLEVEL' in os.environ else False
     payment_failed_count            " the current count of successive payment failure events
     current_total                   " the total costs so far
     theview                         " the view object
-    themodeltask                    " the model (runs Golem) task object, not manipulated, here for thoroughness
+    themodeltask                    " the model (runs Golem) task object
     u_update_main_window            " generator that writes the input hexstring to the display
 
     hook_model(...)                 " handles the last message from the model (queue element)
@@ -341,6 +341,7 @@ class Controller:
                             print(msg_from_model['exception'])
                         elif 'daemon' in msg_from_model:
                             daemon_exited = True
+                    await self.themodeltask
                     await asyncio.sleep(0.01)
 
             locale.setlocale(locale.LC_NUMERIC, '')
