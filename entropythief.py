@@ -46,11 +46,11 @@ _DEBUGLEVEL = True if 'PYTHONDEBUGLEVEL' in os.environ else False
     themodeltask                    " the model (runs Golem) task object
     u_update_main_window            " generator that writes the input hexstring to the display
 
-    hook_model(...)                 " handles the last message from the model (queue element)
-    hook_view(...)                  " handles the last message from the view (return value)
+    _hook_model(...)                 " handles the last message from the model (queue element)
+    _hook_view(...)                  " handles the last message from the view (return value)
     __call__()                      " start provisioning to obtain random bytes
 
-    internal dependencies: [ 'view.py', 'model.py' ]
+    internal dependencies: [ 'view.py', 'model.py', 'utils.py' ]
 
     summary:
 
@@ -226,7 +226,7 @@ class Controller:
                 #############################################
                 #   exit loop on "error" or request to stop #
                 if ucmd:                                    #
-                    ERROR = self.hook_view(ucmd)            #
+                    ERROR = self._hook_view(ucmd)            #
                     if ERROR:                               #
                         break                               #
 
@@ -237,7 +237,7 @@ class Controller:
                 # exit loop on error                                #
                 if not self.from_model_q.empty():                   #
                     msg_from_model = self.from_model_q.get_nowait() #
-                    ERROR = self.hook_model(msg_from_model)         #
+                    ERROR = self._hook_model(msg_from_model)        #
                     if ERROR:                                       #
                         break                                       #
 
@@ -261,7 +261,7 @@ class Controller:
             print("\n\nasyncio cancellederror\n\n")
         finally:
             self.theview.destroy()
-            sys.stderr=sys.__stderr__
+            # sys.stderr=sys.__stderr__
             print("+=+=+=+=+=+=+=stopping and settling accounts=+=+=+=+=+=+=")
             bytesPurchased = 0
             if True:
@@ -274,14 +274,11 @@ class Controller:
                     if not self.from_model_q.empty(): # revise boolean efficiency
                         msg_from_model = self.from_model_q.get_nowait()
                         if self.DEVELOPERDEBUG:
-                            print(f"DEVELOPERDEBUG: {DEVELOPERDEBUG}")
                             print(msg_from_model)
                         if 'bytesPurchased' in msg_from_model:
                             bytesPurchased = msg_from_model['bytesPurchased']
                         elif 'event' in msg_from_model and msg_from_model['event'] == 'PaymentAccepted':
                             self.current_total += float(msg_from_model['amount'])
-                        # if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
-                        #    self.current_total += msg_from_model['amount']
                         elif 'exception' in msg_from_model:
                             print("unhandled exception reported by model:\n")
                             print(msg_from_model['exception'])
@@ -305,7 +302,7 @@ class Controller:
 
 
     #   ---------Controller------------
-    def hook_model(self, msg_from_model):
+    def _hook_model(self, msg_from_model):
     #   -------------------------------
     # process model signal
     # post: current_total, count_workers, payment_failed_count, bytesInPipe, ui updated
@@ -317,8 +314,6 @@ class Controller:
             self.u_update_main_window.send(msg) # TODO coroutine only updates one line at a time, buffering between calls
             concat_msg = { msg_from_model['cmd']: len(msg_from_model['hexstring']) }
             print(concat_msg, file=self.mainlog)
-        # elif 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
-        #    self.current_total += msg_from_model['amount']
         elif 'exception' in msg_from_model:
             raise Exception(msg_from_model['exception'])
         elif 'info' in msg_from_model and msg_from_model['info'] == 'worker started':
@@ -326,9 +321,7 @@ class Controller:
         elif 'info' in msg_from_model and msg_from_model['info'] == "payment failed":
             self.payment_failed_count+=1
             if self.BUDGET - self.current_total < 0.01 or self.payment_failed_count==10: # review epsilon
-                # to be implemented
-                msg_to_model = {'cmd': 'pause execution'} # give the logs a rest, don't bother requesting until budget is increased
-                to_model_q.put_nowait(msg_to_model)
+                msg_to_model = {'cmd': 'pause execution'}; self.to_model_q.put_nowait(msg_to_model)
         elif 'event' in msg_from_model and msg_from_model['event'] == 'AgreementTerminated':
             self.count_workers-=1
         elif 'event' in msg_from_model and msg_from_model['event'] == 'PaymentAccepted':
@@ -353,7 +346,7 @@ class Controller:
 
 
     #   ---------Controller------------
-    def hook_view(self, ucmd):
+    def _hook_view(self, ucmd):
     #   -------------------------------
     # process client input
     # post: MINPOOLSIZE, MAXWORKERS, payment_failed_count, BUDGET
@@ -377,12 +370,12 @@ class Controller:
             self.to_model_q.put_nowait(msg_to_model)
         elif ucmd=='restart':
             self.payment_failed_count=0 # reset counter
-            self.msg_to_model = {'cmd': 'unpause execution' }
+            msg_to_model = {'cmd': 'unpause execution' }
             self.to_model_q.put_nowait(msg_to_model)
         elif 'set budget=' in ucmd:
             tokens = ucmd.split("=")
             self.BUDGET = float(tokens[-1])
-            msg_to_model = {'cmd': 'set budget', 'budget': BUDGET}
+            msg_to_model = {'cmd': 'set budget', 'budget': self.BUDGET}
             self.to_model_q.put_nowait(msg_to_model)
         return ERROR
 
