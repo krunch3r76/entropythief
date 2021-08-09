@@ -149,8 +149,10 @@ class Display:
     #...............................#
     def __init__(self):
         self._widget = curses.newwin(curses.LINES-1, curses.COLS, 0, 0)
-        self._widget.idlok(True); self._widget.scrollok(True)
+        self._widget.idlok(True);
+        self._widget.scrollok(True)
         self._widget.syncok(False) # testing for UI improvement
+        self._widget.leaveok(True)
         self._splash = self.Splash(self)
         txt=\
 """EntropyThief >cmd reference
@@ -162,7 +164,6 @@ class Display:
 <ESC> toggle this menu
 """
         self._splash.text(txt)
-        self._widget.leaveok(True)
     
         # debug
         # curses.endwin()     
@@ -248,7 +249,7 @@ class View:
             self.screen = curses.initscr() 
             curses.noecho()
             curses.cbreak()
-            
+            curses.curs_set(1)                    
             windir = view__create_windows(self)
             self.win = windir['outputfield']
             self.winbox = windir['inputfield']
@@ -256,7 +257,7 @@ class View:
         except Exception as e:
             curses.nocbreak()
             curses.echo()
-            curses.curs_set(True)
+            curses.curs_set(1)
             curses.endwin()
             raise
 
@@ -302,10 +303,11 @@ class View:
         q = SimpleQueue()
         offset=0
         messageBuffered = io.StringIO()
+        REFRESH=False
         try:
             while True:
-                REFRESHED = False
-                msg_in = yield  # whatever is sent to this generator is assigned to msg here and loop starts
+                msg_in = yield REFRESH # whatever is sent to this generator is assigned to msg here and loop starts
+                REFRESH=False
                 if msg_in:
                     q.put( io.StringIO(msg_in) )
 
@@ -320,8 +322,12 @@ class View:
                     lines = messageBuffered.read(4096)
                     offset+=len(lines)
                     if len(lines) > 0:
+                        curses.curs_set(0)
                         self.win._widget.addstr(lines)
-                        self.win.refresh()
+                        # self.win.refresh() # caller should refresh after call to this update
+                        REFRESH=True # inform caller there is no need to refresh again
+                else:
+                    curses.curs_set(1)
         except GeneratorExit: # this generator is infinite and may want to be closed as some point?
             pass
 
@@ -425,5 +431,5 @@ class View:
     def destroy(self):
         curses.nocbreak()
         curses.echo()
-        curses.curs_set(True)
+        curses.curs_set(1)
         curses.endwin()

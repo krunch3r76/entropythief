@@ -9,7 +9,6 @@
     for more information, see README.md
 """
 
-import model
 import os
 import sys
 import multiprocessing
@@ -21,17 +20,99 @@ import asyncio
 
 import utils
 import view
+import model
+
+_kMEBIBYTE  = 2**20                   # constant count
 
 
+_DEBUGLEVEL = True if 'PYTHONDEBUGLEVEL' in os.environ else False
+
+
+"""
+    Controller
+    ----------
+    IMAGE_HASH                      " the hash link for providers to look up the image
+    MAXWORKERS                      " the number of workers to provision per network request {dynamic}
+    MINPOOLSIZE                     " the target maximum number of random bytes available for reading (misnomer!) {dynamic}
+    BUDGET                          " the most the client is willing to spend before pausing execution
+
+    to_model_q                      " signals going to the model
+    from_model_q                    " signals coming from the model
+    count_workers                   " the number of active workers in the current execution
+    bytesInPipe                     " the number of bytes that the model has made available for reading
+    payment_failed_count            " the current count of successive payment failure events
+    current_total                   " the total costs so far
+    theview                         " the view object
+    themodeltask                    " the model (runs Golem) task object, not manipulated, here for thoroughness
+    u_update_main_window            " generator that writes the input hexstring to the display
+
+    hook_model(...)                 " handles the last message from the model (queue element)
+    hook_view(...)                  " handles the last message from the view (return value)
+    __call__()                      " start provisioning to obtain random bytes
+
+    internal dependencies: [ 'view.py', 'model.py' ]
+
+    summary:
+
+        The controller is initialized and called from main asynchronously.
+
+        The Controller initializes the controller-view and when __call__ed begins provisioning work via
+        the model according to the current BUDGET vs current_total, and current MINPOOLSIZE vs bytesInPipe.
+        Execution is paused if several (10) successive payment failures occur or the current_total is at
+        least within a small amount (0.01) of the BUDGET, and the client must issue a restart command.
+
+        The Controller runs in a loop to poll and process events from the view and the model asynchronously.
+        
+        The view has two components: a display and a input box. If new data (a hexstream) is received from
+        the model, it is fed to a generator on the view to update the display. The generator will write
+        all or a portion of the stream and queue further writes for later to return control for the
+        other asynchronous operations. The controller sends empty messages to the view to prompt for
+        writing any buffered display data. On each iteration, the controller also updates the input
+        box, and its status indicators (e.g. worker count, costs, bytesInPipe), and receives and
+        processes any input from the client.
+
+        The model asynchronously requests work whenever there is available funds and the bytes in the
+        writer have fallen beneath a target level (half the MINPOOLSIZE). The results from the last
+        pool are sent as a signal to controller for processing. The model sends various signals to
+        the controller about its state including events during work (such as PaymentAccepted events
+        to track current_total costs) and state information about the PipeWriter, specifically the
+        number of total bytes stored/readable.
+
+        flow:
+        initialize model to start work on Golem
+        \---------------model------------------------
+        /  -> handle signal  from controller        | 
+        |  <- emit work results                     |
+        |  <- emit Golem specific events            |
+        |  <- emit total bytes in writer            /
+        --------------------------------------------\
+
+        \---------------view-------------------------
+        /  -> handle signal from controller         |
+        |   -> (display) handle new a hexstring     |
+        |   -> (box) handle status updates          |
+        |  <- (box) emit client input               /
+        --------------------------------------------\
+
+        >-------------- controller ------------------------------
+        |                                                       |
+        | update status line and receive client input (if any)  |
+        | process client input                                  |
+        | process model signal                                  |
+        |    refresh display if signal is a task pool result    |
+        | flush writes to display                               |
+        --------------------------------------------------------<
+        X read closing messages from message queue to get
+           stats (namely bytesPurchased)
+"""
 
 class Controller:
 
     IMAGE_HASH  = "81e0a936ef13f89622e1b59f3934caf8109244c5f8f6998f0f338ed6"
-    MAXWORKERS  = 5                      # ideal number of workers to provision to at a time
-    _kMEBIBYTE  = 2**20                   # constant count
-    MINPOOLSIZE = 10 * _kMEBIBYTE + 5      # as as buflim, the most random bytes that will be buffered at time
-    BUDGET      = 2.0                         # maximum budget (as of this version runtime constant)
-    DEVELOPERDEBUG=False
+    MAXWORKERS  = 5
+    MINPOOLSIZE = 10 * _kMEBIBYTE + 5
+    BUDGET      = 2.0
+    DEVELOPERDEBUG=_DEBUGLEVEL
     to_model_q = asyncio.Queue()
     from_model_q = asyncio.Queue()
    
@@ -41,7 +122,8 @@ class Controller:
     current_total = 0.0
 
     theview = None
-    u_update_main_window = None # generator to write output to main display
+    themodeltask = None
+    u_update_main_window = None # generator (function with state) to write some output to main display
 
 
 
@@ -49,15 +131,16 @@ class Controller:
 
 
     #   ---------Controller------------
-    def __init__(self):
+    def __init__(self, loop):
     #   -------------------------------
+    # comments: starts golem task
         # parse cli arguments (viz utils.py)
         self.args = argparse.Namespace() # redundant?
         parser = utils.build_parser("pipe entropy to the named pipe /tmp/pilferedbits")
         self.args = parser.parse_args()
 
         # setup console streams
-        self.maindebuglog = open("main.log", "w", buffering=1) # monitoring events mostly or other things thought informative for dev ideas
+        self.mainlog = open("main.log", "w", buffering=1) # monitoring events mostly or other things thought informative for dev ideas
         self.devdebuglog = open("devdebug.log", "w", buffering=1) # special log messaging for temporary debugging purposes
         self.stderr2file = open("stderr", "w", buffering=1) # messages from project and if logging enabled INFO messages from rest
         sys.stderr = self.stderr2file # replace stderr stream with file stream
@@ -69,8 +152,7 @@ class Controller:
 
 
 
-        self.loop = asyncio.get_running_loop()
-        self.loop.create_task(model.model__main( self.args
+        self.themodeltask=loop.create_task(model.model__main( self.args
             , self.to_model_q
             , None
             , self.from_model_q
@@ -81,9 +163,9 @@ class Controller:
             , self.args.enable_logging
             ))
 
-        # setup generator to update the view's main display to write any pending/buffered pages of hex
-        self.u_update_mainwindow = self.theview.coro_update_mainwindow()
-        next(self.u_update_mainwindow)
+        # setup generator that writes any buffered bytes to the main display
+        self.u_update_main_window = self.theview.coro_update_mainwindow()
+        next(self.u_update_main_window)
 
 
 
@@ -92,30 +174,34 @@ class Controller:
     #   ---------Controller------------
     def hook_model(self, msg_from_model):
     #   -------------------------------
+    # process model signal
     # post: current_total, count_workers, payment_failed_count, bytesInPipe, ui updated
+    # output: error is true if an exception occurs
         ERROR = False
-        # log most msg's to maindebuglog (main.log)
+        # log most msg's to mainlog (main.log)
         if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes':
             msg = msg_from_model['hexstring']
-            self.u_update_mainwindow.send(msg) # TODO coroutine only updates one line at a time, buffering between calls
+            self.u_update_main_window.send(msg) # TODO coroutine only updates one line at a time, buffering between calls
             concat_msg = { msg_from_model['cmd']: len(msg_from_model['hexstring']) }
-            print(concat_msg, file=self.maindebuglog)
-        elif 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
-            self.current_total += msg_from_model['amount']
+            print(concat_msg, file=self.mainlog)
+        # elif 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
+        #    self.current_total += msg_from_model['amount']
         elif 'exception' in msg_from_model:
             raise Exception(msg_from_model['exception'])
         elif 'info' in msg_from_model and msg_from_model['info'] == 'worker started':
             self.count_workers+=1
-        elif 'event' in msg_from_model and msg_from_model['event'] == 'AgreementTerminated':
-            self.count_workers-=1
         elif 'info' in msg_from_model and msg_from_model['info'] == "payment failed":
             self.payment_failed_count+=1
             if self.BUDGET - self.current_total < 0.01 or self.payment_failed_count==10: # review epsilon
                 # to be implemented
                 msg_to_model = {'cmd': 'pause execution'} # give the logs a rest, don't bother requesting until budget is increased
                 to_model_q.put_nowait(msg_to_model)
+        elif 'event' in msg_from_model and msg_from_model['event'] == 'AgreementTerminated':
+            self.count_workers-=1
+        elif 'event' in msg_from_model and msg_from_model['event'] == 'PaymentAccepted':
+            self.current_total += float(msg_from_model['amount'])
         elif 'event' in msg_from_model:
-            print(msg_from_model, file=self.maindebuglog) # report event to developer stream
+            print(msg_from_model, file=self.mainlog) # report event to developer stream
         elif 'debug' in msg_from_model:
             print(msg_from_model, file=self.devdebuglog) # record debug message
         elif 'bytesInPipe' in msg_from_model:
@@ -136,11 +222,12 @@ class Controller:
     #   ---------Controller------------
     def hook_view(self, ucmd):
     #   -------------------------------
+    # process client input
     # post: MINPOOLSIZE, MAXWORKERS, payment_failed_count, BUDGET
     # output: error true is view asks controller to stop
         ERROR = False
         if ucmd == "stop":
-            Error = True
+            ERROR = True
         elif 'set buflim=' in ucmd:
             tokens = ucmd.split("=")
             self.MINPOOLSIZE = int(eval(tokens[-1]))
@@ -176,26 +263,45 @@ class Controller:
     async def __call__(self):
     #   -------------------------------
         try:
-            # instantiate and setup view
-
             while True:
-                # update the views status line and get any complete input
-                ucmd = self.theview.getinput(self.current_total, self.MINPOOLSIZE, self.BUDGET, self.MAXWORKERS, self.count_workers, self.bytesInPipe)
-                # handle message from view
-                if ucmd:
-                    ERROR = self.hook_view(ucmd)
-                    if ERROR:
-                        break
 
-                # handle mesage from model
-                if not self.from_model_q.empty():
-                    msg_from_model = self.from_model_q.get_nowait()
-                    ERROR = self.hook_model(msg_from_model)
-                    if ERROR:
-                        break
+                #########################################################
+                #   update status line and receive client input if any  #
+                #########################################################
+                ucmd = self.theview.getinput(self.current_total,        #
+                        self.MINPOOLSIZE,                               #
+                        self.BUDGET,                                    #
+                        self.MAXWORKERS,                                #
+                        self.count_workers,                             #
+                        self.bytesInPipe)                               #
+                
+                #############################################
+                #   process any client input                #
+                #############################################
+                #   exit loop on "error" or request to stop #
+                if ucmd:                                    #
+                    ERROR = self.hook_view(ucmd)            #
+                    if ERROR:                               #
+                        break                               #
 
-                next(self.u_update_mainwindow)
-                self.theview.refresh()
+                #####################################################
+                #   process model signal                            #
+                #####################################################
+                # internally calls self.u_update_main_window        #
+                # exit loop on error                                #
+                if not self.from_model_q.empty():                   #
+                    msg_from_model = self.from_model_q.get_nowait() #
+                    ERROR = self.hook_model(msg_from_model)         #
+                    if ERROR:                                       #
+                        break                                       #
+
+                #############################################
+                #   flush writes to display                 #     
+                #############################################
+                REFRESH = next(self.u_update_main_window)   #
+                if REFRESH:                                 #
+                    self.theview.refresh()                  #
+
                 await asyncio.sleep(0.01)
             #/while
         except asyncio.CancelledError:
@@ -203,12 +309,13 @@ class Controller:
         except Exception as e:
             self.theview.destroy()
             print("generic exception from entropythief controller:")
-            msg = {'model exception': {'name': e.__class__.__name__, 'what': str(e) } }
-            print(msg)
+            print(e.__class__.__name__)
+            print(e)
         except asyncio.CancelledError:
             print("\n\nasyncio cancellederror\n\n")
         finally:
             self.theview.destroy()
+            sys.stderr=sys.__stderr__
             print("+=+=+=+=+=+=+=stopping and settling accounts=+=+=+=+=+=+=")
             bytesPurchased = 0
             if True:
@@ -219,13 +326,16 @@ class Controller:
                 daemon_exited = False
                 while not daemon_exited:
                     if not self.from_model_q.empty(): # revise boolean efficiency
-                        msg_from_model = from_model_q.get_nowait()
-                        if DEVELOPERDEBUG:
+                        msg_from_model = self.from_model_q.get_nowait()
+                        if self.DEVELOPERDEBUG:
+                            print(f"DEVELOPERDEBUG: {DEVELOPERDEBUG}")
                             print(msg_from_model)
-                        if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
-                            self.current_total += msg_from_model['amount']
                         if 'bytesPurchased' in msg_from_model:
                             bytesPurchased = msg_from_model['bytesPurchased']
+                        elif 'event' in msg_from_model and msg_from_model['event'] == 'PaymentAccepted':
+                            self.current_total += float(msg_from_model['amount'])
+                        # if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
+                        #    self.current_total += msg_from_model['amount']
                         elif 'exception' in msg_from_model:
                             print("unhandled exception reported by model:\n")
                             print(msg_from_model['exception'])
@@ -255,7 +365,7 @@ class Controller:
 ##########################################################
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    controller = Controller()
+    controller = Controller(loop)
     task = loop.create_task(controller())
     try:
         loop.run_until_complete(task)

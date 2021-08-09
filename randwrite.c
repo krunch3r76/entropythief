@@ -1,6 +1,6 @@
 // randwrite.c
 // executable project that inputs a number of bytes and writes
-// measures of 8 (64 bit random values) to kFilename
+// the count random bytes to kFilename
 //
 /* author: krunch3r (KJM github.com/krunch3r76) */
 /* license: General Poetic License (GPL3) */

@@ -13,7 +13,8 @@ import io
 
 
 
-
+_DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL']) if 'PYTHONDEBUGLEVEL' in os.environ else None
+"""
 try:
     _DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL'])
 except:
@@ -21,7 +22,7 @@ except:
 
 if not _DEBUGLEVEL:
     _DEBUGLEVEL=0
-
+"""
 
 def _log_msg(msg, debug_level=0, file=sys.stderr):
     pass

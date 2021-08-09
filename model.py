@@ -42,8 +42,7 @@ from TaskResultWriter import Interleaver
 
 ENTRYPOINT_FILEPATH = Path("/golem/run/worker")
 kTASK_TIMEOUT = timedelta(minutes=10)
-# EXPECTED_ENTROPY = 1044480 # the number of bytes we can expect from any single provider's entropy pool
-# TODO dynamically adjust based on statistical data
+DEVELOPER_LOG_EVENTS = True
 
 
 
@@ -118,7 +117,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     to_ctl_q:   the msg queue back to the controller
 """
 class MySummaryLogger(yapapi.log.SummaryLogger):
-    costRunning = 0.0
+    costRunning = 0.0 # keeps track of cost so far to enforce a budget check
     event_log_file=open('/dev/null')
     to_ctl_q = None
 
@@ -131,13 +130,17 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
     def log(self, event: yapapi.events.Event) -> None:
         to_controller_msg = None
         if isinstance(event, yapapi.events.PaymentAccepted):
-            # self.costRunning += float(event.amount)
-            # to_controller_msg = {
-            #    'cmd': 'update_total_cost', 'amount': self.costRunning}
             added_cost=float(event.amount)
-            to_controller_msg = {
-                'cmd': 'add cost', 'amount': added_cost}
             self.costRunning += added_cost
+            to_controller_msg = {
+                'event': event.__class__.__name__ # PaymentAccepted
+                , 'agr_id': event.agr_id
+                , 'inv_id': event.inv_id
+                , 'amount': event.amount
+            }
+            #to_controller_msg = {
+            #    'cmd': 'add cost', 'amount': added_cost}
+
         elif isinstance(event, yapapi.events.PaymentFailed):
             to_controller_msg = {
                 'info': 'payment failed'
@@ -169,7 +172,8 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
             }
         
         # uncomment to log all the Event types as they occur to the specified file
-        # print(event, file=self.event_log_file)
+        if DEVELOPER_LOG_EVENTS:
+            print(event, file=self.event_log_file)
 
 
         """
@@ -300,7 +304,6 @@ async def model__entropythief(
         rdrand_arg = 'devrand'
 
     loop = asyncio.get_running_loop()
-    # loop = asyncio.get_event_loop()
     OP_STOP = False
     OP_PAUSE = False
     strat = MyLeastExpensiveLinearPayMS( # these MS parameters are not clearly documented ?
@@ -324,7 +327,7 @@ async def model__entropythief(
 
         if not from_ctl_q.empty():
             qmsg = from_ctl_q.get_nowait()
-            print(f"message to model: {qmsg}", file=sys.stderr)
+            # print(f"message to model: {qmsg}", file=sys.stderr)
             if 'cmd' in qmsg and qmsg['cmd'] == 'stop':
                 OP_STOP = True
                 continue
