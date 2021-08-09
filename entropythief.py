@@ -130,6 +130,11 @@ class Controller:
 
 
 
+# ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+# ██████▄██░▄▄▀██▄██▄░▄████
+# ██████░▄█░██░██░▄██░█████
+# █████▄▄▄█▄██▄█▄▄▄██▄█████
+# ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
     #   ---------Controller------------
     def __init__(self, loop):
     #   -------------------------------
@@ -170,95 +175,11 @@ class Controller:
 
 
 
-
-    #   ---------Controller------------
-    def hook_model(self, msg_from_model):
-    #   -------------------------------
-    # process model signal
-    # post: current_total, count_workers, payment_failed_count, bytesInPipe, ui updated
-    # output: error is true if an exception occurs
-        ERROR = False
-        # log most msg's to mainlog (main.log)
-        if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes':
-            msg = msg_from_model['hexstring']
-            self.u_update_main_window.send(msg) # TODO coroutine only updates one line at a time, buffering between calls
-            concat_msg = { msg_from_model['cmd']: len(msg_from_model['hexstring']) }
-            print(concat_msg, file=self.mainlog)
-        # elif 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
-        #    self.current_total += msg_from_model['amount']
-        elif 'exception' in msg_from_model:
-            raise Exception(msg_from_model['exception'])
-        elif 'info' in msg_from_model and msg_from_model['info'] == 'worker started':
-            self.count_workers+=1
-        elif 'info' in msg_from_model and msg_from_model['info'] == "payment failed":
-            self.payment_failed_count+=1
-            if self.BUDGET - self.current_total < 0.01 or self.payment_failed_count==10: # review epsilon
-                # to be implemented
-                msg_to_model = {'cmd': 'pause execution'} # give the logs a rest, don't bother requesting until budget is increased
-                to_model_q.put_nowait(msg_to_model)
-        elif 'event' in msg_from_model and msg_from_model['event'] == 'AgreementTerminated':
-            self.count_workers-=1
-        elif 'event' in msg_from_model and msg_from_model['event'] == 'PaymentAccepted':
-            self.current_total += float(msg_from_model['amount'])
-        elif 'event' in msg_from_model:
-            print(msg_from_model, file=self.mainlog) # report event to developer stream
-        elif 'debug' in msg_from_model:
-            print(msg_from_model, file=self.devdebuglog) # record debug message
-        elif 'bytesInPipe' in msg_from_model:
-            self.bytesInPipe = msg_from_model['bytesInPipe']
-        elif 'model exception' in msg_from_model:
-            self.theview.destroy() # to do, use the idiomatic del?
-            print(utils.TEXT_COLOR_BLUE + "The model threw the following exception:" + utils.TEXT_COLOR_DEFAULT + "\n" + msg_from_model['model exception']['name'] + "\n" + msg_from_model['model exception']['what'])
-            ERROR = True
-        return ERROR
-
-
-
-
-
-
-
-
-    #   ---------Controller------------
-    def hook_view(self, ucmd):
-    #   -------------------------------
-    # process client input
-    # post: MINPOOLSIZE, MAXWORKERS, payment_failed_count, BUDGET
-    # output: error true is view asks controller to stop
-        ERROR = False
-        if ucmd == "stop":
-            ERROR = True
-        elif 'set buflim=' in ucmd:
-            tokens = ucmd.split("=")
-            self.MINPOOLSIZE = int(eval(tokens[-1]))
-            if self.MINPOOLSIZE < 2**20:
-                self.MINPOOLSIZE = 2**20 # the pool writer minimum buffer size is set to 1 MiB
-                # ideally this requirement would be done on the model end and an update occur over the wire
-                # TODO
-            msg_to_model = {'cmd': 'set buflim', 'limit': self.MINPOOLSIZE}
-            self.to_model_q.put_nowait(msg_to_model)
-        elif 'set maxworkers=' in ucmd:
-            tokens = ucmd.split("=")
-            self.MAXWORKERS = int(tokens[-1])
-            msg_to_model = {'cmd': 'set maxworkers', 'count': self.MAXWORKERS}
-            self.to_model_q.put_nowait(msg_to_model)
-        elif ucmd=='restart':
-            self.payment_failed_count=0 # reset counter
-            self.msg_to_model = {'cmd': 'unpause execution' }
-            self.to_model_q.put_nowait(msg_to_model)
-        elif 'set budget=' in ucmd:
-            tokens = ucmd.split("=")
-            self.BUDGET = float(tokens[-1])
-            msg_to_model = {'cmd': 'set budget', 'budget': BUDGET}
-            self.to_model_q.put_nowait(msg_to_model)
-        return ERROR
-
-
-
-
-
-
-
+# ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+# █▀▄▀█░▄▄▀█░██░█
+# █░█▀█░▀▀░█░██░█
+# ██▄██▄██▄█▄▄█▄▄
+# ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
     #   ---------Controller------------
     async def __call__(self):
     #   -------------------------------
@@ -353,6 +274,95 @@ class Controller:
             print(utils.TEXT_COLOR_GREEN + "Costs incurred were: " + str(self.current_total) + utils.TEXT_COLOR_DEFAULT)
             print(utils.TEXT_COLOR_WHITE + "\nOn behalf of the Golem Community, thank you for your participation." + utils.TEXT_COLOR_DEFAULT)
             self.stderr2file.close()
+
+
+
+
+
+    #   ---------Controller------------
+    def hook_model(self, msg_from_model):
+    #   -------------------------------
+    # process model signal
+    # post: current_total, count_workers, payment_failed_count, bytesInPipe, ui updated
+    # output: error is true if an exception occurs
+        ERROR = False
+        # log most msg's to mainlog (main.log)
+        if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes':
+            msg = msg_from_model['hexstring']
+            self.u_update_main_window.send(msg) # TODO coroutine only updates one line at a time, buffering between calls
+            concat_msg = { msg_from_model['cmd']: len(msg_from_model['hexstring']) }
+            print(concat_msg, file=self.mainlog)
+        # elif 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add cost':
+        #    self.current_total += msg_from_model['amount']
+        elif 'exception' in msg_from_model:
+            raise Exception(msg_from_model['exception'])
+        elif 'info' in msg_from_model and msg_from_model['info'] == 'worker started':
+            self.count_workers+=1
+        elif 'info' in msg_from_model and msg_from_model['info'] == "payment failed":
+            self.payment_failed_count+=1
+            if self.BUDGET - self.current_total < 0.01 or self.payment_failed_count==10: # review epsilon
+                # to be implemented
+                msg_to_model = {'cmd': 'pause execution'} # give the logs a rest, don't bother requesting until budget is increased
+                to_model_q.put_nowait(msg_to_model)
+        elif 'event' in msg_from_model and msg_from_model['event'] == 'AgreementTerminated':
+            self.count_workers-=1
+        elif 'event' in msg_from_model and msg_from_model['event'] == 'PaymentAccepted':
+            self.current_total += float(msg_from_model['amount'])
+        elif 'event' in msg_from_model:
+            print(msg_from_model, file=self.mainlog) # report event to developer stream
+        elif 'debug' in msg_from_model:
+            print(msg_from_model, file=self.devdebuglog) # record debug message
+        elif 'bytesInPipe' in msg_from_model:
+            self.bytesInPipe = msg_from_model['bytesInPipe']
+        elif 'model exception' in msg_from_model:
+            self.theview.destroy() # to do, use the idiomatic del?
+            print(utils.TEXT_COLOR_BLUE + "The model threw the following exception:" + utils.TEXT_COLOR_DEFAULT + "\n" + msg_from_model['model exception']['name'] + "\n" + msg_from_model['model exception']['what'])
+            ERROR = True
+        return ERROR
+
+
+
+
+
+
+
+
+    #   ---------Controller------------
+    def hook_view(self, ucmd):
+    #   -------------------------------
+    # process client input
+    # post: MINPOOLSIZE, MAXWORKERS, payment_failed_count, BUDGET
+    # output: error true is view asks controller to stop
+        ERROR = False
+        if ucmd == "stop":
+            ERROR = True
+        elif 'set buflim=' in ucmd:
+            tokens = ucmd.split("=")
+            self.MINPOOLSIZE = int(eval(tokens[-1]))
+            if self.MINPOOLSIZE < 2**20:
+                self.MINPOOLSIZE = 2**20 # the pool writer minimum buffer size is set to 1 MiB
+                # ideally this requirement would be done on the model end and an update occur over the wire
+                # TODO
+            msg_to_model = {'cmd': 'set buflim', 'limit': self.MINPOOLSIZE}
+            self.to_model_q.put_nowait(msg_to_model)
+        elif 'set maxworkers=' in ucmd:
+            tokens = ucmd.split("=")
+            self.MAXWORKERS = int(tokens[-1])
+            msg_to_model = {'cmd': 'set maxworkers', 'count': self.MAXWORKERS}
+            self.to_model_q.put_nowait(msg_to_model)
+        elif ucmd=='restart':
+            self.payment_failed_count=0 # reset counter
+            self.msg_to_model = {'cmd': 'unpause execution' }
+            self.to_model_q.put_nowait(msg_to_model)
+        elif 'set budget=' in ucmd:
+            tokens = ucmd.split("=")
+            self.BUDGET = float(tokens[-1])
+            msg_to_model = {'cmd': 'set budget', 'budget': BUDGET}
+            self.to_model_q.put_nowait(msg_to_model)
+        return ERROR
+
+
+
 
 
 
