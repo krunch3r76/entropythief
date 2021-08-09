@@ -130,11 +130,18 @@ class Controller:
 
 
 
-# ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-# ██████▄██░▄▄▀██▄██▄░▄████
-# ██████░▄█░██░██░▄██░█████
-# █████▄▄▄█▄██▄█▄▄▄██▄█████
-# ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+ # __          __   __          
+# |  \        |  \ |  \         
+ # \▓▓_______  \▓▓_| ▓▓_        
+# |  \       \|  \   ▓▓ \       
+# | ▓▓ ▓▓▓▓▓▓▓\ ▓▓\▓▓▓▓▓▓       
+# | ▓▓ ▓▓  | ▓▓ ▓▓ | ▓▓ __      
+# | ▓▓ ▓▓  | ▓▓ ▓▓ | ▓▓|  \     
+# | ▓▓ ▓▓  | ▓▓ ▓▓  \▓▓  ▓▓     
+ # \▓▓\▓▓   \▓▓\▓▓   \▓▓▓▓      
+                              
+                              
+                              
     #   ---------Controller------------
     def __init__(self, loop):
     #   -------------------------------
@@ -156,10 +163,20 @@ class Controller:
         self.theview = view.View()
 
 
+        self.themodeltask=loop.create_task(model.model__EntropyThief(loop
+            , self.args
+            , self.to_model_q
+            , self.from_model_q
+            , self.MINPOOLSIZE
+            , self.MAXWORKERS
+            , self.BUDGET
+            , self.IMAGE_HASH
+            )()
+            )
 
+        """
         self.themodeltask=loop.create_task(model.model__main( self.args
             , self.to_model_q
-            , None
             , self.from_model_q
             , self.MINPOOLSIZE
             , self.MAXWORKERS
@@ -167,6 +184,7 @@ class Controller:
             , self.IMAGE_HASH
             , self.args.enable_logging
             ))
+        """
 
         # setup generator that writes any buffered bytes to the main display
         self.u_update_main_window = self.theview.coro_update_mainwindow()

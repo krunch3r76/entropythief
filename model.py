@@ -264,7 +264,161 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
 
 
 
+class model__EntropyThief:
+    taskResultWriter = None
+    def __init__(self
+        , loop
+        , args
+        , from_ctl_q
+        , to_ctl_q
+        , MINPOOLSIZE
+        , MAXWORKERS
+        , BUDGET
+        , IMAGE_HASH
+        , TASK_TIMEOUT=kTASK_TIMEOUT
+    ):
+        self._loop = loop
+        self.args = args
+        self.from_ctl_q = from_ctl_q
+        self.to_ctl_q = to_ctl_q
+        self.MINPOOLSIZE = MINPOOLSIZE
+        self.MAXWORKERS = MAXWORKERS
+        self.BUDGET = BUDGET
+        self.IMAGE_HASH = IMAGE_HASH
+        self.TASK_TIMEOUT = TASK_TIMEOUT
+        # uncomment to output yapapi logger INFO events to stderr and INFO+DEBUG to args.log_fle
+        if self.args.enable_logging:
+            yapapi.log.enable_default_logger(
+                log_file=args.log_file
+                , debug_activity_api=True
+                , debug_market_api=True
+                , debug_payment_api=True)
 
+        self.taskResultWriter = Interleaver(self.to_ctl_q, self.MINPOOLSIZE)
+        
+
+    async def __call__(self):
+        if self.args.rdrand == 1:
+            self.rdrand_arg = 'rdrand'
+        else:
+            self.rdrand_arg = 'devrand'
+
+        self.OP_STOP = False
+        self.OP_PAUSE = False
+        self.strat = MyLeastExpensiveLinearPayMS( # these MS parameters are not clearly documented ?
+                    max_fixed_price=Decimal("0.00") # testing, ideally this works with the epsilon in model...
+                    , max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.05")
+                        , yapapi.props.com.Counter.TIME: Decimal("0.0011")}
+                    , use_rdrand = self.args.rdrand
+                ) 
+        self.mySummaryLogger = MySummaryLogger(self.to_ctl_q)
+        try:
+            self.bytesInPipe = self.taskResultWriter.query_len() # note bytesInPipe is the lazy count
+            # print("1\n\n", file=sys.stderr)
+            while not self.OP_STOP:
+                await self.taskResultWriter.refresh()
+                bytesInPipe_last = self.bytesInPipe
+                self.bytesInPipe = self.taskResultWriter.query_len()
+                if self.bytesInPipe != bytesInPipe_last:
+                    msg = {'bytesInPipe': self.bytesInPipe}; self.to_ctl_q.put_nowait(msg)
+                
+                if not self.from_ctl_q.empty():
+                    qmsg = self.from_ctl_q.get_nowait()
+                    # print(f"message to model: {qmsg}", file=sys.stderr)
+                    if 'cmd' in qmsg and qmsg['cmd'] == 'stop':
+                        self.OP_STOP = True
+                        continue
+                    elif 'cmd' in qmsg and qmsg['cmd'] == 'set buflim':
+                        self.MINPOOLSIZE = qmsg['limit']
+                        self.taskResultWriter.update_capacity(self.MINPOOLSIZE)
+                    elif 'cmd' in qmsg and qmsg['cmd'] == 'set maxworkers':
+                        self.MAXWORKERS = qmsg['count']
+                    elif 'cmd' in qmsg and qmsg['cmd'] == 'pause execution':
+                        self.OP_PAUSE=True
+                    elif 'cmd' in qmsg and qmsg['cmd'] == 'set budget':
+                        self.BUDGET=qmsg['budget']
+                    elif 'cmd' in qmsg and qmsg['cmd'] == 'unpause execution':
+                        self.OP_PAUSE=False
+                #/if not from_ctl_q.empty()
+
+                if not self.OP_PAUSE:
+                    count_bytes_requested = self.taskResultWriter.count_bytes_requesting()
+                    if count_bytes_requested > 0 and self.bytesInPipe < int(self.MINPOOLSIZE/2) and self.mySummaryLogger.costRunning < self.BUDGET:
+                        package = await vm.repo(
+                                image_hash=self.IMAGE_HASH, min_mem_gib=0.3, min_storage_gib=0.3
+                            )
+
+
+                        async with yapapi.Golem(
+                                budget=self.BUDGET-self.mySummaryLogger.costRunning
+                                , subnet_tag=self.args.subnet_tag
+                                , network=self.args.network
+                                , driver=self.args.driver
+                                , event_consumer=self.mySummaryLogger.log
+                                , strategy=self.strat
+                                ) as golem:
+
+                            await asyncio.sleep(0.01)
+                            bytes_needed_per_worker = int(count_bytes_requested/self.MAXWORKERS)
+
+                            completed_tasks = golem.execute_tasks(
+                                    steps
+                                    , [yapapi.Task(data={'req_byte_count': bytes_needed_per_worker, 'writer': self.taskResultWriter, 'rdrand_arg':self.rdrand_arg}) for _ in range(self.MAXWORKERS)]
+                                    , payload=package
+                                    , max_workers=self.MAXWORKERS
+                                    , timeout=self.TASK_TIMEOUT
+                               )
+
+                            async for task in completed_tasks:
+                                if task.result:
+                                    self.taskResultWriter.add_file(task.result)
+
+                                    bytesInPipe_last = self.bytesInPipe
+                                    self.bytesInPipe = self.taskResultWriter.query_len()
+                                    if self.bytesInPipe != bytesInPipe_last: # this can be made into a function
+                                        msg = {'bytesInPipe': self.bytesInPipe}; self.to_ctl_q.put_nowait(msg)
+                                else:
+                                    pass # no result implies rejection which steps reprovisions
+
+                            self.taskResultWriter.commit_added_files()
+                await asyncio.sleep(0.01)
+        except KeyboardInterrupt:
+            pass # if the task has not exited in response to this already, finally will propagate a cancel
+        except yapapi.NoPaymentAccountError as e:
+            handbook_url = (
+                "https://handbook.golem.network/requestor-tutorials/"
+                "flash-tutorial-of-requestor-development"
+            )
+            emsg = f"{utils.TEXT_COLOR_RED}" \
+                f"No payment account initialized for driver `{e.required_driver}` " \
+                f"and network `{e.required_network}`.\n\n" \
+                f"See {handbook_url} on how to initialize payment accounts for a requestor node." \
+                f"{utils.TEXT_COLOR_DEFAULT}"
+            emsg += f"\nMaybe you forgot to invoke {utils.TEXT_COLOR_YELLOW}yagna payment init --sender{utils.TEXT_COLOR_DEFAULT}"
+            msg = {'exception': emsg }
+            self.to_ctl_q.put_nowait(msg)
+        except aiohttp.client_exceptions.ClientConnectorError as e:
+            _msg = str(e)
+            _msg += "\ndid you forget to invoke " + utils.TEXT_COLOR_YELLOW + "yagna service run" + utils.TEXT_COLOR_DEFAULT + "?"
+            msg = {'exception': "..." +  _msg }
+            self.to_ctl_q.put_nowait(msg)
+        except Exception as e:
+            # this should not happen
+            msg = {'model exception': {'name': e.__class__.__name__, 'what': str(e) } }
+            self.to_ctl_q.put_nowait(msg)
+        finally:
+            msg = {'bytesPurchased': self.taskResultWriter._bytesSeen}
+            self.to_ctl_q.put_nowait(msg)
+            # send a message back to the controller that the (daemonized) process has cleanly exited
+            # consider a more clean exit by checking if task is running first
+            try:
+                pass
+                #task.cancel() # make sure cancel message has been propagated to EntropyThief (and Golem)
+                # loop.run_until_complete(task)
+            except:
+                pass
+            msg = {'daemon': "finished"}
+            self.to_ctl_q.put_nowait(msg)
 
 
 
@@ -313,7 +467,7 @@ async def model__entropythief(
             ) 
 
     mySummaryLogger = MySummaryLogger(to_ctl_q)
-    bytesInPipe = taskResultWriter.query_len() # note bytesInPipe is the lazy count
+    self.bytesInPipe = taskResultWriter.query_len() # note bytesInPipe is the lazy count
     while not OP_STOP:
         await taskResultWriter.refresh()
 
@@ -429,7 +583,6 @@ async def model__entropythief(
 ###########################################################################
 async def model__main(args
         , from_ctl_q
-        , fifoWriteEnd
         , to_ctl_q
         , MINPOOLSIZE
         , MAXWORKERS
