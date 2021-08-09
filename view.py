@@ -249,7 +249,6 @@ class View:
             self.screen = curses.initscr() 
             curses.noecho()
             curses.cbreak()
-            curses.curs_set(1)                    
             windir = view__create_windows(self)
             self.win = windir['outputfield']
             self.winbox = windir['inputfield']
