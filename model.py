@@ -266,6 +266,21 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
 
 class model__EntropyThief:
     taskResultWriter = None
+
+
+
+ # __          __   __          
+# |  \        |  \ |  \         
+ # \▓▓_______  \▓▓_| ▓▓_        
+# |  \       \|  \   ▓▓ \       
+# | ▓▓ ▓▓▓▓▓▓▓\ ▓▓\▓▓▓▓▓▓       
+# | ▓▓ ▓▓  | ▓▓ ▓▓ | ▓▓ __      
+# | ▓▓ ▓▓  | ▓▓ ▓▓ | ▓▓|  \     
+# | ▓▓ ▓▓  | ▓▓ ▓▓  \▓▓  ▓▓     
+ # \▓▓\▓▓   \▓▓\▓▓   \▓▓▓▓      
+
+# model__EntropyThief
+
     def __init__(self
         , loop
         , args
@@ -297,6 +312,57 @@ class model__EntropyThief:
         self.taskResultWriter = Interleaver(self.to_ctl_q, self.MINPOOLSIZE)
         
 
+
+
+
+
+    # -----------model__EntropyThief------------------------ #
+    def hasBytesInPipeChanged(self):
+    # ------------------------------------------------------ #
+        bytesInPipe_last = self.bytesInPipe
+        self.bytesInPipe = self.taskResultWriter.query_len()
+        return bytesInPipe_last != self.bytesInPipe
+
+
+
+
+
+    def hook_controller(self, qmsg):
+        # print(f"message to model: {qmsg}", file=sys.stderr)
+        if 'cmd' in qmsg and qmsg['cmd'] == 'stop':
+            self.OP_STOP = True
+        elif 'cmd' in qmsg and qmsg['cmd'] == 'set buflim':
+            self.MINPOOLSIZE = qmsg['limit']
+            self.taskResultWriter.update_capacity(self.MINPOOLSIZE)
+        elif 'cmd' in qmsg and qmsg['cmd'] == 'set maxworkers':
+            self.MAXWORKERS = qmsg['count']
+        elif 'cmd' in qmsg and qmsg['cmd'] == 'pause execution':
+            self.OP_PAUSE=True
+        elif 'cmd' in qmsg and qmsg['cmd'] == 'set budget':
+            self.BUDGET=qmsg['budget']
+        elif 'cmd' in qmsg and qmsg['cmd'] == 'unpause execution':
+            self.OP_PAUSE=False
+    #/if not from_ctl_q.empty()
+
+
+
+
+
+
+
+
+                   # __ __ 
+                  # |  \  \
+  # _______  ______ | ▓▓ ▓▓
+ # /       \|      \| ▓▓ ▓▓
+# |  ▓▓▓▓▓▓▓ \▓▓▓▓▓▓\ ▓▓ ▓▓
+# | ▓▓      /      ▓▓ ▓▓ ▓▓
+# | ▓▓_____|  ▓▓▓▓▓▓▓ ▓▓ ▓▓
+ # \▓▓     \\▓▓    ▓▓ ▓▓ ▓▓
+  # \▓▓▓▓▓▓▓ \▓▓▓▓▓▓▓\▓▓\▓▓
+                         
+# model__EntropyThief
+
     async def __call__(self):
         if self.args.rdrand == 1:
             self.rdrand_arg = 'rdrand'
@@ -314,34 +380,16 @@ class model__EntropyThief:
         self.mySummaryLogger = MySummaryLogger(self.to_ctl_q)
         try:
             self.bytesInPipe = self.taskResultWriter.query_len() # note bytesInPipe is the lazy count
-            # print("1\n\n", file=sys.stderr)
             while not self.OP_STOP:
                 await self.taskResultWriter.refresh()
-                bytesInPipe_last = self.bytesInPipe
-                self.bytesInPipe = self.taskResultWriter.query_len()
-                if self.bytesInPipe != bytesInPipe_last:
+
+                if self.hasBytesInPipeChanged():
                     msg = {'bytesInPipe': self.bytesInPipe}; self.to_ctl_q.put_nowait(msg)
                 
                 if not self.from_ctl_q.empty():
-                    qmsg = self.from_ctl_q.get_nowait()
-                    # print(f"message to model: {qmsg}", file=sys.stderr)
-                    if 'cmd' in qmsg and qmsg['cmd'] == 'stop':
-                        self.OP_STOP = True
-                        continue
-                    elif 'cmd' in qmsg and qmsg['cmd'] == 'set buflim':
-                        self.MINPOOLSIZE = qmsg['limit']
-                        self.taskResultWriter.update_capacity(self.MINPOOLSIZE)
-                    elif 'cmd' in qmsg and qmsg['cmd'] == 'set maxworkers':
-                        self.MAXWORKERS = qmsg['count']
-                    elif 'cmd' in qmsg and qmsg['cmd'] == 'pause execution':
-                        self.OP_PAUSE=True
-                    elif 'cmd' in qmsg and qmsg['cmd'] == 'set budget':
-                        self.BUDGET=qmsg['budget']
-                    elif 'cmd' in qmsg and qmsg['cmd'] == 'unpause execution':
-                        self.OP_PAUSE=False
-                #/if not from_ctl_q.empty()
-
-                if not self.OP_PAUSE:
+                    hook_controller(self.from_ctl_q.get_nowait())
+                    
+                if not self.OP_STOP and not self.OP_PAUSE: # OP_STOP might have been set by the controller hook
                     count_bytes_requested = self.taskResultWriter.count_bytes_requesting()
                     if count_bytes_requested > 0 and self.bytesInPipe < int(self.MINPOOLSIZE/2) and self.mySummaryLogger.costRunning < self.BUDGET:
                         package = await vm.repo(
@@ -373,9 +421,7 @@ class model__EntropyThief:
                                 if task.result:
                                     self.taskResultWriter.add_file(task.result)
 
-                                    bytesInPipe_last = self.bytesInPipe
-                                    self.bytesInPipe = self.taskResultWriter.query_len()
-                                    if self.bytesInPipe != bytesInPipe_last: # this can be made into a function
+                                    if self.hasBytesInPipeChanged():
                                         msg = {'bytesInPipe': self.bytesInPipe}; self.to_ctl_q.put_nowait(msg)
                                 else:
                                     pass # no result implies rejection which steps reprovisions
