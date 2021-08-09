@@ -167,7 +167,8 @@ class PipeReader:
     # -------------------------------------------
     # for now, the reader will destroy anything remaining in the pipe
         os.close(self._fdPipe)
-        os.unlink(self._kNamedPipeFilePathString)
+        # os.unlink(self._kNamedPipeFilePathString) # unlinking the named pipe will mean the writer will not be seen next time
+        # maybe the writer should be unlinking it when done?
 
 
 
