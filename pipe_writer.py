@@ -41,7 +41,7 @@ import time
 """
 
 
-_DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL']) if 'PYTHONDEBUGLEVEL' in os.environ else None
+_DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL']) if 'PYTHONDEBUGLEVEL' in os.environ else 0
 
 
 def _log_msg(msg, debug_level=0, stream=sys.stderr):

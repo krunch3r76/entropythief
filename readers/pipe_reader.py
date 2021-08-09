@@ -13,7 +13,7 @@ import io
 
 
 
-_DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL']) if 'PYTHONDEBUGLEVEL' in os.environ else None
+_DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL']) if 'PYTHONDEBUGLEVEL' in os.environ else 0 
 """
 try:
     _DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL'])
