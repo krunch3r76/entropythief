@@ -239,12 +239,20 @@ class model__EntropyThief:
 
         ## BEGIN ROUTINE
         count_bytes_requested = self.taskResultWriter.count_bytes_requesting()
-        if count_bytes_requested > 0 and self.bytesInPipe < int(self.MINPOOLSIZE/2) and self.mySummaryLogger.costRunning < self.BUDGET:
-            package = await vm.repo(
-                    image_hash=self.IMAGE_HASH
-                    , min_mem_gib=0.3
-                    , min_storage_gib=0.3
-                )
+
+
+        
+        ####################################################################\
+        # check whether task result writer can/should accept more bytes     #
+        if count_bytes_requested > 0                                        #
+            and self.bytesInPipe < int(self.MINPOOLSIZE/2)                  #
+            and self.mySummaryLogger.costRunning < self.BUDGET:             #
+            package = await vm.repo(                                        #
+                    image_hash=self.IMAGE_HASH                              #
+                    , min_mem_gib=0.3                                       #
+                    , min_storage_gib=0.3                                   #
+                )                                                           #
+        #                                                                   /
 
 
 
@@ -270,17 +278,23 @@ class model__EntropyThief:
                         , timeout=self.TASK_TIMEOUT
                    )
 
-                async for task in completed_tasks:
-                    if task.result:
-                        self.taskResultWriter.add_file(task.result)
+                ####################################################################\
+                # run tasks asynchronously and collect results                      #
+                async for task in completed_tasks:                                  #
+                    if task.result:                                                 #
+                        self.taskResultWriter.add_file(task.result)                 #
+                                                                                    #
+                        if self.hasBytesInPipeChanged():                            #
+                            msg = {'bytesInPipe': self.bytesInPipe};                #
+                            self.to_ctl_q.put_nowait(msg)                           #
+                    else:                                                           #
+                        pass # no result implies rejection which steps reprovisions #
+                #                                                                   /
 
-                        if self.hasBytesInPipeChanged():
-                            msg = {'bytesInPipe': self.bytesInPipe}; self.to_ctl_q.put_nowait(msg)
-                    else:
-                        pass # no result implies rejection which steps reprovisions
-
-                # control will have been returned between task results but after this point all results are collected
-                self.taskResultWriter.commit_added_files()
+                ####################################################################\
+                # inform task result writer that all results have been given to it  #
+                self.taskResultWriter.commit_added_files()                          #
+                #                                                                   /
 
 
 
