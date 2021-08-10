@@ -206,6 +206,38 @@ class model__EntropyThief:
     # ----------------- model__EntropyThief --------------- #
     async def _provision(self):
     # ----------------------------------------------------- #
+
+
+        ## HELPERS
+        #...........................................#
+        # partition                                 #
+        #  divide a total into a list of partition  #
+        #   counts                                  #
+        #...........................................#
+        def partition(total, maxcount=6):
+            if total == 1:
+                return [total]
+
+            if total <= maxcount:
+                count=total
+            else:
+                count=maxcount
+
+            minimum = int(total/count)
+            while minimum == 1:
+                count-=1
+                minimum = int(total/count)
+
+            extra = total % count
+
+            rv = []
+            for _ in range(count-1):
+                rv.append(minimum)
+            rv.append(minimum + extra)
+            return rv
+
+
+        ## BEGIN ROUTINE
         count_bytes_requested = self.taskResultWriter.count_bytes_requesting()
         if count_bytes_requested > 0 and self.bytesInPipe < int(self.MINPOOLSIZE/2) and self.mySummaryLogger.costRunning < self.BUDGET:
             package = await vm.repo(
@@ -213,32 +245,6 @@ class model__EntropyThief:
                     , min_mem_gib=0.3
                     , min_storage_gib=0.3
                 )
-
-
-            #............................................#
-            # partition                                  #
-            #............................................#
-            def partition(total, maxcount=6):
-                if total == 1:
-                    return [total]
-
-                if total <= maxcount:
-                    count=total
-                else:
-                    count=maxcount
-
-                minimum = int(total/count)
-                while minimum == 1:
-                    count-=1
-                    minimum = int(total/count)
-
-                extra = total % count
-
-                rv = []
-                for _ in range(count-1):
-                    rv.append(minimum)
-                rv.append(minimum + extra)
-                return rv
 
 
 
@@ -275,6 +281,10 @@ class model__EntropyThief:
 
                 # control will have been returned between task results but after this point all results are collected
                 self.taskResultWriter.commit_added_files()
+
+
+
+
 
 
 
@@ -381,18 +391,19 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
         await task.data['writer'].refresh()
         # request <count> bytes from provider and wait
         ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']), task.data['rdrand_arg'])
-        output_file = Path(gettempdir()) / str(uuid4())
+        Path_output_file = Path(gettempdir()) / str(uuid4())
         try:
-            ctx.download_file(worker_public.RESULT_PATH, str(output_file))
+            ctx.download_file(worker_public.RESULT_PATH, str(Path_output_file))
             yield ctx.commit(timeout=timedelta(minutes=2))
-            # print(f"CALLING ACCEPT RESULT {output_file}", file=sys.stderr)
+            # print(f"CALLING ACCEPT RESULT {Path_output_file}", file=sys.stderr)
         except rest.activity.BatchTimeoutError: # credit to Golem's blender.py
             print(
                     f"{utils.TEXT_COLOR_RED}"
                     f"Task {task} timed out on {ctx.provider_name}, time: {task.running_time}"
                     f"{utils.TEXT_COLOR_DEFAULT}"
                     , file=sys.stderr
-                    )
+                )
+
             task.reject_result("timeout", retry=True) # need to ensure a retry occurs! TODO
         except Exception as e: # define exception TODO
             print(
@@ -404,7 +415,13 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             print(e, file=sys.stderr)
             task.reject_result("unspecified error", retry=True) # timeout maybe?
         else:
-            task.accept_result(result=str(output_file))
+            task.accept_result(result=str(Path_output_file))
+        finally:
+            if not task.result:
+                if Path_output_file.exists():
+                    Path_output_file.unlink()
+
+
 
 
 
@@ -505,6 +522,10 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
 
     def __del__(self):
         self.event_log_file.close()
+
+
+
+
 
 
 
