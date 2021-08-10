@@ -302,11 +302,10 @@ class View:
         q = SimpleQueue()
         offset=0
         messageBuffered = io.StringIO()
-        REFRESH=False
         try:
             while True:
-                msg_in = yield REFRESH # whatever is sent to this generator is assigned to msg here and loop starts
-                REFRESH=False
+                msg_in = yield True # whatever is sent to this generator is assigned to msg here and loop starts
+                                    # True is returned to inform caller to manually refresh
                 if msg_in:
                     q.put( io.StringIO(msg_in) )
 
@@ -323,8 +322,7 @@ class View:
                     if len(lines) > 0:
                         curses.curs_set(0)
                         self.win._widget.addstr(lines)
-                        # self.win.refresh() # caller should refresh after call to this update
-                        REFRESH=True # inform caller there is no need to refresh again
+                        self.win.refresh()
                 else:
                     curses.curs_set(1)
         except GeneratorExit: # this generator is infinite and may want to be closed as some point?
