@@ -150,7 +150,8 @@ class model__EntropyThief:
         self.BUDGET = BUDGET
         self.IMAGE_HASH = IMAGE_HASH
         self.TASK_TIMEOUT = TASK_TIMEOUT
-        # uncomment to output yapapi logger INFO events to stderr and INFO+DEBUG to args.log_fle
+
+        # output yapapi logger INFO events to stderr and INFO+DEBUG to args.log_fle
         if self.args.enable_logging:
             yapapi.log.enable_default_logger(
                 log_file=args.log_file
@@ -181,7 +182,6 @@ class model__EntropyThief:
     # -----------model__EntropyThief------------------------ #
     def _hook_controller(self, qmsg):
     # ------------------------------------------------------ #
-        # print(f"message to model: {qmsg}", file=sys.stderr)
         if 'cmd' in qmsg and qmsg['cmd'] == 'stop':
             self.OP_STOP = True
         elif 'cmd' in qmsg and qmsg['cmd'] == 'set buflim':
@@ -195,7 +195,6 @@ class model__EntropyThief:
             self.BUDGET=qmsg['budget']
         elif 'cmd' in qmsg and qmsg['cmd'] == 'unpause execution':
             self.OP_PAUSE=False
-    #/if not from_ctl_q.empty()
 
 
 
@@ -237,7 +236,7 @@ class model__EntropyThief:
             return rv
 
 
-        ## BEGIN ROUTINE
+        ## BEGIN ROUTINE _provision
         count_bytes_requested = self.taskResultWriter.count_bytes_requesting()
 
 
@@ -256,27 +255,37 @@ class model__EntropyThief:
 
 
 
-            async with yapapi.Golem(
-                    budget=self.BUDGET-self.mySummaryLogger.costRunning
-                    , subnet_tag=self.args.subnet_tag
-                    , network=self.args.network
-                    , driver=self.args.driver
-                    , event_consumer=self.mySummaryLogger.log
-                    , strategy=self.strat
-            ) as golem:
+
+            ############################################################################\
+            # initialize and spread work across task objects                            #
+            async with yapapi.Golem(                                                    #
+                    budget=self.BUDGET-self.mySummaryLogger.costRunning                 #
+                    , subnet_tag=self.args.subnet_tag                                   #
+                    , network=self.args.network                                         #
+                    , driver=self.args.driver                                           #
+                    , event_consumer=self.mySummaryLogger.log                           #
+                    , strategy=self.strat                                               #
+            ) as golem:                                                                 #
+                                                                                        #
+                                                                                        #
+                                                                                        #
+                bytes_partitioned= partition(count_bytes_requested, self.MAXWORKERS)    #
+                                                                                        #
+                completed_tasks = golem.execute_tasks(                                  #
+                        steps                                                           #
+                        , [yapapi.Task(                                                 #
+                            data={'req_byte_count': bytes_needed_on_worker              #
+                                , 'writer': self.taskResultWriter                       #
+                                , 'rdrand_arg':self.rdrand_arg})                        #
+                            for bytes_needed_on_worker in bytes_partitioned]            #
+                        , payload=package                                               #
+                        , max_workers=self.MAXWORKERS                                   #
+                        , timeout=self.TASK_TIMEOUT                                     #
+                   )                                                                    #
+            #                                                                           /
 
 
 
-
-                bytes_partitioned= partition(count_bytes_requested, self.MAXWORKERS)
-
-                completed_tasks = golem.execute_tasks(
-                        steps
-                        , [yapapi.Task(data={'req_byte_count': bytes_needed_on_worker, 'writer': self.taskResultWriter, 'rdrand_arg':self.rdrand_arg}) for bytes_needed_on_worker in bytes_partitioned]
-                        , payload=package
-                        , max_workers=self.MAXWORKERS
-                        , timeout=self.TASK_TIMEOUT
-                   )
 
                 ####################################################################\
                 # run tasks asynchronously and collect results                      #
@@ -290,6 +299,9 @@ class model__EntropyThief:
                     else:                                                           #
                         pass # no result implies rejection which steps reprovisions #
                 #                                                                   /
+
+
+
 
                 ####################################################################\
                 # inform task result writer that all results have been given to it  #
@@ -417,8 +429,8 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                     f"{utils.TEXT_COLOR_DEFAULT}"
                     , file=sys.stderr
                 )
-
             task.reject_result("timeout", retry=True) # need to ensure a retry occurs! TODO
+            print(f"Result exists?: {bool(task)}\n", file=sys.stderr)
         except Exception as e: # define exception TODO
             print(
                     f"{utils.TEXT_COLOR_RED}"
@@ -428,6 +440,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             )
             print(e, file=sys.stderr)
             task.reject_result("unspecified error", retry=True) # timeout maybe?
+            print(f"Result exists?: {bool(task)}\n", file=sys.stderr)
         else:
             task.accept_result(result=str(Path_output_file))
         finally:
@@ -555,10 +568,10 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
 # ╚╝╚╝╚╝╚═╗╔╝╚═══╝╚══╝╚═══╝╚══╝ ╚═╝╚═══╝╚╝╚╝║╔═╝╚══╝╚╝╚╝╚══╝╚╝ ╚╝ ╚══╝╚═══╝╚╝╚╝╚╝╚══╝╚═══╝╚╝ ╚╝   ╚═══╝╚═╗╔╝╚╝╚╝╚╝╚═══╝
 #       ╔═╝║                                ║║                                                         ╔═╝║            
 #       ╚══╝                                ╚╝                                                         ╚══╝            
-############################ {} #########################
+############################ {} ######################################################
 @dataclass
 class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, object):
-#########################################################
+######################################################################################
     """
         expected_time_secs: ? TODO, copied from api, required for super
         max_fixed_price: ? TODO, copied from api, required for super

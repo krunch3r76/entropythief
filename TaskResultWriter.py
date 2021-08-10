@@ -99,6 +99,11 @@ class Interleaver__Source():
 
 
 """
+notes: a TaskResultWriter needs to implement
+    add_file
+    commit_added_files
+    refresh
+
 Interleaver
 -----------
 
