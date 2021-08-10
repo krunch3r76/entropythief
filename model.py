@@ -244,9 +244,9 @@ class model__EntropyThief:
         
         ####################################################################\
         # check whether task result writer can/should accept more bytes     #
-        if count_bytes_requested > 0 and \                                  
-            self.bytesInPipe < int(self.MINPOOLSIZE/2) and \                
-                self.mySummaryLogger.costRunning < self.BUDGET:             #
+        if  count_bytes_requested > 0                                       #
+        and self.bytesInPipe < int(self.MINPOOLSIZE/2)                      #
+        and self.mySummaryLogger.costRunning < self.BUDGET:                 #
             package = await vm.repo(                                        #
                     image_hash=self.IMAGE_HASH                              #
                     , min_mem_gib=0.3                                       #
