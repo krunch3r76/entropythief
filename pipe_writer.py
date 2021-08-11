@@ -52,7 +52,9 @@ def _log_msg(msg, debug_level=0, stream=sys.stderr):
 
 
 # MyBytesIO wraps StringIO so that reads advance the stream to behavior like a file stream
+##################{}#####################
 class MyBytesIO(io.BytesIO):
+#########################################
 
     def __init__(self, initial_value):
         super().__init__(initial_value)
@@ -74,7 +76,8 @@ class MyBytesIO(io.BytesIO):
     def __del__(self):
         self.close()
 
-
+    def write(self, count):
+        assert False, "MyBytesIO does not support write operation"
 
 
 
@@ -99,12 +102,13 @@ def _write_to_pipe(fifoWriteEnd, thebytes):
             try:
                 WRITTEN = os.write(fifoWriteEnd, thebytes)
             except BlockingIOError:
-                WRITTEN=0
+                WRITTEN = 0
             else:
                 break
     except BrokenPipeError:
         WRITTEN=0
-        _log_msg("BROKEN PIPE--------------------------------------", 0)
+        _log_msg("BROKEN PIPE--------------------------------------", 1)
+        # make fd_pipe none
         raise # review whether the exception should be raised TODO
     except Exception as exception:
         _log_msg("_write_to_pipe: UNHANDLED EXCEPTION")
@@ -212,12 +216,16 @@ class PipeWriter:
     # -------------------------------------------
     def _count_bytes_in_pipe(self):
     # -------------------------------------------
+        """
         if self._whether_pipe_is_broken():
             return 0
-        buf = bytearray(4)
-        fcntl.ioctl(self._fdPipe, termios.FIONREAD, buf, 1)
-        bytesInPipe = int.from_bytes(buf, "little")
-        
+        """
+        bytesInPipe = 0
+        if self._fdPipe:
+            buf = bytearray(4)
+            fcntl.ioctl(self._fdPipe, termios.FIONREAD, buf, 1)
+            bytesInPipe = int.from_bytes(buf, "little")
+            
         return bytesInPipe
 
 
@@ -227,6 +235,15 @@ class PipeWriter:
     # -------------------------------------------
     def _open_pipe(self):
     # -------------------------------------------
+        if not self._fdPipe:
+            try:
+                self._fdPipe = os.open(self._kNamedPipeFilePathString, os.O_WRONLY | os.O_NONBLOCK)
+                self._pipeCapacity = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
+                _log_msg("_open_pipe: pipe opened!", 1)
+            except OSError:
+                pass
+
+        """
         if self._fdPipe is not None:
             self._fdPoll.unregister(self._fdPipe)
         try:
@@ -238,7 +255,7 @@ class PipeWriter:
             self._pipeCapacity = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
             _log_msg("_open_pipe: pipe opened!", 3)
 
-
+        """
 
 
 
@@ -247,7 +264,8 @@ class PipeWriter:
     # -----------------------------------------
     def refresh(self):
     # -----------------------------------------
-        self.write(bytearray())
+        self._open_pipe()
+        self.write(None)
 
 
 
@@ -265,6 +283,7 @@ class PipeWriter:
     # -----------------------------------------
         countBytesInPipe = self._count_bytes_in_pipe()
         countBytesInInternalBuffers = self._countBytesInInternalBuffers()
+
         return countBytesInPipe + countBytesInInternalBuffers
 
 
@@ -275,14 +294,14 @@ class PipeWriter:
 
         ###############################################################
         # .........................................
-        def ___store_bytes(self, data):
+        def ___store_bytes(self, _data):
         # .........................................
             # stores as much as the data as permitted in a bytearray added to the internal buffer list
             countAvailable = self.countAvailable()
-            if len(data) > countAvailable:
-                self._buffers.append(MyBytesIO(data[:countAvailable]))
+            if len(_data) > countAvailable:
+                self._buffers.append(MyBytesIO(_data[:countAvailable]))
             else:
-                self._buffers.append(MyBytesIO(data))
+                self._buffers.append(MyBytesIO(_data))
 
 
         # .........................................
@@ -296,43 +315,52 @@ class PipeWriter:
 
 
         # .........................................
-        def ___try_write(self, data):
+        def ___try_write(self, _data):
         # .........................................
         # try writing first to pipe then whatever could not be written push as a new stack buffer
             countBytesAvailableInPipe = ___countAvailableInPipe(self)
-            remaining = len(data)
+            remaining = len(_data)
             written = 0
 
-            if countBytesAvailableInPipe > 0:
+            if countBytesAvailableInPipe > 0 and self._fdPipe:
                 if remaining <= countBytesAvailableInPipe:
-                    written = _write_to_pipe(self._fdPipe, data)
+                    written = _write_to_pipe(self._fdPipe, _data)
                 else:
-                    written = _write_to_pipe(self._fdPipe, data[:countBytesAvailableInPipe])
-                    remaining -= written
+                    written = _write_to_pipe(self._fdPipe, _data[:countBytesAvailableInPipe])
+
+                remaining -= written
 
 
             # slice anything that was not successfully written to the name pipe and push unto internal stack
             if remaining > 0:
-                ___store_bytes(self, data[written:])
+               ___store_bytes(self, _data[written:])
+               # print(f"pipe_Writer: stacking {len(_data[written:])}", file=sys.stderr)
+
+            """
+            if written != 0 or len(data[written:]) != 0:
+                print(f"DEBUG: wrote {written} to pipe, storing {len(data[written:])}", file=sys.stderr) 
+                print(f"len is {self.len()}", file=sys.stderr) 
+                print(f"bytes available in pipe was {countBytesAvailableInPipe}", file=sys.stderr)
+            """
 
         # ...
         ################################################################
         #               // begin routine //                            #
         ################################################################
+
+
+
         # reconnect a broken pipe if applicable
+        """
         if self._whether_pipe_is_broken():
             self._open_pipe()
+        """
 
-        if self.countAvailable() == 0:
-            data=bytearray() # no space, slice to 0
-        elif len(data) > self.countAvailable():
-            data=data[0:self.countAvailable()] # slice up to capacity available inefficient to copy TODO REVIEW refactor
-            #...just in case the caller did not check first
 
         countBytesAvailableInPipe = ___countAvailableInPipe(self) # empty count
 
         # move contents of buffers into named pipe
-        if len(self._buffers) > 0 and self._whether_pipe_is_ready_for_writing():
+        if len(self._buffers) > 0 : # and self._whether_pipe_is_ready_for_writing():
                 bufferstream = io.BytesIO()
                 # iterate until total length >= empty count
                 runningTotal = 0
@@ -349,38 +377,45 @@ class PipeWriter:
                 countBytesToPenult = 0 # stores how much will come from all the completely emptied buffers
                 if lastBufferIndex > 0:
                     penUltimateBufferIndex = lastBufferIndex - 1
-                    if penUltimateBufferIndex > 0:
+                    if penUltimateBufferIndex >= 0:
                         for i in range(penUltimateBufferIndex):
                             countBytesToPenult += len(self._buffers[i])
-                            bufferstream.write(self._buffers[i].getbuffer())
+                            bufferstream.write(self._buffers[i].getbuffer()) # append buffered bytes to temporary stream
 
-                # difference gives how much to partially empty the last buffer
-                countBytesToTakeFromUlt = countBytesAvailableInPipe - countBytesToPenult
-                    
                 # buffers up to but not including end buffer have been consumed
                 # pop them \/ for garbage collection
                 if lastBufferIndex > 0:
                     for _ in range(lastBufferIndex):
-                        popped = self._buffers.pop()
-                        bufferstream.write(popped.getbuffer())
-                        del(popped) 
+                        popped = self._buffers.pop(0)
+                        del(popped) # close the stream (garbage collection) and doubles as an assertion
 
+                # difference gives how much to partially empty the last buffer
+                countBytesToTakeFromUlt = countBytesAvailableInPipe - countBytesToPenult
+                    
                 if countBytesToTakeFromUlt > 0:
+                # the non-removed/non-popped buffer is the ultimate
                 # [ remaining buffer bytes can now be taken and placed in named pipe up to the calculate amount ]
-                    # ___try_write(self, self._buffers[0][:countBytesToTakeFromUlt])
                     bufferstream.write(self._buffers[0].read(countBytesToTakeFromUlt))
-                    ___try_write(self, bufferstream.getbuffer())
-                    bufferstream.close()
-                    # ___try_write(self, self._buffers[0].read(countBytesToTakeFromUlt))
-                    # rewrite buffer to exclude the part handled by the write routine
-                    # self._buffers[0] = self._buffers[0][countBytesToTakeFromUlt:-1]
+
+                # whatever has been appended to the temporary buffer stream try writing to the pipe
+                ___try_write(self, bufferstream.getbuffer())
+
+                bufferstream.close()
 
 
         # after topping off, attempt to write incoming `data` (which is pushed on stack as appropriate)
-        ___try_write(self, data)
+        if data:
 
+            if self.countAvailable() == 0:
+                data=bytearray() # no space, slice to 0
+            elif len(data) > self.countAvailable():
+                data=data[0:self.countAvailable()] # slice up to capacity available inefficient to copy TODO REVIEW refactor
+                #...just in case the caller did not check first
 
+            ___try_write(self, data)
 
+            return(len(data))
+        return 0
 
 
     # -----------------------------------------
@@ -403,6 +438,7 @@ bytes in pipe: {self._count_bytes_in_pipe()}
 bytes in internal buffers: {self._countBytesInInternalBuffers()}
 total available: {self.countAvailable()}
 number of buffers: {len(self._buffers)}
+total bytes: {self._countBytesInInternalBuffers() + self._count_bytes_in_pipe()}
 """
         return output
 

@@ -21,6 +21,7 @@ import asyncio
 import utils
 import view
 import model
+from TaskResultWriter import Interleaver
 
 _kMEBIBYTE  = 2**20                   # constant count
 
@@ -54,8 +55,11 @@ _DEBUGLEVEL = True if 'PYTHONDEBUGLEVEL' in os.environ else False
 
     summary:
 
-        The controller is initialized and called from main asynchronously.
-
+        The controller is initialized and called from main asynchronously. By default it is initialized
+        with a subclass of the abstract class TaskResultWriter, Interleaver. The
+        client may subclass TaskResultWriter if interested in handling the task results in an alternative
+        fashion than that to Interleaver (see TaskResultWriter.py).
+        
         The Controller initializes the controller-view and when __call__ed begins provisioning work via
         the model according to the current BUDGET vs current_total, and current MINPOOLSIZE vs bytesInPipe.
         Execution is paused if several (10) successive payment failures occur or the current_total is at
@@ -162,6 +166,7 @@ class Controller:
 
         self.theview = view.View()
 
+        # self.taskResultWriter = Interleaver(self.to_ctl_q, self.MINPOOLSIZE)
 
         self.themodeltask=loop.create_task(model.model__EntropyThief(loop
             , self.args
@@ -171,6 +176,7 @@ class Controller:
             , self.MAXWORKERS
             , self.BUDGET
             , self.IMAGE_HASH
+            , Interleaver(self.from_model_q, self.MINPOOLSIZE)
             )()
             )
 
