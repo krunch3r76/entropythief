@@ -46,6 +46,14 @@ DEVELOPER_LOG_EVENTS = True
 
 
 
+_DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL']) if 'PYTHONDEBUGLEVEL' in os.environ else 0
+
+
+def _log_msg(msg, debug_level=0, stream=sys.stderr):
+    pass
+    if debug_level <= _DEBUGLEVEL:
+        print(f"\n[model.py] {msg}\n", file=sys.stderr)
+
 
 """
     model__EntropyThief
@@ -240,7 +248,6 @@ class model__EntropyThief:
         ## BEGIN ROUTINE _provision
         count_bytes_requested = self.taskResultWriter.count_bytes_requesting()
 
-
         
         ####################################################################|
         # check whether task result writer can/should accept more bytes     #
@@ -272,7 +279,7 @@ class model__EntropyThief:
 
 
                 bytes_partitioned= partition(count_bytes_requested, self.MAXWORKERS)
-                                                                                        #
+                _log_msg(f"::[provision()] {count_bytes_requested} bytes, partition counts: {bytes_partitioned}", 1)
                 completed_tasks = golem.execute_tasks(
                         steps
                         , [yapapi.Task(

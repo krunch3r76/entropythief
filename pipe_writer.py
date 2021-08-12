@@ -51,7 +51,7 @@ _DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL']) if 'PYTHONDEBUGLEVEL' in os.en
 def _log_msg(msg, debug_level=0, stream=sys.stderr):
     pass
     if debug_level <= _DEBUGLEVEL:
-        print(f"\n{msg}\n", file=sys.stderr)
+        print(f"\n[pipe_writer.py] {msg}\n", file=sys.stderr)
 
 
 
@@ -88,7 +88,7 @@ class MyBytesIO(io.BytesIO):
     """
 
     def putback(self, count):
-        self.seek(-count, io.SEEK_CUR)
+        self.seek(-(count), io.SEEK_CUR)
 
     def write(self, count):
         assert False, "MyBytesIO does not support write operation"
@@ -146,7 +146,7 @@ def _write_to_pipe(fifoWriteEnd, thebytes):
     try:
         WRITTEN = os.write(fifoWriteEnd, thebytes)
     except BlockingIOError:
-        _log_msg(f"_write_to_pipe: BlockingIOError, COULD NOT WRITE {len(thebytes)} bytes.", 1)
+        _log_msg(f"_write_to_pipe: BlockingIOError, COULD NOT WRITE {len(thebytes)} bytes.", 2)
         for _ in range(10):
             try:
                 WRITTEN = os.write(fifoWriteEnd, thebytes)
@@ -156,7 +156,7 @@ def _write_to_pipe(fifoWriteEnd, thebytes):
                 break
     except BrokenPipeError:
         WRITTEN=0
-        _log_msg("BROKEN PIPE--------------------------------------", 1)
+        _log_msg("BROKEN PIPE--------------------------------------", 2)
         # make fd_pipe none
         raise # review whether the exception should be raised TODO
     except Exception as exception:
@@ -319,7 +319,7 @@ class PipeWriter:
     def write(self, data):
     # -----------------------------------------
         if data and len(data) > 0:
-            print(f"pipe_writer.py write received {len(data)} bytes", file=sys.stderr)
+            _log_msg(f"::[write] received {len(data)} bytes", 1)
         ###############################################################
 
         # .........................................
@@ -351,13 +351,13 @@ class PipeWriter:
 
         # chunk input into pages added to the byteQ, might help prevent blocking io
         # might facilitate asynchronous implementation
+        debugCount=0
         while True:
             chunk_of_bytes = bytestream.read(4096)
+            debugCount+=len(chunk_of_bytes)
             if len(chunk_of_bytes) == 0:
                 break
             self._byteQ.append(MyBytesIO(chunk_of_bytes))
-
-
         # reconnect a broken pipe if applicable
         if self._whether_pipe_is_broken():
             self._open_pipe()
