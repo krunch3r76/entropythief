@@ -251,6 +251,7 @@ class model__EntropyThief:
         
         ####################################################################|
         # check whether task result writer can/should accept more bytes     #
+        _log_msg(f"::[provision()] the costs so far are: {self._costRunning}", 11)
         if count_bytes_requested > 0 and \
         self.bytesInPipe < int(self.MINPOOLSIZE/2) and \
         self._costRunning < self.BUDGET:
@@ -366,6 +367,9 @@ class model__EntropyThief:
                 if not self.from_ctl_q.empty():
                     self._hook_controller(self.from_ctl_q.get_nowait())
                     
+                #########################################################
+                # 2.4) provision work if needed
+                #########################################################
                 if not self.OP_STOP and not self.OP_PAUSE: # OP_STOP might have been set by the controller hook
                     await self._provision()
 
@@ -417,7 +421,9 @@ class model__EntropyThief:
 
 # required by:  entropythief
 ##############################################################################
+
 async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
+
 ##############################################################################
 
     loop = asyncio.get_running_loop()
@@ -427,7 +433,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
         # request <count> bytes from provider and wait
         try:
             ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']), task.data['rdrand_arg'])
-            yield ctx.commit(timeout=timedelta(seconds=60))
+            yield ctx.commit(timeout=timedelta(seconds=90))
             Path_output_file = Path(gettempdir()) / str(uuid4())
             ctx.download_file(worker_public.RESULT_PATH, str(Path_output_file))
             yield ctx.commit()
@@ -473,23 +479,27 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     to_ctl_q:   the msg queue back to the controller
 """
 ##########################{}##################################################
+
 class MySummaryLogger(yapapi.log.SummaryLogger):
+
 ##############################################################################
 # Required by: model__entropythief
 # the log method is provided as the event-consumer for yapapi.Golem to intercept events
-    __costRunning = 0.0 # keeps track of cost so far to enforce a budget check
     to_ctl_q = None
     model = None
 
+    # can be removed
     @property
     def costRunning(self):
-        return self.__costRunning
+        return self.model._costRunning
 
     @costRunning.setter
     def costRunning(self, amount):
-        self.model.costRunning = amount
+        _log_msg(f"[MySummaryLogger{{}}] Setting costRunning to {amount}", 1)
+        self.model._costRunning = amount
 
     def __init__(self, model):
+        self.model = model
         # self.costRunning = 0.0
         self.to_ctl_q = model.to_ctl_q
         super().__init__()
@@ -499,7 +509,7 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
         to_controller_msg = None
         if isinstance(event, yapapi.events.PaymentAccepted):
             added_cost=float(event.amount)
-            self.__costRunning += added_cost
+            self.costRunning = self.costRunning + added_cost
             to_controller_msg = {
                 'event': event.__class__.__name__ # PaymentAccepted
                 , 'agr_id': event.agr_id
@@ -572,8 +582,10 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
 
 
 ############################ {} ######################################################
+
 @dataclass
 class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, object):
+
 ######################################################################################
     """
         expected_time_secs: ? TODO, copied from api, required for super
