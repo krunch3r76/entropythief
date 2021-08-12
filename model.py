@@ -308,6 +308,9 @@ class model__EntropyThief:
                         if self.hasBytesInPipeChanged():
                             msg = {'bytesInPipe': self.bytesInPipe}
                             self.to_ctl_q.put_nowait(msg)
+
+                        self.taskResultWriter.refresh()
+
                     else:
                         pass # no result implies rejection which steps reprovisions
                 #                                                                   /
@@ -357,7 +360,8 @@ class model__EntropyThief:
             self.bytesInPipe = self.taskResultWriter.query_len() # note bytesInPipe is the lazy count
 
             while not self.OP_STOP:
-                # 2.1) flush any pending processes in the task result writer
+
+                # 2.1) flush any pending processes/buffers in the task result writer
                 self.taskResultWriter.refresh()
 
                 # 2.2) query task result writer for the number of bytes stored and relay to controller
@@ -371,6 +375,7 @@ class model__EntropyThief:
                 if not self.from_ctl_q.empty():
                     self._hook_controller(self.from_ctl_q.get_nowait())
                 # [[state change]]
+
 
                 # 2.4) provision work if possible               #
                 if not self.OP_STOP and not self.OP_PAUSE: # OP_STOP might have been set by the controller hook
@@ -440,7 +445,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             ################################################
             ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']), task.data['rdrand_arg'])
             yield ctx.commit(timeout=timedelta(seconds=70))
-
+            task.data['writer'].refresh()
 
             ################################################
             # download the results on successful execution #
@@ -448,6 +453,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             Path_output_file = Path(gettempdir()) / str(uuid4())
             ctx.download_file(worker_public.RESULT_PATH, str(Path_output_file))
             yield ctx.commit(timeout=timedelta(seconds=45))
+            task.data['writer'].refresh()
 
             #debug
             # print(f"{task.data['writer']._writerPipe}", file=sys.stderr)
@@ -521,6 +527,17 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
         # self.event_log_file = open("events.log", "w")
 
     def log(self, event: yapapi.events.Event) -> None:
+
+        # during an execution we are interested in updating the state
+        # while executions are pending, we hook to refresh the buffer
+        # state and update the controller here while events are emitted
+        # there is probably a more Pythonic + yapapi way to handle this TODO
+        self.model.taskResultWriter.refresh()
+        _log_msg(f"[MySummaryLogger{{}}] REFRESHing taskResultWriter on log event", 10)
+        delta = self.model.hasBytesInPipeChanged()
+        if delta != 0:
+            msg = {'bytesInPipe': self.model.bytesInPipe}; self.model.to_ctl_q.put_nowait(msg)
+
         to_controller_msg = None
         if isinstance(event, yapapi.events.PaymentAccepted):
             added_cost=float(event.amount)
