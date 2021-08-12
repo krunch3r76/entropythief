@@ -23,25 +23,35 @@ import collections
     ----------
     (_maxCapacity)
     countAvailable()                " how many bytes the object will accept at the moment
-    len()                           " shall report count bytes in buffer
+    len()                           " shall report count bytes currently stored (readable)
     write(data)                     " shall buffer input bytes
     refresh()                       " shall top off buffer as needed
-    _countBytesInInternalBuffers()  " sic
     __del__()                       " shall close pipe ... cleanup
 
+    _set_max_capacity(...)          " sic
+    _countBytesInInternalBuffers()  " sic
+    _whether_pipe_is_broken()       " sic
+    _count_bytes_in_pipe()          " reads the count of bytes as reported by the operating system in the pipe
+    _open_pipe()                    " opens the named pipe file
+    _countBytesInInternalBuffers()  " reports on how many bytes are stored outside of the named pipe
 
-    _buffers = []
-    _fdPipe
-    _pipeCapacity
-    _maxCapacity
+    _byteQ                          " stores MyBytesIO objects containing data pending write to the named pipe
+    _fdPipe                         " stores the file descriptor of the named pipe
+    _pipeCapacity                   " stores the capacity of the pipe as read from the operating system (set by reader)
+    _maxCapacity                    " stores the maximum number of bytes the PipeWriter will hold/buffer at any given time
 
     kNamedPipeFilePathString = '/tmp/pilferedbits'
 
-    PipeWriter buffers and continually fills a pipe with bytes input via .write
-    It needs to be reminded to top off the buffer when possible by a call to its refresh method.
-    It shall top off the buffer when possible on every write call.
-    Every frame of bytes is first sliced to top off the named pipe, then added to a stack/list.
 
+
+
+    gist: PipeWriter buffers and continually fills a pipe with bytes input via .write
+
+    Data that does not fit within its `_maxCapacity` is discarded.
+    Data is appended to an internal queue (current storing chunks of MyBytesIO) `_byteQ`
+    Its refresh method must be called continually in order to flush bytes into the named pipe.
+    It also tops off the named pipe every write call.
+    The named pipe is topped off with the data in the queue of storage objects _byteQ
 """
 
 
@@ -57,7 +67,9 @@ def _log_msg(msg, debug_level=0, stream=sys.stderr):
 
 # MyBytesIO wraps StringIO so that reads advance the stream to behavior like a file stream
 ##################{}#####################
+
 class MyBytesIO(io.BytesIO):
+
 #########################################
 
     def __init__(self, initial_value):
@@ -81,11 +93,6 @@ class MyBytesIO(io.BytesIO):
     def __del__(self):
         self.close()
 
-    """
-    def read(self, count):
-        rv = super().read(count)
-        return rv
-    """
 
     def putback(self, count):
         self.seek(-(count), io.SEEK_CUR)
@@ -94,7 +101,15 @@ class MyBytesIO(io.BytesIO):
         assert False, "MyBytesIO does not support write operation"
 
 
+
+
+
+
+####################### {} ########################
+
 class MyBytesDeque(collections.deque):
+
+###################################################
     _runningTotal = 0
 
     def __init__(self):
@@ -125,6 +140,8 @@ class MyBytesDeque(collections.deque):
 
     # def total(self):
     #     return self.len()
+
+
 
 
 
@@ -232,18 +249,6 @@ class PipeWriter:
         return answer
 
 
-    # -------------------------------------------
-    def _whether_pipe_is_ready_for_writing(self):
-    # -------------------------------------------
-        answer = False
-        # consider a non existing fd as a broken/unready pipe
-        if self._fdPipe is None:
-            answer = False
-        else:
-            answer = True
-
-        return answer
-
 
 
 
@@ -308,12 +313,6 @@ class PipeWriter:
         return countBytesInPipe + countBytesInInternalBuffers
 
 
-    def _len_q(self):
-        running_total = 0
-        for i in len(self._byteQ):
-            running_total += self._byteQ.len()
-
-        return running_total
 
     # ----------------------------------------------
     def write(self, data):
@@ -358,7 +357,8 @@ class PipeWriter:
             if len(chunk_of_bytes) == 0:
                 break
             self._byteQ.append(MyBytesIO(chunk_of_bytes))
-        # reconnect a broken pipe if applicable
+
+        #### reconnect a broken pipe if applicable
         if self._whether_pipe_is_broken():
             self._open_pipe()
 
@@ -408,6 +408,8 @@ class PipeWriter:
         
 
 
+
+
     # -------------------------------------------
     def __repr__(self):
     # -------------------------------------------
@@ -416,7 +418,6 @@ max capacity: {self._maxCapacity}
 bytes in pipe: {self._count_bytes_in_pipe()}
 bytes in internal buffers: {self._countBytesInInternalBuffers()}
 total available: {self.countAvailable()}
-number of buffers: {len(self._buffers)}
 total bytes: {self._countBytesInInternalBuffers() + self._count_bytes_in_pipe()}
 """
         return output
