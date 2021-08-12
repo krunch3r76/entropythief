@@ -38,13 +38,21 @@ from yapapi.strategy import *
 # internal
 import  utils
 import  worker_public
-from TaskResultWriter import Interleaver
+# from TaskResultWriter import Interleaver
 
 ENTRYPOINT_FILEPATH = Path("/golem/run/worker")
 kTASK_TIMEOUT = timedelta(minutes=10)
 DEVELOPER_LOG_EVENTS = True
 
 
+
+_DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL']) if 'PYTHONDEBUGLEVEL' in os.environ else 0
+
+
+def _log_msg(msg, debug_level=0, stream=sys.stderr):
+    pass
+    if debug_level <= _DEBUGLEVEL:
+        print(f"\n[model.py] {msg}\n", file=sys.stderr)
 
 
 """
@@ -139,27 +147,29 @@ class model__EntropyThief:
         , MAXWORKERS
         , BUDGET
         , IMAGE_HASH
+        , taskResultWriter
         , TASK_TIMEOUT=kTASK_TIMEOUT
     ):
-        self._loop = loop
-        self.args = args
-        self.from_ctl_q = from_ctl_q
-        self.to_ctl_q = to_ctl_q
-        self.MINPOOLSIZE = MINPOOLSIZE
-        self.MAXWORKERS = MAXWORKERS
-        self.BUDGET = BUDGET
-        self.IMAGE_HASH = IMAGE_HASH
-        self.TASK_TIMEOUT = TASK_TIMEOUT
+        self._loop              = loop
+        self.args               = args
+        self.from_ctl_q         = from_ctl_q
+        self.to_ctl_q           = to_ctl_q
+        self.MINPOOLSIZE        = MINPOOLSIZE
+        self.MAXWORKERS         = MAXWORKERS
+        self.BUDGET             = BUDGET
+        self.IMAGE_HASH         = IMAGE_HASH
+        self.taskResultWriter   = taskResultWriter
+        self.TASK_TIMEOUT       = TASK_TIMEOUT
+        self._costRunning       = 0.0
 
         # output yapapi logger INFO events to stderr and INFO+DEBUG to args.log_fle
         if self.args.enable_logging:
             yapapi.log.enable_default_logger(
                 log_file=args.log_file
-                , debug_activity_api=True
-                , debug_market_api=True
-                , debug_payment_api=True)
+                , debug_activity_api =True
+                , debug_market_api   =True
+                , debug_payment_api  =True)
 
-        self.taskResultWriter = Interleaver(self.to_ctl_q, self.MINPOOLSIZE)
         
 
 
@@ -171,7 +181,7 @@ class model__EntropyThief:
     # ------------------------------------------------------ #
         bytesInPipe_last = self.bytesInPipe
         self.bytesInPipe = self.taskResultWriter.query_len()
-        return bytesInPipe_last != self.bytesInPipe
+        return bytesInPipe_last - self.bytesInPipe
 
 
 
@@ -206,7 +216,6 @@ class model__EntropyThief:
     async def _provision(self):
     # ----------------------------------------------------- #
 
-
         ## HELPERS
         #...........................................#
         # partition                                 #
@@ -239,49 +248,49 @@ class model__EntropyThief:
         ## BEGIN ROUTINE _provision
         count_bytes_requested = self.taskResultWriter.count_bytes_requesting()
 
-
         
-        ####################################################################\
+        ####################################################################|
         # check whether task result writer can/should accept more bytes     #
         if count_bytes_requested > 0 and \
         self.bytesInPipe < int(self.MINPOOLSIZE/2) and \
-        self.mySummaryLogger.costRunning < self.BUDGET:                     #
-            package = await vm.repo(                                        #
-                    image_hash=self.IMAGE_HASH                              #
-                    , min_mem_gib=0.3                                       #
-                    , min_storage_gib=0.3                                   #
-                )                                                           #
-        #                                                                   /
+        self._costRunning < self.BUDGET:
+            package = await vm.repo(
+                    image_hash=self.IMAGE_HASH
+                    , min_mem_gib=0.3
+                    , min_storage_gib=0.3
+                )
+        #                                                                   |
 
 
 
-
+            #debug
             ############################################################################\
             # initialize and spread work across task objects                            #
-            async with yapapi.Golem(                                                    #
-                    budget=self.BUDGET-self.mySummaryLogger.costRunning                 #
-                    , subnet_tag=self.args.subnet_tag                                   #
-                    , network=self.args.network                                         #
-                    , driver=self.args.driver                                           #
-                    , event_consumer=self.mySummaryLogger.log                           #
-                    , strategy=self.strat                                               #
-            ) as golem:                                                                 #
-                                                                                        #
-                                                                                        #
-                                                                                        #
-                bytes_partitioned= partition(count_bytes_requested, self.MAXWORKERS)    #
-                                                                                        #
-                completed_tasks = golem.execute_tasks(                                  #
-                        steps                                                           #
-                        , [yapapi.Task(                                                 #
-                            data={'req_byte_count': bytes_needed_on_worker              #
-                                , 'writer': self.taskResultWriter                       #
-                                , 'rdrand_arg':self.rdrand_arg})                        #
-                            for bytes_needed_on_worker in bytes_partitioned]            #
-                        , payload=package                                               #
-                        , max_workers=self.MAXWORKERS                                   #
-                        , timeout=self.TASK_TIMEOUT                                     #
-                   )                                                                    #
+            async with yapapi.Golem(
+                    budget=self.BUDGET-self._costRunning
+                    , subnet_tag=self.args.subnet_tag
+                    , network=self.args.network
+                    , driver=self.args.driver
+                    , event_consumer=MySummaryLogger(self).log
+                    # , event_consumer=mySummaryLogger.log
+                    , strategy=self.strat
+            ) as golem:
+
+
+
+                bytes_partitioned= partition(count_bytes_requested, self.MAXWORKERS)
+                _log_msg(f"::[provision()] {count_bytes_requested} bytes, partition counts: {bytes_partitioned}", 1)
+                completed_tasks = golem.execute_tasks(
+                        steps
+                        , [yapapi.Task(
+                            data={'req_byte_count': bytes_needed_on_worker
+                                , 'writer': self.taskResultWriter
+                                , 'rdrand_arg':self.rdrand_arg})
+                            for bytes_needed_on_worker in bytes_partitioned]
+                        , payload=package
+                        , max_workers=self.MAXWORKERS
+                        , timeout=self.TASK_TIMEOUT
+                   )
             #                                                                           /
 
 
@@ -289,15 +298,15 @@ class model__EntropyThief:
 
                 ####################################################################\
                 # run tasks asynchronously and collect results                      #
-                async for task in completed_tasks:                                  #
-                    if task.result:                                                 #
-                        self.taskResultWriter.add_file(task.result)                 #
-                                                                                    #
-                        if self.hasBytesInPipeChanged():                            #
-                            msg = {'bytesInPipe': self.bytesInPipe};                #
-                            self.to_ctl_q.put_nowait(msg)                           #
-                    else:                                                           #
-                        pass # no result implies rejection which steps reprovisions #
+                async for task in completed_tasks:
+                    if task.result:
+                        self.taskResultWriter.add_result_file(task.result)
+
+                        if self.hasBytesInPipeChanged():
+                            msg = {'bytesInPipe': self.bytesInPipe}
+                            self.to_ctl_q.put_nowait(msg)
+                    else:
+                        pass # no result implies rejection which steps reprovisions
                 #                                                                   /
 
 
@@ -305,9 +314,8 @@ class model__EntropyThief:
 
                 ####################################################################\
                 # inform task result writer that all results have been given to it  #
-                self.taskResultWriter.commit_added_files()                          #
+                self.taskResultWriter.commit_added_result_files()
                 #                                                                   /
-
 
 
 
@@ -341,15 +349,19 @@ class model__EntropyThief:
                         , yapapi.props.com.Counter.TIME: Decimal("0.0011")}
                     , use_rdrand = self.args.rdrand
                 ) 
-        self.mySummaryLogger = MySummaryLogger(self.to_ctl_q)
         try:
             self.bytesInPipe = self.taskResultWriter.query_len() # note bytesInPipe is the lazy count
 
             while not self.OP_STOP:
-                await self.taskResultWriter.refresh()
+                loop = asyncio.get_running_loop()
+                # loop.run_in_executor(None, self.taskResultWriter.refresh)
+                self.taskResultWriter.refresh()
 
-                if self.hasBytesInPipeChanged():
+                delta = self.hasBytesInPipeChanged()
+                if delta != 0:
                     msg = {'bytesInPipe': self.bytesInPipe}; self.to_ctl_q.put_nowait(msg)
+                    if delta < 0:
+                        print(f"The bytesInPipe has increased by {abs(delta)}", file=sys.stderr)
                 
                 if not self.from_ctl_q.empty():
                     self._hook_controller(self.from_ctl_q.get_nowait())
@@ -358,6 +370,7 @@ class model__EntropyThief:
                     await self._provision()
 
                 await asyncio.sleep(0.01)
+
         except KeyboardInterrupt:
             pass # if the task has not exited in response to this already, finally will propagate a cancel
         except yapapi.NoPaymentAccountError as e:
@@ -402,26 +415,24 @@ class model__EntropyThief:
 
 
 
-     # ╔╗             
-    # ╔╝╚╗            
-# ╔══╗╚╗╔╝╔══╗╔══╗╔══╗
-# ║══╣ ║║ ║╔╗║║╔╗║║══╣
-# ╠══║ ║╚╗║║═╣║╚╝║╠══║
-# ╚══╝ ╚═╝╚══╝║╔═╝╚══╝
-     #        ║║      
-     #        ╚╝      
 # required by:  entropythief
+##############################################################################
 async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
+##############################################################################
+
     loop = asyncio.get_running_loop()
     async for task in tasks:
-        await task.data['writer'].refresh()
+        # loop.run_in_executor(None, task.data['writer'].refresh)
+        task.data['writer'].refresh()
         # request <count> bytes from provider and wait
-        ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']), task.data['rdrand_arg'])
-        Path_output_file = Path(gettempdir()) / str(uuid4())
         try:
+            ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']), task.data['rdrand_arg'])
+            yield ctx.commit(timeout=timedelta(seconds=60))
+            Path_output_file = Path(gettempdir()) / str(uuid4())
             ctx.download_file(worker_public.RESULT_PATH, str(Path_output_file))
-            yield ctx.commit(timeout=timedelta(minutes=2))
-            # print(f"CALLING ACCEPT RESULT {Path_output_file}", file=sys.stderr)
+            yield ctx.commit()
+            #debug
+            # print(f"{task.data['writer']._writerPipe}", file=sys.stderr)
         except rest.activity.BatchTimeoutError: # credit to Golem's blender.py
             print(
                     f"{utils.TEXT_COLOR_RED}"
@@ -430,7 +441,8 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                     , file=sys.stderr
                 )
             task.reject_result("timeout", retry=True) # need to ensure a retry occurs! TODO
-            print(f"Result exists?: {bool(task)}\n", file=sys.stderr)
+            #debug
+            # print(f"Result exists?: {bool(task)}\n", file=sys.stderr)
         except Exception as e: # define exception TODO
             print(
                     f"{utils.TEXT_COLOR_RED}"
@@ -440,7 +452,8 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             )
             print(e, file=sys.stderr)
             task.reject_result("unspecified error", retry=True) # timeout maybe?
-            print(f"Result exists?: {bool(task)}\n", file=sys.stderr)
+            #debug
+            # print(f"Result exists?: {bool(task)}\n", file=sys.stderr)
         else:
             task.accept_result(result=str(Path_output_file))
         finally:
@@ -456,37 +469,37 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
 
 
 
-# ╔═╗╔═╗     ╔═══╗                         ╔╗                      
-# ║║╚╝║║     ║╔═╗║                         ║║                      
-# ║╔╗╔╗║╔╗ ╔╗║╚══╗╔╗╔╗╔╗╔╗╔╗╔╗╔══╗ ╔═╗╔╗ ╔╗║║   ╔══╗╔══╗╔══╗╔══╗╔═╗
-# ║║║║║║║║ ║║╚══╗║║║║║║╚╝║║╚╝║╚ ╗║ ║╔╝║║ ║║║║ ╔╗║╔╗║║╔╗║║╔╗║║╔╗║║╔╝
-# ║║║║║║║╚═╝║║╚═╝║║╚╝║║║║║║║║║║╚╝╚╗║║ ║╚═╝║║╚═╝║║╚╝║║╚╝║║╚╝║║║═╣║║ 
-# ╚╝╚╝╚╝╚═╗╔╝╚═══╝╚══╝╚╩╩╝╚╩╩╝╚═══╝╚╝ ╚═╗╔╝╚═══╝╚══╝╚═╗║╚═╗║╚══╝╚╝ 
-#       ╔═╝║                          ╔═╝║          ╔═╝║╔═╝║       
-#       ╚══╝                          ╚══╝          ╚══╝╚══╝       
-# Required by: model__entropythief
-# the log method is provided as the event-consumer for yapapi.Golem to intercept events
 """
     to_ctl_q:   the msg queue back to the controller
 """
 ##########################{}##################################################
 class MySummaryLogger(yapapi.log.SummaryLogger):
 ##############################################################################
-    costRunning = 0.0 # keeps track of cost so far to enforce a budget check
-    event_log_file=open('/dev/null')
+# Required by: model__entropythief
+# the log method is provided as the event-consumer for yapapi.Golem to intercept events
+    __costRunning = 0.0 # keeps track of cost so far to enforce a budget check
     to_ctl_q = None
+    model = None
 
-    def __init__(self, to_ctl_q):
+    @property
+    def costRunning(self):
+        return self.__costRunning
+
+    @costRunning.setter
+    def costRunning(self, amount):
+        self.model.costRunning = amount
+
+    def __init__(self, model):
         # self.costRunning = 0.0
-        self.to_ctl_q = to_ctl_q
+        self.to_ctl_q = model.to_ctl_q
         super().__init__()
-        self.event_log_file = open("events.log", "w")
+        # self.event_log_file = open("events.log", "w")
 
     def log(self, event: yapapi.events.Event) -> None:
         to_controller_msg = None
         if isinstance(event, yapapi.events.PaymentAccepted):
             added_cost=float(event.amount)
-            self.costRunning += added_cost
+            self.__costRunning += added_cost
             to_controller_msg = {
                 'event': event.__class__.__name__ # PaymentAccepted
                 , 'agr_id': event.agr_id
@@ -526,9 +539,6 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
                 , 'struct': str(event)
             }
         
-        # uncomment to log all the Event types as they occur to the specified file
-        if DEVELOPER_LOG_EVENTS:
-            print(event, file=self.event_log_file)
 
 
         """
@@ -548,7 +558,8 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
 
 
     def __del__(self):
-        self.event_log_file.close()
+        pass
+        # self.event_log_file.close()
 
 
 
@@ -560,14 +571,6 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
 
 
 
-# ╔═╗╔═╗     ╔╗                 ╔╗ ╔═══╗                              ╔╗                     ╔═══╗          ╔═╗╔═╗╔═══╗
-# ║║╚╝║║     ║║                ╔╝╚╗║╔══╝                              ║║                     ║╔═╗║          ║║╚╝║║║╔═╗║
-# ║╔╗╔╗║╔╗ ╔╗║║   ╔══╗╔══╗ ╔══╗╚╗╔╝║╚══╗╔╗╔╗╔══╗╔══╗╔═╗ ╔══╗╔╗╔╗╔╗╔══╗║║   ╔╗╔═╗ ╔══╗╔══╗ ╔═╗║╚═╝║╔══╗ ╔╗ ╔╗║╔╗╔╗║║╚══╗
-# ║║║║║║║║ ║║║║ ╔╗║╔╗║╚ ╗║ ║══╣ ║║ ║╔══╝╚╬╬╝║╔╗║║╔╗║║╔╗╗║══╣╠╣║╚╝║║╔╗║║║ ╔╗╠╣║╔╗╗║╔╗║╚ ╗║ ║╔╝║╔══╝╚ ╗║ ║║ ║║║║║║║║╚══╗║
-# ║║║║║║║╚═╝║║╚═╝║║║═╣║╚╝╚╗╠══║ ║╚╗║╚══╗╔╬╬╗║╚╝║║║═╣║║║║╠══║║║╚╗╔╝║║═╣║╚═╝║║║║║║║║║═╣║╚╝╚╗║║ ║║   ║╚╝╚╗║╚═╝║║║║║║║║╚═╝║
-# ╚╝╚╝╚╝╚═╗╔╝╚═══╝╚══╝╚═══╝╚══╝ ╚═╝╚═══╝╚╝╚╝║╔═╝╚══╝╚╝╚╝╚══╝╚╝ ╚╝ ╚══╝╚═══╝╚╝╚╝╚╝╚══╝╚═══╝╚╝ ╚╝   ╚═══╝╚═╗╔╝╚╝╚╝╚╝╚═══╝
-#       ╔═╝║                                ║║                                                         ╔═╝║            
-#       ╚══╝                                ╚╝                                                         ╚══╝            
 ############################ {} ######################################################
 @dataclass
 class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, object):
