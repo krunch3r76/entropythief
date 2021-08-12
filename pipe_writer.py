@@ -101,6 +101,7 @@ class MyBytesDeque(collections.deque):
         super().__init__()
 
     def append(self, mybytesio):
+        assert isinstance(mybytesio, MyBytesIO)
         self._runningTotal += len(mybytesio)
         super().append(mybytesio)
 
@@ -315,22 +316,6 @@ class PipeWriter:
         if data and len(data) > 0:
             print(f"pipe_writer.py write received {len(data)} bytes", file=sys.stderr)
         ###############################################################
-        """
-        # .........................................
-        def ___store_bytes(self, _data):
-        # .........................................
-            tell = self._blocked.tell()
-            self._blocked.seek(0, io.SEEK_END)
-            self._blocked.write(_data)
-            self._blocked.seek(tell, io.SEEK_SET)
-
-            # stores as much as the data as permitted in a bytearray added to the internal buffer list
-            # countAvailable = self.countAvailable()
-            # if len(_data) > countAvailable:
-            #     self._buffers.append(MyBytesIO(_data[:countAvailable]))
-            # else:
-            #     self._buffers.append(MyBytesIO(_data))
-        """
 
         # .........................................
         def ___countAvailableInPipe(self) -> int:
@@ -342,24 +327,6 @@ class PipeWriter:
                 return 0
 
 
-        # .........................................
-        def ___try_write(self, _data):
-        # .........................................
-        # try writing first to pipe then whatever could not be written push as a new stack buffer
-
-            countBytesAvailableInPipe = ___countAvailableInPipe(self)
-            remaining = len(_data)
-            written = 0
-
-            if countBytesAvailableInPipe > 0 and self._fdPipe:
-                if remaining <= countBytesAvailableInPipe:
-                    written = _write_to_pipe(self._fdPipe, _data)
-                else:
-                    written = _write_to_pipe(self._fdPipe, _data[:countBytesAvailableInPipe])
-
-                remaining -= written
-
-            return remaining
 
 
 
@@ -370,13 +337,15 @@ class PipeWriter:
 
         # append queue with data
         countBytesIn = len(data)
+
         if countBytesIn > self.countAvailable():
             countBytesIn = self.countAvailable()
         bytesToStore=countBytesIn
-        if countBytesIn > 0 or bytesToStore > 0:
+
         bytestream = io.BytesIO(data)
 
-        # chunk input into pages added to the byteQ
+        # chunk input into pages added to the byteQ, might help prevent blocking io
+        # might facilitate asynchronous implementation
         while True:
             chunk_of_bytes = bytestream.read(4096)
             if len(chunk_of_bytes) == 0:
