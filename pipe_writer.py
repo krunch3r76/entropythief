@@ -127,6 +127,11 @@ class MyBytesDeque(collections.deque):
     #     return self.len()
 
 
+
+
+
+
+
   #-------------------------------------------------#
  #           _write_to_pipe                         #
 #-------------------------------------------------#
@@ -352,8 +357,6 @@ class PipeWriter:
                 break
             self._byteQ.append(MyBytesIO(chunk_of_bytes))
 
-        if countBytesIn > 0 or bytesToStore > 0:
-            print(f"stored!", file=sys.stderr)
 
         # reconnect a broken pipe if applicable
         if self._whether_pipe_is_broken():
@@ -379,11 +382,12 @@ class PipeWriter:
                     if written == 0:
                         BLOCKED = True
                         first.putback(free)
-                    else:
-                        self._byteQ.appendleft(first)
+                        
+                    self._byteQ.appendleft(first)
             except IndexError:
                 break
 
+        # print(f"BLOCKED: {BLOCKED}", file=sys.stderr)
         return len(data) # stub
 
 
