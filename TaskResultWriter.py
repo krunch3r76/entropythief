@@ -174,7 +174,7 @@ class Interleaver(TaskResultWriter):
 
             Given two bytes streams
                 b'deadbeef
-                b'defgaf     <- shortest length is a the cutoff
+                b'defgaf     <- shortest length is a the cutoff (returned by `_page_size()`)
             the result according to the algorithm would be written to the underlying writer as
                 ddeeafdgbaef 
             (notice that terminating ef was not including because there is no more to alternate)
@@ -245,9 +245,7 @@ class Interleaver(TaskResultWriter):
 
 
 
-    # post: if a group is available and readable, the _writerPipe receives a page
-    # this additional logic assumes that the page size is not the full length of the
-    # the shortest of the group (for future implementations)
+    # post: if a group is available and readable, the `_writerPipe` is given a "book" of interleaved bytes
     # ---------------------------------------
     def refresh(self):
     # ---------------------------------------

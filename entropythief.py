@@ -124,6 +124,7 @@ class Controller:
     bytesInPipe = 0
     payment_failed_count = 0
     current_total = 0.0
+    whether_paused = False
 
     theview = None
     themodeltask = None
@@ -198,7 +199,7 @@ class Controller:
  # \▓▓     \\▓▓    ▓▓ ▓▓ ▓▓
   # \▓▓▓▓▓▓▓ \▓▓▓▓▓▓▓\▓▓\▓▓
                          
-                         
+    # this is the main entrypoint!                     
                          
     #   ---------Controller------------
     async def __call__(self):
@@ -209,12 +210,13 @@ class Controller:
                 #########################################################
                 #   update status line and receive client input if any  #
                 #########################################################
-                ucmd = self.theview.getinput(self.current_total,
-                        self.MINPOOLSIZE,
-                        self.BUDGET,
-                        self.MAXWORKERS,
-                        self.count_workers,
-                        self.bytesInPipe)
+                ucmd = self.theview.getinput(self.current_total
+                        , self.MINPOOLSIZE
+                        , self.BUDGET
+                        , self.MAXWORKERS
+                        , self.count_workers
+                        , self.bytesInPipe
+                        , self.whether_paused)
                 
                 #############################################
                 #   process any client input                #
@@ -315,8 +317,9 @@ class Controller:
             self.count_workers+=1
         elif 'info' in msg_from_model and msg_from_model['info'] == "payment failed":
             self.payment_failed_count+=1
-            if self.BUDGET - self.current_total < 0.01 or self.payment_failed_count==10: # review epsilon
+            if self.BUDGET - self.current_total < 0.02 or self.payment_failed_count==10: # review epsilon
                 msg_to_model = {'cmd': 'pause execution'}; self.to_model_q.put_nowait(msg_to_model)
+                self.whether_paused=True
         elif 'event' in msg_from_model and msg_from_model['event'] == 'AgreementTerminated':
             self.count_workers-=1
         elif 'event' in msg_from_model and msg_from_model['event'] == 'PaymentAccepted':
@@ -367,6 +370,7 @@ class Controller:
             self.payment_failed_count=0 # reset counter
             msg_to_model = {'cmd': 'unpause execution' }
             self.to_model_q.put_nowait(msg_to_model)
+            self.whether_paused=False
         elif 'set budget=' in ucmd:
             tokens = ucmd.split("=")
             self.BUDGET = float(tokens[-1])

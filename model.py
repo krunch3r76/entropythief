@@ -257,7 +257,7 @@ class model__EntropyThief:
         #     2   test if within budget
         if count_bytes_requested > 0 and \
         self.bytesInPipe < int(self.MINPOOLSIZE/2) and \
-        self._costRunning < self.BUDGET:
+        self._costRunning < (self.BUDGET - 0.02):
             package = await vm.repo(
                     image_hash=self.IMAGE_HASH
                     , min_mem_gib=0.3

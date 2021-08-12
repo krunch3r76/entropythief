@@ -247,12 +247,15 @@ class View:
     def _init_screen(self):
         try:
             self.screen = curses.initscr() 
+            curses.start_color()
             curses.noecho()
             curses.cbreak()
             windir = view__create_windows(self)
             self.win = windir['outputfield']
             self.winbox = windir['inputfield']
-            # self.win, self.winbox, self.popupwin = view__create_windows(self)
+
+            curses.use_default_colors()
+            curses.init_pair(3, curses.COLOR_YELLOW, -1)
         except Exception as e:
             curses.nocbreak()
             curses.echo()
@@ -347,8 +350,9 @@ class View:
     #..View.........................#
     #.          getinput           .#
     #...............................#
-    def getinput(self, current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, bytesInPipe=0):
+    def getinput(self, current_total, MINPOOLSIZE, BUDGET, MAXWORKERS, count_workers, bytesInPipe, whether_paused):
         # update status line
+
         Y, X = self.winbox.getyx()
         yMax, xMax = self.winbox.getmaxyx()
         current_total_str = "cost:{:.5f}".format(current_total)
@@ -356,11 +360,12 @@ class View:
         maxworkers_str = "{:02d}".format(MAXWORKERS)
         countworkers_str = "{:02d}".format(count_workers)
 
-
         self.winbox.move(Y, len(self.linebuf)+1)
         self.winbox.clrtoeol()
         ADJUST=15
         if xMax-53-ADJUST > 0:
+            if whether_paused:
+                self.winbox.addstr(Y, xMax-60-ADJUST, "PAUSED", curses.color_pair(3) | curses.A_BLINK)
             if xMax-53-ADJUST + 3 > 0:
                 self.winbox.addstr(Y, xMax-53-ADJUST, "ESC", curses.A_ITALIC | curses.A_STANDOUT)
             if xMax-46-ADJUST + 2 + len(countworkers_str) + 1 + len(maxworkers_str) > 0:
@@ -371,7 +376,6 @@ class View:
                 self.winbox.addstr(Y, xMax-37-ADJUST+len(current_total_str), "/"+current_budget_str)
             if xMax-15-ADJUST + 14 > 0:
                 self.winbox.addstr(Y, xMax-15-ADJUST, "%.30s" % f"buf:{bytesInPipe}/{str(MINPOOLSIZE)}")
-
         self.winbox.move(Y, X)
 
         ucmd = ""
