@@ -85,16 +85,45 @@ class MyBytesIO(io.BytesIO):
     def read(self, count):
         rv = super().read(count)
         return rv
+    """
 
     def putback(self, count):
-        self.seek(count, io.SEEK_SET)
-    """
+        self.seek(-count, io.SEEK_CUR)
 
     def write(self, count):
         assert False, "MyBytesIO does not support write operation"
 
 
+class MyBytesDeque(collections.deque):
+    _runningTotal = 0
 
+    def __init__(self):
+        super().__init__()
+
+    def append(self, mybytesio):
+        self._runningTotal += len(mybytesio)
+        super().append(mybytesio)
+
+    def insert(self, index, mybytesio):
+        self._runningTotal += len(mybytesio)
+        super().insert(index, mybytesio)
+
+    def appendleft(self, mybytesio):
+        self.insert(0, mybytesio)
+
+    def popleft(self):
+        rv = super().popleft()
+        self._runningTotal -= len(rv)
+        return rv
+
+    def len(self):
+        return self._runningTotal
+
+    def __len__(self):
+        return self.len()
+
+    # def total(self):
+    #     return self.len()
 
 
   #-------------------------------------------------#
@@ -145,7 +174,7 @@ def _write_to_pipe(fifoWriteEnd, thebytes):
  #                      PipeWriter{}                         #
 #############################################################
 class PipeWriter:
-    _byteQ = collections.deque()
+    _byteQ = MyBytesDeque()
     _fdPipe = None
     _pipeCapacity = 0
     _maxCapacity = None
@@ -259,7 +288,7 @@ class PipeWriter:
     # -----------------------------------------
     def countAvailable(self):
     # -----------------------------------------
-        return self._maxCapacity - self._count_bytes_in_pipe() - self._byteQ.qsize()
+        return self._maxCapacity - self._count_bytes_in_pipe() - self._byteQ.len()
 
 
 
@@ -345,9 +374,9 @@ class PipeWriter:
             countBytesIn = self.countAvailable()
         bytesToStore=countBytesIn
         if countBytesIn > 0 or bytesToStore > 0:
-            print(f"countBytesIn: {countBytesIn}", file=sys.stderr)
-            print(f"bytesToStore: {bytesToStore}", file=sys.stderr)
         bytestream = io.BytesIO(data)
+
+        # chunk input into pages added to the byteQ
         while True:
             chunk_of_bytes = bytestream.read(4096)
             if len(chunk_of_bytes) == 0:
@@ -362,27 +391,30 @@ class PipeWriter:
             self._open_pipe()
 
         # move data from queue to top of pipe
-        countBytesAvailableInPipe = ___countAvailableInPipe(self) # empty count
-        # assume countBytesAvailableInPipe will be completely filled
-        # so we read that many out of the queue
-        if not self._byteQ.empty() and countBytesAvailableInPipe > 0: # and self._whether_pipe_is_ready_for_writing():
-            bytestream=io.BytesIO()
-            if self._len_q() > countBytesAvailableInPipe:
-                while True:
-                    try:
-                        popped = self._byteQ.popleft()
-                        bytestream.write(popped.getbuffer())
-                        popped.close
-                    except IndexError:
-                        break
-            else:
-                runningtotal=0
-                while True:
-                    
-                # for now just find the first buffer before which the pipe would be overfilled
+        free = ___countAvailableInPipe(self) # empty count
+        BLOCKED = False
+        while free > 0 and not BLOCKED:
+            try:
+                first = self._byteQ.popleft()
+                if first.len() <= free:
+                    written = _write_to_pipe(self._fdPipe, first.getbuffer())
+                    if written == 0:
+                        BLOCKED = True
+                        self._byteQ.appendleft(first)
+                    else:
+                        free -= first.len() # assumes all written
+                        continue # superfluous
+                else: # len(first) > free
+                    frame = first.read(free)
+                    written = _write_to_pipe(self._fdPipe, frame[:free])
+                    if written == 0:
+                        BLOCKED = True
+                        first.putback(free)
+                    else:
+                        self._byteQ.appendleft(first)
+            except IndexError:
+                break
 
-            ___try_write(self, bytestream.getbuffer())
-            
         return len(data) # stub
 
 
@@ -398,8 +430,9 @@ class PipeWriter:
             countBytesInBuffers += len(ba)
         return countBytesInBuffers
         """
-        return self._byteQ.qsize()
-
+        return self._byteQ.len()
+        # return self._byteQ.qsize()
+        
 
 
     # -------------------------------------------
