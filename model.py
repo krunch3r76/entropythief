@@ -437,7 +437,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     loop = asyncio.get_running_loop()
     async for task in tasks:
         # loop.run_in_executor(None, task.data['writer'].refresh)
-        task.data['writer'].refresh()
+        # task.data['writer'].refresh()
         # request <count> bytes from provider and wait
         try:
             ################################################
@@ -445,7 +445,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             ################################################
             ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']), task.data['rdrand_arg'])
             yield ctx.commit(timeout=timedelta(seconds=70))
-            task.data['writer'].refresh()
+            # task.data['writer'].refresh()
 
             ################################################
             # download the results on successful execution #
@@ -453,7 +453,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             Path_output_file = Path(gettempdir()) / str(uuid4())
             ctx.download_file(worker_public.RESULT_PATH, str(Path_output_file))
             yield ctx.commit(timeout=timedelta(seconds=45))
-            task.data['writer'].refresh()
+            # task.data['writer'].refresh()
 
             #debug
             # print(f"{task.data['writer']._writerPipe}", file=sys.stderr)
