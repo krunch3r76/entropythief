@@ -2,15 +2,13 @@
 **LINUX little endian (e.g. Intel chips/little endian i.e. not Raspberry Pi/ARM) only**
 **A golem requestor installation is needed to run this app. Please visit https://www.golem.network for details**
 
-**There is a bug  (issue #14) where there appears to be spurious rewrites of random data. pipe_writer.py is currently being rewritten to correct this as is in testing on the taskresultwriter branch, thanks for your interest, and stay tuned**
- 
 get random entropy at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (default). requests are sent whenever the named pipe falls below a half the set threshold. 
 
 usage:
 ```
 git clone https://github.com/krunch3r76/entropythief.git
 cd entropythief
-git checkout alpha-v7.23 # note, the (multiple) named pipe model is being revised as too many causes problems
+git checkout alpha-v7.24 # note, the (multiple) named pipe model is being revised as too many causes problems
 python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r requirements.txt
