@@ -209,39 +209,39 @@ class Controller:
                 #########################################################
                 #   update status line and receive client input if any  #
                 #########################################################
-                ucmd = self.theview.getinput(self.current_total,        #
-                        self.MINPOOLSIZE,                               #
-                        self.BUDGET,                                    #
-                        self.MAXWORKERS,                                #
-                        self.count_workers,                             #
-                        self.bytesInPipe)                               #
+                ucmd = self.theview.getinput(self.current_total,
+                        self.MINPOOLSIZE,
+                        self.BUDGET,
+                        self.MAXWORKERS,
+                        self.count_workers,
+                        self.bytesInPipe)
                 
                 #############################################
                 #   process any client input                #
                 #############################################
                 #   exit loop on "error" or request to stop #
                 if ucmd:                                    #
-                    ERROR = self._hook_view(ucmd)            #
-                    if ERROR:                               #
-                        break                               #
+                    ERROR = self._hook_view(ucmd)
+                    if ERROR:
+                        break
 
                 #####################################################
                 #   process model signal                            #
                 #####################################################
-                # internally calls self.u_update_main_window        #
-                # exit loop on error                                #
-                if not self.from_model_q.empty():                   #
-                    msg_from_model = self.from_model_q.get_nowait() #
-                    ERROR = self._hook_model(msg_from_model)        #
-                    if ERROR:                                       #
-                        break                                       #
+                # internally calls self.u_update_main_window
+                # exit loop on error
+                if not self.from_model_q.empty():
+                    msg_from_model = self.from_model_q.get_nowait()
+                    ERROR = self._hook_model(msg_from_model)
+                    if ERROR:
+                        break
 
                 #############################################
                 #   flush writes to display                 #     
                 #############################################
-                REFRESH = next(self.u_update_main_window)   #
-                if REFRESH:                                 #
-                    self.theview.refresh()                  #
+                REFRESH = next(self.u_update_main_window)
+                if REFRESH:
+                    self.theview.refresh()
 
                 await asyncio.sleep(0.01)
             #/while
