@@ -73,7 +73,6 @@ class TaskResultWriter(ABC):
 
     def _write_to_pipe(self, data):
         written = self._writerPipe.write(data)
-        print(f"DEBUG TaskResultWriter: sent {written} bytes to pipe writer\n", file=sys.stderr)
         # self._flush_pipe()
         return written
 

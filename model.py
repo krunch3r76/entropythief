@@ -222,7 +222,7 @@ class model__EntropyThief:
         #  divide a total into a list of partition  #
         #   counts                                  #
         #...........................................#
-        def partition(total, maxcount=6):
+        def helper__partition(total, maxcount=6):
             if total == 1:
                 return [total]
 
@@ -252,6 +252,9 @@ class model__EntropyThief:
         ####################################################################|
         # check whether task result writer can/should accept more bytes     #
         _log_msg(f"::[provision()] the costs so far are: {self._costRunning}", 11)
+
+        # 2.4.1)  test if bytes available from task result writer are beneath threshold
+        #     2   test if within budget
         if count_bytes_requested > 0 and \
         self.bytesInPipe < int(self.MINPOOLSIZE/2) and \
         self._costRunning < self.BUDGET:
@@ -260,7 +263,6 @@ class model__EntropyThief:
                     , min_mem_gib=0.3
                     , min_storage_gib=0.3
                 )
-        #                                                                   |
 
 
 
@@ -273,14 +275,16 @@ class model__EntropyThief:
                     , network=self.args.network
                     , driver=self.args.driver
                     , event_consumer=MySummaryLogger(self).log
-                    # , event_consumer=mySummaryLogger.log
                     , strategy=self.strat
             ) as golem:
 
 
+                # partition the work into evenly spaced lengths except for last
+                bytes_partitioned= helper__partition(count_bytes_requested, self.MAXWORKERS)
 
-                bytes_partitioned= partition(count_bytes_requested, self.MAXWORKERS)
                 _log_msg(f"::[provision()] {count_bytes_requested} bytes, partition counts: {bytes_partitioned}", 1)
+
+                # 2.4.3)  initialize work needed per node across a list of Task objects
                 completed_tasks = golem.execute_tasks(
                         steps
                         , [yapapi.Task(
@@ -295,10 +299,8 @@ class model__EntropyThief:
             #                                                                           /
 
 
-
-
-                ####################################################################\
-                # run tasks asynchronously and collect results                      #
+                # 2.4.4)  run tasks asynchronously collecting results and returning control after
+                #            each result collected
                 async for task in completed_tasks:
                     if task.result:
                         self.taskResultWriter.add_result_file(task.result)
@@ -351,25 +353,26 @@ class model__EntropyThief:
                     , use_rdrand = self.args.rdrand
                 ) 
         try:
+            # see if there are any bytes already in the pipe # may not be necessary
             self.bytesInPipe = self.taskResultWriter.query_len() # note bytesInPipe is the lazy count
 
             while not self.OP_STOP:
-                loop = asyncio.get_running_loop()
-                # loop.run_in_executor(None, self.taskResultWriter.refresh)
+                # 2.1) flush any pending processes in the task result writer
                 self.taskResultWriter.refresh()
 
+                # 2.2) query task result writer for the number of bytes stored and relay to controller
                 delta = self.hasBytesInPipeChanged()
                 if delta != 0:
                     msg = {'bytesInPipe': self.bytesInPipe}; self.to_ctl_q.put_nowait(msg)
                     if delta < 0:
-                        print(f"The bytesInPipe has increased by {abs(delta)}", file=sys.stderr)
+                        _log_msg(f"The bytesInPipe has increased by {abs(delta)}", 1)
                 
+                # 2.3) receive and handle a message from the controller if any
                 if not self.from_ctl_q.empty():
                     self._hook_controller(self.from_ctl_q.get_nowait())
-                    
-                #########################################################
-                # 2.4) provision work if needed
-                #########################################################
+                # [[state change]]
+
+                # 2.4) provision work if possible               #
                 if not self.OP_STOP and not self.OP_PAUSE: # OP_STOP might have been set by the controller hook
                     await self._provision()
 
@@ -432,11 +435,20 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
         task.data['writer'].refresh()
         # request <count> bytes from provider and wait
         try:
+            ################################################
+            # execute the worker in the vm                 #
+            ################################################
             ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']), task.data['rdrand_arg'])
-            yield ctx.commit(timeout=timedelta(seconds=90))
+            yield ctx.commit(timeout=timedelta(seconds=70))
+
+
+            ################################################
+            # download the results on successful execution #
+            ################################################
             Path_output_file = Path(gettempdir()) / str(uuid4())
             ctx.download_file(worker_public.RESULT_PATH, str(Path_output_file))
-            yield ctx.commit()
+            yield ctx.commit(timeout=timedelta(seconds=45))
+
             #debug
             # print(f"{task.data['writer']._writerPipe}", file=sys.stderr)
         except rest.activity.BatchTimeoutError: # credit to Golem's blender.py
@@ -461,6 +473,9 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             #debug
             # print(f"Result exists?: {bool(task)}\n", file=sys.stderr)
         else:
+            ###################################################
+            # accept the downloaded file as the task result   #
+            ###################################################
             task.accept_result(result=str(Path_output_file))
         finally:
             if not task.result:
