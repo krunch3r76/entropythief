@@ -2,22 +2,28 @@
 **LINUX little endian (e.g. Intel chips/little endian i.e. not Raspberry Pi/ARM) only**
 **A golem requestor installation is needed to run this app. Please visit https://www.golem.network for details**
 
+**note this page is pending an update to alphav8 and some features may not be implemented as of this writing. it will be update shortly**
 get random entropy at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (default). requests are sent whenever the named pipe falls below a half the set threshold. 
 
 usage:
 ```
 git clone https://github.com/krunch3r76/entropythief.git
 cd entropythief
-git checkout alpha-v7.26 # note, the (multiple) named pipe model is being revised as too many causes problems
+git checkout alpha-v8 # note, the (multiple) named pipe model is being revised as too many causes problems
 python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r requirements.txt
 ./entropythief.py # --help # to change the network from the default rinkeby and the subnet-tag from the default devnet-beta.2
 
-# in a separate window
+# in a separate window while entropythief is running
 cd readers/print_nonce
-python3 print_nonce.py # watch how the status line changes!
-# optional: tail yapapi log and/or stderr file
+python3 print_nonce.py # to read some nonces
+
+python3 burn.sh # simple interactive script to read continuously from the pipe to demonstrate pipe refills
+
+
+# optional: 
+tail -f stderr # or the entropythief yapapi log file
 ```
 
 this requestor runs to pilfer as many bytes of random 1's and 0's from up to as many providers as the user specifies. these parameter(s) can be adjusted on the fly by the user with the following commands:
@@ -29,11 +35,14 @@ restart               # after so many payment failures or after budget is exceed
 stop                  # stop/exit
 ```
 
-try:
-`set buflim=1000*2**20` for 1 gigabyte of random data
-
-and `set maxworkers=13` across 13 workers
-
+try: **note the following could take awhile to complete but depending on network conditions but bytes are asynchronously chunked so it is not a hard wait; remember, you may want to follow along by invoking tail -f stderr.**
+```
+pause
+set maxworkers=13 across 13 workers
+set buflim=250*2**20 for 1/4 gigabyte of random bytes
+set budget=5
+start
+```
 __Usage/API__:
 once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to a named pipe, topping it off. the named pipe can accessed via any programming language and a sample Python API is provided at `readers/pipe_reader.py`, and an example script is in `readers/print_nonce`. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. 
 
@@ -79,18 +88,14 @@ have fun with a unpredictable and exotic stream of 1's and 0's!
 this application exposes undocumented parts of the Python API to handle specific events in a novel way and to filter providers. see the code for details (elaboration to follow).
 
 ```
+TO DO: video demonstration
 TO DO: UI view of log messages or other interesting network activity
 TO DO: a discussion of randomness and the difference between random bits vs random number generators.
-TO DO: further modularize/abstract view to facilitate porting and daemonization
 TO DO: windows compatible routines for named pipes (and UI)
-TO DO: detail design e.g. my original, self developed mvc model, etc
-TO DO: develop a market strategy for better rates
-TO DO: video demonstration
-TO DO: improve comments
-TO DO: document flow
+TO DO: develop an improved market strategy for better rates
 ```
 
-CREDITS TO ADD TO SOURCE: Intel provided the inline assembly to obtain random int64's from the processor.
+CREDITS TO ADD TO SOURCE: Intel provided the inline assembly to obtain random int64's from the processor. entropythief was inspired by its predecessor golem app: https://github.com/reza-hackathons/gandom. the splash screen ascii art was obtained from: 
 
 Reflections:
 Randomness (exotic) is expensive. To get enough of it I think you literally have to steal it! This is a problem entropy thief is working on but as of yet it serves as a POC with components that can be implemented in other apps where randomness or other features need to be leveraged.
