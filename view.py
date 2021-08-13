@@ -439,11 +439,16 @@ class View:
                     self.winbox.addstr('>')
             elif chr(result) in string.printable:
                 # [char]
-                self.linebuf.append(chr(result))
-                if len(self.linebuf) > 0:
+                curses.update_lines_cols()
+                maxY, maxX = self.winbox.getmaxyx()
+                y, x = self.winbox.getyx()
+                if len(self.linebuf) < maxX - 2: #and len(self.linebuf) > 0:
+                    self.linebuf.append(chr(result))
                     self.winbox.addstr(0, len(self.linebuf), self.linebuf[-1]) # append last character from linebuf
                 else:
-                    self.winbox.addstr(0, 1, "")
+                    self.winbox.move(0,1)
+                    self.linebuf.clear()
+                    # self.winbox.addstr(0, 1, "")
             elif result == curses.ascii.ESC:
                 self.win.toggle__splash()
         elif result == curses.KEY_RESIZE:

@@ -251,7 +251,7 @@ class Controller:
                 if REFRESH:
                     self.theview.refresh()
 
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.01)
             #/while
         except asyncio.CancelledError:
             pass
@@ -372,7 +372,7 @@ class Controller:
             self.MAXWORKERS = int(tokens[-1])
             msg_to_model = {'cmd': 'set maxworkers', 'count': self.MAXWORKERS}
             self.to_model_q.put_nowait(msg_to_model)
-        elif ucmd=='restart':
+        elif ucmd=='restart' or ucmd=='start':
             self.payment_failed_count=0 # reset counter
             msg_to_model = {'cmd': 'unpause execution' }
             self.to_model_q.put_nowait(msg_to_model)
@@ -382,6 +382,9 @@ class Controller:
             self.BUDGET = float(tokens[-1])
             msg_to_model = {'cmd': 'set budget', 'budget': self.BUDGET}
             self.to_model_q.put_nowait(msg_to_model)
+        elif ucmd =='pause':
+            msg_to_model = {'cmd': 'pause execution'}; self.to_model_q.put_nowait(msg_to_model)
+            self.whether_paused=True
         return ERROR
 
 
@@ -408,5 +411,8 @@ if __name__ == "__main__":
         loop.run_until_complete(task)
         print(task.exception(), file=sys.stderr)
     finally:
-        pass
+        print("\nCREDITS")
+        print("entropythief was inspired by gandom https://github.com/reza-hackathons/gandom")
+        print("the splash screen ascii art was obtained from https://asciiart.website/index.php?art=logos%20and%20insignias/smiley")
+
 
