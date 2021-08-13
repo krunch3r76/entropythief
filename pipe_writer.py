@@ -288,10 +288,10 @@ class PipeWriter:
 
 
     # -----------------------------------------
-    def refresh(self):
+    async def refresh(self):
     # -----------------------------------------
         self._open_pipe()
-        self.write(bytearray())
+        await self.write(bytearray())
 
 
 
@@ -315,10 +315,10 @@ class PipeWriter:
 
 
     # ----------------------------------------------
-    def write(self, data):
+    async def write(self, data):
     # -----------------------------------------
         if data and len(data) > 0:
-            _log_msg(f"::[write] received {len(data)} bytes", 1)
+            _log_msg(f"::[write] received {len(data)} bytes", 3)
         ###############################################################
 
         # .........................................
@@ -339,30 +339,36 @@ class PipeWriter:
         #               // begin routine write //                      #
         ################################################################
 
+
         # append queue with data
         countBytesIn = len(data)
 
         if countBytesIn > self.countAvailable():
             countBytesIn = self.countAvailable()
+
         bytesToStore=countBytesIn
 
         bytestream = io.BytesIO(data)
 
-        # chunk input into pages added to the byteQ, might help prevent blocking io
-        # might facilitate asynchronous implementation
-        debugCount=0
-        while True:
-            chunk_of_bytes = bytestream.read(4096)
-            debugCount+=len(chunk_of_bytes)
-            if len(chunk_of_bytes) == 0:
-                break
-            self._byteQ.append(MyBytesIO(chunk_of_bytes))
+        if countBytesIn > 0:
+            # chunk input into pages added to the byteQ, might help prevent blocking io
+            # might facilitate asynchronous implementation
+            debugCount=0
+            while True:
+                chunk_of_bytes = bytestream.read(4096)
+                debugCount+=len(chunk_of_bytes)
+                if len(chunk_of_bytes) == 0:
+                    break
+                self._byteQ.append(MyBytesIO(chunk_of_bytes))
+                # await asyncio.sleep(0.01) 
 
-        #### reconnect a broken pipe if applicable
-        if self._whether_pipe_is_broken():
-            self._open_pipe()
+            #### reconnect a broken pipe if applicable
+            if self._whether_pipe_is_broken():
+                self._open_pipe()
+
 
         # move data from queue to top of pipe
+        _log_msg(f"[::write]] topping off pipe", 10)
         free = ___countAvailableInPipe(self) # empty count
         BLOCKED = False
         while free > 0 and not BLOCKED:
@@ -387,8 +393,10 @@ class PipeWriter:
             except IndexError:
                 break
 
-        # print(f"BLOCKED: {BLOCKED}", file=sys.stderr)
-        return len(data) # stub
+        if len(data) > 0:
+            return len(data[:countBytesIn]) # stub
+        else:
+            return 0
 
 
 

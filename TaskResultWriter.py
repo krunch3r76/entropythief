@@ -67,12 +67,12 @@ class TaskResultWriter(ABC):
         # self._writerPipe = pipe_writer.PipeWriter(POOL_LIMIT)
 
 
-    def _flush_pipe(self):
-        self._writerPipe.refresh()
+    async def _flush_pipe(self):
+        await self._writerPipe.refresh()
 
 
-    def _write_to_pipe(self, data):
-        written = self._writerPipe.write(data)
+    async def _write_to_pipe(self, data):
+        written = await self._writerPipe.write(data)
         # self._flush_pipe()
         return written
 
@@ -91,10 +91,13 @@ class TaskResultWriter(ABC):
         return self._writerPipe.countAvailable()
 
     # the inheritor may wish to write processed data first then calling this as a super
-    def refresh(self):
+    async def refresh(self):
         # since the PipeWriter object must be manually refreshed regularly
-        self._flush_pipe()
+        await self._flush_pipe()
 
+    # number of result files added so far
+    def count_uncommitted(self):
+        pass
 
     @abstractmethod
     def add_result_file(self, filepathstring):
@@ -225,7 +228,10 @@ class Interleaver(TaskResultWriter):
         source = Interleaver__Source(filepathstring)
         self._source_next_group.append(source)
 
-
+    # ----------------------------------
+    def count_uncommitted(self):
+    # ----------------------------------
+        return len(self._source_next_group)
 
 
     # commit_added_result_files is called when a new group of files have been added
@@ -247,7 +253,7 @@ class Interleaver(TaskResultWriter):
 
     # post: if a group is available and readable, the `_writerPipe` is given a "book" of interleaved bytes
     # ---------------------------------------
-    def refresh(self):
+    async def refresh(self):
     # ---------------------------------------
         # ........................................
 
@@ -283,27 +289,43 @@ class Interleaver(TaskResultWriter):
             for source in self._source_groups[0]:
                 try:
                     pages.append(io.BytesIO(source.read(self._page_size)))
+                    await asyncio.sleep(0.01)
                 except Exception as e:
                     pass # unexpected, remove later
 
             # write the pages into a single book, alternating each byte across all pages
             book=io.BytesIO()
+            sleepinterval=0
+            intervalcount=0
             for _ in range(self._page_size):
                 for page in pages:
                     book.write(page.read(1))
+                    sleepinterval+=1
+                if sleepinterval % 4096 == 0:
+                    sleepinterval=0
+                    intervalcount+=1
+                    await asyncio.sleep(0.01)
+                    if intervalcount % 10 == 0:
+                        written = await self._write_to_pipe(book.getbuffer())
+                        randomBytesView = book.getvalue()
+                        msg = randomBytesView[:written].hex()
+                        to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}; self.to_ctl_q.put_nowait(to_ctl_cmd)
+                        book.close()
+                        book=io.BytesIO()
+                        # directly inform controller of any change in pipe, which is next to guaranteed
+                        msg = {'bytesInPipe': self.query_len()}; self.to_ctl_q.put_nowait(msg)
+
+            written = await self._write_to_pipe(book.getbuffer())
+            # share with controller a view of the bytes written
+            randomBytesView = book.getvalue()
+            msg = randomBytesView[:written].hex()
+            to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}; self.to_ctl_q.put_nowait(to_ctl_cmd)
+            msg = {'bytesInPipe': self.query_len()}; self.to_ctl_q.put_nowait(msg)
 
             for page in pages:
                 page.close() # garbage collect pages (not really necessary in this case)
 
-            written = self._write_to_pipe(book.getvalue())
-
-            # share with controller a view of the bytes written
-            randomBytesView = book.getbuffer()
-            msg = randomBytesView[:written].hex()
-            to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}
-            self.to_ctl_q.put_nowait(to_ctl_cmd)
-
-        self._flush_pipe()
+        await self._flush_pipe()
 
 
 

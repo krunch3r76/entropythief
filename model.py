@@ -49,10 +49,11 @@ DEVELOPER_LOG_EVENTS = True
 _DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL']) if 'PYTHONDEBUGLEVEL' in os.environ else 0
 
 
-def _log_msg(msg, debug_level=0, stream=sys.stderr):
+def _log_msg(msg, debug_level=0, color=utils.TEXT_COLOR_MAGENTA):
     pass
     if debug_level <= _DEBUGLEVEL:
-        print(f"\n[model.py] {msg}\n", file=sys.stderr)
+        print(f"\n[model.py] {color}{msg}{utils.TEXT_COLOR_DEFAULT}\n", file=sys.stderr)
+        # print(f"\n[model.py] {utils.TEXT_COLOR_MAGENTA}{msg}{utils.TEXT_COLOR_DEFAULT}\n", file=sys.stderr)
 
 
 """
@@ -303,25 +304,26 @@ class model__EntropyThief:
                 #            each result collected
                 async for task in completed_tasks:
                     if task.result:
+                        _log_msg(f"::[provision()] saw a task result, its contents are {task.result}", 1)
                         self.taskResultWriter.add_result_file(task.result)
-
-                        if self.hasBytesInPipeChanged():
-                            msg = {'bytesInPipe': self.bytesInPipe}
-                            self.to_ctl_q.put_nowait(msg)
-
-                        self.taskResultWriter.refresh()
+                        _log_msg(f"::[provision()] number of task results added to writer: {self.taskResultWriter.count_uncommitted()}", 1)
+                        # optionally (testing for performance)
+                        # inform task result writer that all results have been given to it  #
+                        # this is done in the loop ahead of the network communications to finalize
+                        # all transactions so work can continue asynchronously
+                        # if self.taskResultWriter.count_uncommitted() == self.MAXWORKERS:
+                            # self.taskResultWriter.commit_added_result_files()
+                        await self.taskResultWriter.refresh()
 
                     else:
                         pass # no result implies rejection which steps reprovisions
                 #                                                                   /
 
-
+                _log_msg(f"::[provision()] committing added files now", 1)
+                self.taskResultWriter.commit_added_result_files()
 
 
                 ####################################################################\
-                # inform task result writer that all results have been given to it  #
-                self.taskResultWriter.commit_added_result_files()
-                #                                                                   /
 
 
 
@@ -362,7 +364,7 @@ class model__EntropyThief:
             while not self.OP_STOP:
 
                 # 2.1) flush any pending processes/buffers in the task result writer
-                self.taskResultWriter.refresh()
+                await self.taskResultWriter.refresh()
 
                 # 2.2) query task result writer for the number of bytes stored and relay to controller
                 delta = self.hasBytesInPipeChanged()
@@ -433,7 +435,7 @@ class model__EntropyThief:
 async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
 
 ##############################################################################
-
+    Path_output_file = None
     loop = asyncio.get_running_loop()
     async for task in tasks:
         # loop.run_in_executor(None, task.data['writer'].refresh)
@@ -444,16 +446,14 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             # execute the worker in the vm                 #
             ################################################
             ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']), task.data['rdrand_arg'])
-            yield ctx.commit(timeout=timedelta(seconds=70))
-            # task.data['writer'].refresh()
+            yield ctx.commit(timeout=timedelta(seconds=120))
 
             ################################################
             # download the results on successful execution #
             ################################################
             Path_output_file = Path(gettempdir()) / str(uuid4())
             ctx.download_file(worker_public.RESULT_PATH, str(Path_output_file))
-            yield ctx.commit(timeout=timedelta(seconds=45))
-            # task.data['writer'].refresh()
+            yield ctx.commit(timeout=timedelta(seconds=120))
 
             #debug
             # print(f"{task.data['writer']._writerPipe}", file=sys.stderr)
@@ -465,8 +465,6 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                     , file=sys.stderr
                 )
             task.reject_result("timeout", retry=True) # need to ensure a retry occurs! TODO
-            #debug
-            # print(f"Result exists?: {bool(task)}\n", file=sys.stderr)
         except Exception as e: # define exception TODO
             print(
                     f"{utils.TEXT_COLOR_RED}"
@@ -485,7 +483,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             task.accept_result(result=str(Path_output_file))
         finally:
             if not task.result:
-                if Path_output_file.exists():
+                if Path_output_file and Path_output_file.exists():
                     Path_output_file.unlink()
 
 
@@ -516,7 +514,7 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
 
     @costRunning.setter
     def costRunning(self, amount):
-        _log_msg(f"[MySummaryLogger{{}}] Setting costRunning to {amount}", 1)
+        _log_msg(f"[MySummaryLogger{{}}] Setting costRunning to {amount}", 3)
         self.model._costRunning = amount
 
     def __init__(self, model):
@@ -529,10 +527,11 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
     def log(self, event: yapapi.events.Event) -> None:
 
         # during an execution we are interested in updating the state
-        # while executions are pending, we hook to refresh the buffer
+        # while executions are pending, we hook to inspect the buffer
         # state and update the controller here while events are emitted
         # there is probably a more Pythonic + yapapi way to handle this TODO
-        self.model.taskResultWriter.refresh()
+
+        # await self.model.taskResultWriter.refresh()
         _log_msg(f"[MySummaryLogger{{}}] REFRESHing taskResultWriter on log event", 10)
         delta = self.model.hasBytesInPipeChanged()
         if delta != 0:
