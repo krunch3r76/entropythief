@@ -159,8 +159,9 @@ class Display:
 >set buflim=<NUM>
 >set maxworkers=<NUM>
 >set budget=<FLOAT>
->stop
->restart    # after pause due to budget limit
+>stop       # exit or CTRL-C
+>pause
+>restart    #  or start after pause
 <ESC> toggle this menu
 """
         self._splash.text(txt)
