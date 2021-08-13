@@ -25,7 +25,7 @@ python3 burn.sh # simple interactive script to read continuously from the pipe t
 tail -f stderr # or the entropythief yapapi log file
 ```
 
-this requestor runs to pilfer as many bytes of random 1's and 0's from up to as many providers as the user specifies. these parameter(s) can be adjusted on the fly by the user with the following commands:
+this requestor runs to pilfer as many bytes of random 1's and 0's from as many providers as the user specifies. these parameter(s) can be adjusted on the fly by the user with the following commands:
 ```
 set buflim=<num>      # the minimum threshold that entropythief should do its best to stay above (refills when it falls beneath half this value)
 set maxworkers=<num>  # the most workers Golem executor can provision  # the more the more exotic!
