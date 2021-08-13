@@ -124,7 +124,7 @@ class Controller:
     bytesInPipe = 0
     payment_failed_count = 0
     current_total = 0.0
-    whether_paused = False
+    whether_paused = True
 
     theview = None
     themodeltask = None
@@ -204,6 +204,12 @@ class Controller:
     #   ---------Controller------------
     async def __call__(self):
     #   -------------------------------
+
+        if not self.args.start_paused:
+            msg_to_model = {'cmd': 'unpause execution' }
+            self.to_model_q.put_nowait(msg_to_model)
+            self.whether_paused=False
+
         try:
             while True:
 
@@ -245,7 +251,7 @@ class Controller:
                 if REFRESH:
                     self.theview.refresh()
 
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.1)
             #/while
         except asyncio.CancelledError:
             pass

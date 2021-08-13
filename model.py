@@ -348,7 +348,7 @@ class model__EntropyThief:
             self.rdrand_arg = 'devrand'
 
         self.OP_STOP = False
-        self.OP_PAUSE = False
+        self.OP_PAUSE = True # wait for controller to send start signal as restart
         self.strat = MyLeastExpensiveLinearPayMS( # these MS parameters are not clearly documented ?
                     max_fixed_price=Decimal("0.00") # testing, ideally this works with the epsilon in model...
                     , max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.05")

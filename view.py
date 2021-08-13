@@ -1,6 +1,7 @@
 # view
 # author: krunch3r (KJM github.com/krunch3r76)
 # license: General Poetic License (GPL3)
+import os,sys,subprocess #testing
 
 import curses
 import curses.ascii
@@ -12,9 +13,6 @@ import string
 import time # debug
 import io
 from queue import SimpleQueue
-
-
-
 
 
 
@@ -147,8 +145,10 @@ class Display:
     #....Display....................#
     #.          __init__           .#
     #...............................#
-    def __init__(self):
+    def __init__(self, background):
+        self.background=background
         self._widget = curses.newwin(curses.LINES-1, curses.COLS, 0, 0)
+        self._load_background()
         self._widget.idlok(True);
         self._widget.scrollok(True)
         self._widget.syncok(False) # testing for UI improvement
@@ -164,10 +164,30 @@ class Display:
 <ESC> toggle this menu
 """
         self._splash.text(txt)
-    
+
         # debug
         # curses.endwin()     
         # /debug
+
+
+    def _load_background(self):
+        y=0; x=0
+        h, w= self._widget.getmaxyx()
+        inner_height, inner_width = self.background.inner_height, self.background.inner_width
+
+        if inner_height < h:
+            margin = int((h - inner_height)/2)
+            y+=margin
+
+       
+        if inner_width < w:
+            margin = int((w - inner_width)/2)
+            x+=margin
+
+        if inner_height < h and inner_width < w:
+            for line in self.background.lines:
+                self._widget.addstr(y, x, line.rstrip())               
+                y+=1
 
 
 
@@ -189,6 +209,9 @@ class Display:
         self._widget.refresh()
 
 
+
+
+
     #....Display....................#
     #.    toggle__splash           .#
     #...............................#
@@ -206,12 +229,13 @@ class Display:
  # view__init_curses()             #
 ###################################
 # required by View::_init_screen
-def view__create_windows(view):
-    win = Display()
+def view__create_windows(view, background):
+    win = Display(background)
 
     winbox = curses.newwin(1, curses.COLS, curses.LINES-1, 0)
     winbox.addstr(0, 0, ">")
     winbox.nodelay(True)
+
     return { 'outputfield': win, 'inputfield': winbox }
 
 
@@ -227,6 +251,19 @@ def view__create_windows(view):
 
 
 
+class Background:
+    # inner_height
+    # inner_width
+    def __init__(self):
+        with open("dontpanic.txt") as f:
+            self.lines = f.readlines()
+                        
+        self.inner_height = len(self.lines)
+        self.inner_width = 0
+        for line in self.lines:
+            if len(line) > self.inner_width:
+                self.inner_width = len(line)
+        # post: inner_height, inner_width, lines
 
 
   ###################################
@@ -241,21 +278,29 @@ class View:
 
 
 
+
+
     #..View............................#
     #.          _init_screen          .#
     #..................................#
     def _init_screen(self):
         try:
+            # subprocess.run(['resize', 100, 100])
+            # sys.stdout.write("\e[8;50;100t")
             self.screen = curses.initscr() 
             curses.start_color()
             curses.noecho()
             curses.cbreak()
-            windir = view__create_windows(self)
+
+            
+            windir = view__create_windows(self, self.background)
             self.win = windir['outputfield']
             self.winbox = windir['inputfield']
 
             curses.use_default_colors()
             curses.init_pair(3, curses.COLOR_YELLOW, -1)
+
+
         except Exception as e:
             curses.nocbreak()
             curses.echo()
@@ -266,12 +311,11 @@ class View:
 
 
 
-
-
     #..View.........................#
     #.          __init__           .#
     #...............................#
     def __init__(self):
+        self.background = Background()
         self._init_screen()
 
 
