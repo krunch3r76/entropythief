@@ -2,7 +2,6 @@
 **LINUX little endian (e.g. Intel chips/little endian i.e. not Raspberry Pi/ARM) only**
 **A golem requestor installation is needed to run this app. Please visit https://www.golem.network for details**
 
-**note this page is pending an update to alphav8 and some features may not be implemented as of this writing. it will be update shortly**
 get random entropy at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (default). requests are sent whenever the named pipe falls below a half the set threshold. 
 
 usage:
