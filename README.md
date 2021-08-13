@@ -34,7 +34,7 @@ restart               # after so many payment failures or after budget is exceed
 stop                  # stop/exit
 ```
 
-try: **note the following could take awhile to complete but depending on network conditions but bytes are asynchronously chunked so it is not a hard wait; remember, you may want to follow along by invoking tail -f stderr.**
+try: **note the following could take awhile to complete depending on network conditions but bytes are asynchronously chunked so it is not a hard wait; remember, you may want to follow along by invoking tail -f stderr.**
 ```
 pause
 set maxworkers=13 across 13 workers
