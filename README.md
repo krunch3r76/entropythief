@@ -4,7 +4,10 @@
 
 get random entropy at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (default). requests are sent whenever the named pipe falls below half the set threshold. 
 
-usage:
+# video demo
+https://krunch3r76.github.io/entropythief
+
+# usage:
 ```
 git clone https://github.com/krunch3r76/entropythief.git
 cd entropythief
@@ -42,16 +45,16 @@ set buflim=250*2**20 #for 1/4 gigabyte of random bytes
 set budget=5
 start
 ```
-__Usage/API__:
+# API:
 once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to a named pipe, topping it off. the named pipe can accessed via any programming language and a sample Python API is provided at `readers/pipe_reader.py`, and an example script is in `readers/print_nonce`. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. 
 
 
-__comments/reflections__:
+# comments/reflections:
 
 this project was inspired by gandom. however, gandom does not draw upon the underlying system's entropy source (kernel/cpu), which Docker reportedly guarantees is attached to every image. furthermore, gandom mixes bytes to produce a single value whereas entropy thief provides a stream of values, which incidentally are mixed by default, and can be played with in a myriad of ways. additionally, entropythief stores bits in raw format while presenting to the user a bird's eye view of them in the intelligible base 16 (cf. base64).
 
 
-__UI components__:
+# UI components:
 ```
 w:<number of workers started but unfinished>/maximum>
 cost:<total cost aggregated from paid invoices>/<budget>
@@ -62,7 +65,7 @@ the fields are as described above.
 
 
 
-__other components__:
+# other components:
 ```
 ./stderr                  # messages and optionally yapapi logger info messages are written to this file in place of stderr
 ./main.log                # development messages that come from the controller are written to this file
@@ -79,7 +82,7 @@ __other components__:
 ./randwriter.c            # for vm, compiled into worker executable
 ```
 
-__applications__:
+# applications:
 have fun with a unpredictable and exotic stream of 1's and 0's!
 
 
@@ -94,7 +97,8 @@ TO DO: windows compatible routines for named pipes (and UI)
 TO DO: develop an improved market strategy for better rates
 ```
 
-CREDITS: Intel provided the inline assembly to obtain random int64's from the processor. entropythief was inspired by its predecessor golem app: https://github.com/reza-hackathons/gandom. the splash screen ascii art was obtained from: https://asciiart.website/index.php?art=logos%20and%20insignias/smiley
+## CREDITS
+Intel provided the inline assembly to obtain random int64's from the processor. entropythief was inspired by its predecessor golem app: https://github.com/reza-hackathons/gandom. the splash screen ascii art was obtained from: https://asciiart.website/index.php?art=logos%20and%20insignias/smiley
 
-Reflections:
+## Reflections:
 Randomness (exotic) is expensive. To get enough of it I think you literally have to steal it! This is a problem entropy thief is working on but as of yet it serves as a POC with components that can be implemented in other apps where randomness or other features need to be leveraged.
