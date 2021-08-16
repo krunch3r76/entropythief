@@ -3,10 +3,10 @@
 
 # interface with entropythief's ring of named pipes to draw a 64bit value
 import os, sys
+from pathlib import Path
 
-
-PATH_TO_PIPE_MODULE=os.path.dirname(__file__) + "./.."
-sys.path.append(PATH_TO_PIPE_MODULE)
+PATH_TO_PIPE_MODULE=Path(os.path.dirname(__file__)).resolve().parents[0]
+sys.path.append(str(PATH_TO_PIPE_MODULE))
 import pipe_reader
 
 
