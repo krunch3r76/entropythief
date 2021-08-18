@@ -7,6 +7,9 @@ get random entropy at a steal of a rate from multiple providers utilizing the li
 # video demo
 https://krunch3r76.github.io/entropythief
 
+# non technical description
+computers can provide random numbers; however, hardware designs make such number sequences somewhat predictable. entropythief has several computers produce random numbers and mixes them to make an unpredictable sequence of never before seen random numbers, like snowflakes. randomness in computers has many scientific and practical applications and may have applications in art. entropythief makes no claims on the quality of randomness but does facilitate reprogramming to refine or improve the results. at any rate, entropythief may be summed up as a faucet of random 1's and 0's.
+
 # usage:
 ```
 git clone https://github.com/krunch3r76/entropythief.git
