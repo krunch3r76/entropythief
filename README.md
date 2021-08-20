@@ -16,6 +16,7 @@ randomness is different things to different people. John Venn described it as ra
 entropythief solves the scarcity problem of high quality entropy by procuring randomly generated numbers in ample quantities from independent sources, i.e. provider computers on the Golem network, and mixing them together to effectively create entropy from "movements" of providers instead of movements of mice. this input is inherently random because no provider is necessarily available at any given time on the Golem network. furthermore, its modular nature allows for increased refinement depending on the quality desired. for additional details, please refer to the cited sources [1,2] and to the source code of entropythief itself.
 
 [1] https://software.intel.com/content/www/us/en/develop/articles/intel-digital-random-number-generator-drng-software-implementation-guide.html
+
 [2]	https://en.wikipedia.org/wiki/RDRAND
 
 # usage:
@@ -96,17 +97,7 @@ the fields are as described above.
 # applications:
 have fun with a unpredictable and exotic stream of 1's and 0's!
 
-
-
 this application exposes undocumented parts of the Python API to handle specific events in a novel way and to filter providers. see the code for details (elaboration to follow).
-
-```
-TO DO: video demonstration
-TO DO: UI view of log messages or other interesting network activity
-TO DO: a discussion of randomness and the difference between random bits vs random number generators.
-TO DO: windows compatible routines for named pipes (and UI)
-TO DO: develop an improved market strategy for better rates
-```
 
 ## CREDITS
 Intel provided the inline assembly to obtain random int64's from the processor. entropythief was inspired by its predecessor golem app: https://github.com/reza-hackathons/gandom. the splash screen ascii art was obtained from: https://asciiart.website/index.php?art=logos%20and%20insignias/smiley
