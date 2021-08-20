@@ -2,7 +2,7 @@
 
 **A golem requestor installation is needed to run this app. Please visit https://www.golem.network for details**
 
-get random entropy at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (default). requests are sent whenever the named pipe falls below half the set threshold. 
+get random entropy at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (**default**). requests are sent whenever the pipe falls below half the set threshold. 
 
 # video demo
 https://krunch3r76.github.io/entropythief
