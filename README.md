@@ -99,7 +99,7 @@ the fields are as described above.
 # applications:
 have fun with a unpredictable and exotic stream of 1's and 0's!
 
-this application exposes undocumented parts of the Python API to handle specific events in a novel way and to filter providers. see the code for details (elaboration to follow).
+this application exposes undocumented parts of Golem's Python API, yapapi, to handle specific events in a novel way and to filter providers. see the code for details (elaboration to follow).
 
 ## CREDITS
 Intel provided the inline assembly to obtain random int64's from the processor [1]. entropythief was inspired by its predecessor golem app: https://github.com/reza-hackathons/gandom. the splash screen ascii art was obtained from: https://asciiart.website/index.php?art=logos%20and%20insignias/smiley
