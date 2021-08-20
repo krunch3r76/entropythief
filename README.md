@@ -10,6 +10,8 @@ https://krunch3r76.github.io/entropythief
 # non technical description
 computers can provide random numbers; however, hardware designs make such number sequences somewhat predictable. entropythief has several computers produce random numbers and chops and mixes them to make an unpredictable sequence of never before seen random numbers, like snowflakes. randomness in computers has many scientific and practical applications and may have applications in art. entropythief makes no claims on the quality of randomness but does facilitate reprogramming to refine or improve the results. at any rate, entropythief may be summed up as a faucet of random 1's and 0's.
 
+# discussion
+randomness is different things to different people. John Venn described it as raindrops falling on a surface touching only one place once until the surface has been completely covered. but the randomness here is not so tidy of a definition, as randommness commononly connotes otherwise! randomness with any periodicity such as what Venn described is often considered pseudo randomness, and in the context of using computers for research purposes this is often desired. however, some endeavor to obtain true randomness (cryptography, monte carlo simulations...). one obstacle to such however is the intrinsic determinism in any algorithm tied to the computer generating the numbers. the linux kernel offers "true" random numbers by altering random numbers according to "random" inputs, such as mouse movements. the amount of randomness thus generated is called entropy. however, there can only be so much user interaction before such randomness is exhausted.
 # usage:
 ```
 git clone https://github.com/krunch3r76/entropythief.git
