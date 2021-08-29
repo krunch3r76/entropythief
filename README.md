@@ -12,6 +12,7 @@ computers can provide random numbers; however, hardware designs make such number
 
 # usage
 ```
+# Linux or WSL
 git clone https://github.com/krunch3r76/entropythief.git
 cd entropythief
 git checkout v1.0.0
