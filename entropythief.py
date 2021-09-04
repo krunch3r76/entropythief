@@ -276,8 +276,11 @@ class Controller:
                 while not daemon_exited:
                     if not self.from_model_q.empty(): # revise boolean efficiency
                         msg_from_model = self.from_model_q.get_nowait()
-                        if self.DEVELOPERDEBUG:
-                            print(msg_from_model)
+                        # if self.DEVELOPERDEBUG:
+                        #     if 'hex' in msg_from_model:
+                        #         print(len(msg_from_model['hex']))
+                        #     else:
+                        #         print(msg_from_model)
                         if 'bytesPurchased' in msg_from_model:
                             bytesPurchased = msg_from_model['bytesPurchased']
                         elif 'event' in msg_from_model and msg_from_model['event'] == 'PaymentAccepted':
@@ -287,8 +290,8 @@ class Controller:
                             print(msg_from_model['exception'])
                         elif 'daemon' in msg_from_model:
                             daemon_exited = True
-                    await self.themodeltask
                     await asyncio.sleep(0.01)
+                await self.themodeltask
 
             locale.setlocale(locale.LC_NUMERIC, '')
             print("Bytes purchased were: " + locale.format_string("%d", bytesPurchased, grouping=True))

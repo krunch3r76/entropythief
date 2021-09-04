@@ -333,6 +333,7 @@ class model__EntropyThief:
                         # await self.taskResultWriter.refresh()
 
                     else:
+                        _log_msg(f"::[provision()] saw rejected result", 1)
                         pass # no result implies rejection which steps reprovisions
                 #                                                                   /
 
@@ -384,6 +385,8 @@ class model__EntropyThief:
             while not self.OP_STOP:
 
                 # 2.1) flush any pending processes/buffers in the task result writer
+                # coro = self.taskResultWriter.refresh()
+                # await coro
                 await self.taskResultWriter.refresh()
 
                 # 2.2) query task result writer for the number of bytes stored and relay to controller
@@ -391,7 +394,7 @@ class model__EntropyThief:
                 if delta != 0:
                     msg = {'bytesInPipe': self.bytesInPipe}; self.to_ctl_q.put_nowait(msg)
                     if delta < 0:
-                        _log_msg(f"The bytesInPipe has increased by {abs(delta)}", 1)
+                        _log_msg(f"The bytesInPipe has increased by {abs(delta)}", 10)
                 
                 # 2.3) receive and handle a message from the controller if any
                 if not self.from_ctl_q.empty():
@@ -401,7 +404,7 @@ class model__EntropyThief:
 
                 # 2.4) provision work if possible               #
                 if not self.OP_STOP and not self.OP_PAUSE: # OP_STOP might have been set by the controller hook
-                    await self._provision()
+                    await self._provision() # only if needed, tested inside
 
                 await asyncio.sleep(0.01)
         except KeyboardInterrupt:
