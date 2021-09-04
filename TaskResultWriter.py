@@ -370,7 +370,7 @@ class Interleaver(TaskResultWriter):
 
                         # directly inform controller of any change in pipe, which is next to guaranteed
                         msg = {'bytesInPipe': self.query_len()}; self.to_ctl_q.put_nowait(msg)
-            await asyncio.sleep(0)
+                await asyncio.sleep(0)
             # write remaining that is less than yield_byte_count
             written = await self._write_to_pipe(book.getbuffer())
 
