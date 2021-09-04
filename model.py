@@ -57,8 +57,17 @@ def _log_msg(msg, debug_level=0, color=utils.TEXT_COLOR_MAGENTA):
 
 
 """
+    classes:
+        model__EntropyThief
+        MySummaryLogger
+        MyLeastExpensiveLinearPayMS
+    
+    functions:
+        {async} steps(...)
+
+
     model__EntropyThief
-    -------------------
+    ----------------------
     MINPOOLSIZE             " the target maximum number of random bytes available for reading (misnomer!) {dynamic}
     MAXWORKERS              " the number of workers to provision per network request (misnomer?) {dynamic}
     BUDGET                  " the most the clinet is willing to spend before pausing execution {dynamic}
@@ -71,9 +80,10 @@ def _log_msg(msg, debug_level=0, color=utils.TEXT_COLOR_MAGENTA):
     loop                    " the running loop (same as get_running_loop)
     args                    " from the argparse module
 
+    __call__                " the object is called to start the asynchronous task of communicating with Golem
     _hook_controller(...)   " callback for controller signals
     _provision()            " start a vm on Golem to collect the results
-
+    ----------------------
     internal dependencies: [ 'worker_public.py', 'TaskResultWriter.py', 'utils' ]
 
     summary:
@@ -125,7 +135,14 @@ def _log_msg(msg, debug_level=0, color=utils.TEXT_COLOR_MAGENTA):
 
 
 class model__EntropyThief:
+    """
+    __init__
+    hasBytesInPipeChanges
+    _hook_controller
+    _provision
+    __call__
 
+    """
 
  # __          __   __          
 # |  \        |  \ |  \         

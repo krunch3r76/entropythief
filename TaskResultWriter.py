@@ -9,9 +9,16 @@ import sys # for output to sys.stderr
 
 from abc import ABC, abstractmethod
 
+"""
+    classes:
+        TaskResultWriter
+        Interleaver(TaskResultWriter)
+            Interleaver__Source
+"""
 
 """
-notes: a TaskResultWriter
+notes: 
+ TaskResultWriter
     implements
     ---------
     _flush_pipe
@@ -25,6 +32,7 @@ notes: a TaskResultWriter
     -------------------------
     add_result_file()
     commit_added_result_files()
+    count_uncommitted()
 
     inheritor may override:
     --------------------------
@@ -96,6 +104,7 @@ class TaskResultWriter(ABC):
         await self._flush_pipe()
 
     # number of result files added so far
+    @abstractmethod
     def count_uncommitted(self):
         pass
 
@@ -162,15 +171,44 @@ class Interleaver(TaskResultWriter):
 # reference implementation of TaskResultWriter
 ################################################
     """
+    definitions:
+    
+    result := Interleaver__Source object, which wraps the result_file for reading...
+
+    attributes/methods:
+
+    / _page_size                    { computed property }
+     - shortest length of all results next in queue
+
+    _source_groups
+     - [ [result, result, ...], [ result, result, ...] ] # results (as wrapped file streams ie Interleaver__Source) are added in groups and queued
+
+    _source_next_group
+     - [ result, result ...] # which add_result_file augments until full then added to _source_Groups
+
+    add_result_file(...)            { implement }
+     - augment _source_next_group by opening/wrapping in Interleaver__Source and appending _source_next_group
+
+    count_uncommitted(...)          { implement }
+     - length of _source_next_group
+
+    commit_added_result_files(...)  { implement }
+     - move append _source_next_group to _source_groups and clear
+
+    refresh(...)                    { override }
+    """
+
+    """
+    Extended Description:
         The Interleaver class subclasses TaskResultWriter to prepare the bytes that are written to the
         writer object setup by the superclass.
 
         The Interleaver class initially waits for the results of a Golem executor (tasks) by collecting
         them into a temporary variable `_source_next_group`, which are added to the `_source_groups`
-        as grouped into a sublist upon invocation of commit_added_result_files().
+        as a sublist upon invocation of commit_added_result_files().
 
-        When manually refreshed:
-            Interleaver checks to say whether there are at least two files in
+        When manually refreshed via refresh():
+            Interleaver checks to see whether there are at least two files in
             the head, or first element of, `_sources_groups` and interleaves the bytes from all the souces.
             The interleaving process reads a byte from each source_file streams to consecutively place them
             into the underlying pipe writer (see super).
@@ -187,6 +225,7 @@ class Interleaver(TaskResultWriter):
 
             when the result is written to the underlying writer, it is also sent over the message queue
             back to the controller (which can display it to the UI).
+        comments: the _page_size will result in a loss of bytes if the lengths of the results are disparate
 
     """
     _source_groups = [] # sublists of task result groups
@@ -257,6 +296,8 @@ class Interleaver(TaskResultWriter):
     # ---------------------------------------
         # ........................................
 
+        # post: _source_groups either has a list of 2 or more results in the front of the queue
+        #       or groups are removed until this condition has been satisfied or until empty
         def ___refresh_source_groups():
             if len(self._source_groups) > 0:
                 sources = self._source_groups[0] # just treat head
@@ -280,8 +321,10 @@ class Interleaver(TaskResultWriter):
         # ........................................
 
 
-        ___refresh_source_groups() # viable source list (2+ members with all having at least a page of bytes) now at head
+        ___refresh_source_groups()  # ensure there are at least two results with at least length _page_size
+                                    # at the head of _source_groups
 
+        # [ viable source list (2+ members with all having at least a page of bytes) now at head ]
         if len(self._source_groups) > 0: 
             pages = []
 
@@ -295,32 +338,48 @@ class Interleaver(TaskResultWriter):
 
             # write the pages into a single book, alternating each byte across all pages
             book=io.BytesIO()
-            sleepinterval=0
-            intervalcount=0
-            for _ in range(self._page_size):
-                for page in pages:
-                    book.write(page.read(1))
-                    sleepinterval+=1
-                if sleepinterval % 4096 == 0:
-                    sleepinterval=0
+            k_yield_byte_count=4096 # number of bytes to read before asynchronously yielding
+            intervalcount=0 # the number of times yield_byte_count as been read since the last pipe write
+            interval_reset_count=10
+            bytes_read=0
+
+            for _ in range(self._page_size): # up to the shortest length of all results (now stored in pages)
+                for page in pages: # read next byte from each page writing them alternately into the book
+                    book.write(page.read(1)) # read,write
+                    bytes_read+=1
+                if bytes_read == k_yield_byte_count:
+                    bytes_read=0
                     intervalcount+=1
                     await asyncio.sleep(0.01)
-                    if intervalcount % 10 == 0:
-                        written = await self._write_to_pipe(book.getbuffer())
-                        randomBytesView = book.getvalue()
-                        msg = randomBytesView[:written].hex()
-                        to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}; self.to_ctl_q.put_nowait(to_ctl_cmd)
-                        book.close()
-                        book=io.BytesIO()
-                        # directly inform controller of any change in pipe, which is next to guaranteed
-                        msg = {'bytesInPipe': self.query_len()}; self.to_ctl_q.put_nowait(msg)
+                if intervalcount == interval_reset_count:
+                    # write to pipe
+                    written = await self._write_to_pipe(book.getbuffer())
+                    # send hex serialized version to controller
+                    randomBytesView = book.getvalue() # optimize?
+                    msg = randomBytesView[:written].hex()
+                    to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}; self.to_ctl_q.put_nowait(to_ctl_cmd)
+                    # TODO for later messages can be tx faster of they are smaller in size (e.g. binary vs hex)
+                    # to_ctl_cmd = {'cmd': 'add_bytes', 'hex': randomBytesView[:written]}; self.to_ctl_q.put_nowait(to_ctl_cmd)
 
+                    # clear book from memory and start a new one
+                    book.close()
+                    book=io.BytesIO()
+
+                    # directly inform controller of any change in pipe, which is next to guaranteed
+                    # TODO insert logic to check for change here
+                    msg = {'bytesInPipe': self.query_len()}; self.to_ctl_q.put_nowait(msg)
+                    interval_reset_count = 0
+
+            # write remaining that is less than yield_byte_count
             written = await self._write_to_pipe(book.getbuffer())
+
             # share with controller a view of the bytes written
             randomBytesView = book.getvalue()
             msg = randomBytesView[:written].hex()
             to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}; self.to_ctl_q.put_nowait(to_ctl_cmd)
             msg = {'bytesInPipe': self.query_len()}; self.to_ctl_q.put_nowait(msg)
+            # TODO for later messages can be tx faster of they are smaller in size (e.g. binary vs hex)
+            # to_ctl_cmd = {'cmd': 'add_bytes', 'hex': randomBytesView[:written]}; self.to_ctl_q.put_nowait(to_ctl_cmd)
 
             for page in pages:
                 page.close() # garbage collect pages (not really necessary in this case)
