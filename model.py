@@ -324,13 +324,7 @@ class model__EntropyThief:
                         _log_msg(f"::[provision()] saw a task result, its contents are {task.result}", 1)
                         self.taskResultWriter.add_result_file(task.result)
                         _log_msg(f"::[provision()] number of task results added to writer: {self.taskResultWriter.count_uncommitted()}", 1)
-                        # optionally (testing for performance)
-                        # inform task result writer that all results have been given to it  #
-                        # this is done in the loop ahead of the network communications to finalize
-                        # all transactions so work can continue asynchronously
-                        # if self.taskResultWriter.count_uncommitted() == self.MAXWORKERS:
-                            # self.taskResultWriter.commit_added_result_files()
-                        # await self.taskResultWriter.refresh()
+                        await self.taskResultWriter.refresh() # review
 
                     else:
                         _log_msg(f"::[provision()] saw rejected result", 1)
@@ -462,7 +456,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     loop = asyncio.get_running_loop()
     async for task in tasks:
         # loop.run_in_executor(None, task.data['writer'].refresh)
-        # task.data['writer'].refresh()
+        await task.data['writer'].refresh()
         # request <count> bytes from provider and wait
         try:
             ################################################
@@ -554,7 +548,6 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
         # state and update the controller here while events are emitted
         # there is probably a more Pythonic + yapapi way to handle this TODO
 
-        # await self.model.taskResultWriter.refresh()
         # _log_msg(f"[MySummaryLogger{{}}] REFRESHing taskResultWriter on log event", 10)
         delta = self.model.hasBytesInPipeChanged()
         if delta != 0:
