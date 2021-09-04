@@ -330,7 +330,7 @@ class model__EntropyThief:
                         # all transactions so work can continue asynchronously
                         # if self.taskResultWriter.count_uncommitted() == self.MAXWORKERS:
                             # self.taskResultWriter.commit_added_result_files()
-                        await self.taskResultWriter.refresh()
+                        # await self.taskResultWriter.refresh()
 
                     else:
                         pass # no result implies rejection which steps reprovisions
@@ -370,8 +370,11 @@ class model__EntropyThief:
         self.OP_PAUSE = True # wait for controller to send start signal as restart
         self.strat = MyLeastExpensiveLinearPayMS( # these MS parameters are not clearly documented ?
                     max_fixed_price=Decimal("0.00") # testing, ideally this works with the epsilon in model...
-                    , max_price_for={yapapi.props.com.Counter.CPU: Decimal("0.05")
-                        , yapapi.props.com.Counter.TIME: Decimal("0.0011")}
+                    , max_price_for=
+                        {
+                            yapapi.props.com.Counter.CPU: Decimal("0.05")
+                            , yapapi.props.com.Counter.TIME: Decimal("0.0011")
+                        }
                     , use_rdrand = self.args.rdrand
                 ) 
         try:
@@ -401,7 +404,6 @@ class model__EntropyThief:
                     await self._provision()
 
                 await asyncio.sleep(0.01)
-
         except KeyboardInterrupt:
             pass # if the task has not exited in response to this already, finally will propagate a cancel
         except yapapi.NoPaymentAccountError as e:
@@ -549,7 +551,7 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
         # there is probably a more Pythonic + yapapi way to handle this TODO
 
         # await self.model.taskResultWriter.refresh()
-        _log_msg(f"[MySummaryLogger{{}}] REFRESHing taskResultWriter on log event", 10)
+        # _log_msg(f"[MySummaryLogger{{}}] REFRESHing taskResultWriter on log event", 10)
         delta = self.model.hasBytesInPipeChanged()
         if delta != 0:
             msg = {'bytesInPipe': self.model.bytesInPipe}; self.model.to_ctl_q.put_nowait(msg)

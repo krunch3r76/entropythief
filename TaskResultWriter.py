@@ -330,45 +330,44 @@ class Interleaver(TaskResultWriter):
 
             # read the calculated page size from each file and add to a "pages" list
             for source in self._source_groups[0]:
-                try:
-                    pages.append(io.BytesIO(source.read(self._page_size)))
-                    await asyncio.sleep(0.01)
-                except Exception as e:
-                    pass # unexpected, remove later
+                pages.append(io.BytesIO(source.read(self._page_size)))
+                await asyncio.sleep(0.01) # ------- yield ---------
 
             # write the pages into a single book, alternating each byte across all pages
             book=io.BytesIO()
             k_yield_byte_count=4096 # number of bytes to read before asynchronously yielding
             intervalcount=0 # the number of times yield_byte_count as been read since the last pipe write
-            interval_reset_count=10
+            k_interval_reset_count=10
             bytes_read=0
-
+            debug_count=0
             for _ in range(self._page_size): # up to the shortest length of all results (now stored in pages)
-                for page in pages: # read next byte from each page writing them alternately into the book
+                for page in pages: # read next byte from each page/result writing them alternately into the book
                     book.write(page.read(1)) # read,write
                     bytes_read+=1
-                if bytes_read == k_yield_byte_count:
-                    bytes_read=0
-                    intervalcount+=1
-                    await asyncio.sleep(0.01)
-                if intervalcount == interval_reset_count:
-                    # write to pipe
-                    written = await self._write_to_pipe(book.getbuffer())
-                    # send hex serialized version to controller
-                    randomBytesView = book.getvalue() # optimize?
-                    msg = randomBytesView[:written].hex()
-                    to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}; self.to_ctl_q.put_nowait(to_ctl_cmd)
-                    # TODO for later messages can be tx faster of they are smaller in size (e.g. binary vs hex)
-                    # to_ctl_cmd = {'cmd': 'add_bytes', 'hex': randomBytesView[:written]}; self.to_ctl_q.put_nowait(to_ctl_cmd)
 
-                    # clear book from memory and start a new one
-                    book.close()
-                    book=io.BytesIO()
+                    if bytes_read >= k_yield_byte_count:
+                        bytes_read=0
+                        intervalcount+=1
+                        await asyncio.sleep(0.001) # --------- yield -----------
+                        # upon every intervalcount intervals write whatever was written in the book (intervalcount * k_yield_byte_count)
+                        if intervalcount == k_interval_reset_count:
+                            # write to pipe
 
-                    # directly inform controller of any change in pipe, which is next to guaranteed
-                    # TODO insert logic to check for change here
-                    msg = {'bytesInPipe': self.query_len()}; self.to_ctl_q.put_nowait(msg)
-                    interval_reset_count = 0
+                            # print(f"WRITING TO PIPE count: {debug_count}", file=sys.stderr)
+                            # debug_count+=1
+
+                            written = await self._write_to_pipe(book.getbuffer())
+                            # send hex serialized version to controller
+                            randomBytesView = book.getvalue() # optimize?
+                            to_ctl_cmd = {'cmd': 'add_bytes', 'hex': randomBytesView[:written]}; self.to_ctl_q.put_nowait(to_ctl_cmd)
+
+                            # clear book from memory and start a new one
+                            book.close()
+                            book=io.BytesIO()
+
+                            # directly inform controller of any change in pipe, which is next to guaranteed
+                            msg = {'bytesInPipe': self.query_len()}; self.to_ctl_q.put_nowait(msg)
+                            intervalcount = 0
 
             # write remaining that is less than yield_byte_count
             written = await self._write_to_pipe(book.getbuffer())
@@ -376,10 +375,10 @@ class Interleaver(TaskResultWriter):
             # share with controller a view of the bytes written
             randomBytesView = book.getvalue()
             msg = randomBytesView[:written].hex()
-            to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}; self.to_ctl_q.put_nowait(to_ctl_cmd)
-            msg = {'bytesInPipe': self.query_len()}; self.to_ctl_q.put_nowait(msg)
+            # to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}; self.to_ctl_q.put_nowait(to_ctl_cmd)
+            # msg = {'bytesInPipe': self.query_len()}; self.to_ctl_q.put_nowait(msg)
             # TODO for later messages can be tx faster of they are smaller in size (e.g. binary vs hex)
-            # to_ctl_cmd = {'cmd': 'add_bytes', 'hex': randomBytesView[:written]}; self.to_ctl_q.put_nowait(to_ctl_cmd)
+            to_ctl_cmd = {'cmd': 'add_bytes', 'hex': randomBytesView[:written]}; self.to_ctl_q.put_nowait(to_ctl_cmd)
 
             for page in pages:
                 page.close() # garbage collect pages (not really necessary in this case)

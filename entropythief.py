@@ -313,9 +313,10 @@ class Controller:
         ERROR = False
         # log most msg's to mainlog (main.log)
         if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes':
-            msg = msg_from_model['hexstring']
+            # msg = msg_from_model['hexstring']
+            msg = msg_from_model['hex'].hex()
             self.u_update_main_window.send(msg) # TODO coroutine only updates one line at a time, buffering between calls
-            concat_msg = { msg_from_model['cmd']: len(msg_from_model['hexstring']) }
+            concat_msg = { msg_from_model['cmd']: len(msg_from_model['hex']) }
             print(concat_msg, file=self.mainlog)
         elif 'exception' in msg_from_model:
             raise Exception(msg_from_model['exception'])
