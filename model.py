@@ -406,7 +406,8 @@ class model__EntropyThief:
                 if not self.OP_STOP and not self.OP_PAUSE: # OP_STOP might have been set by the controller hook
                     await self._provision() # only if needed, tested inside
 
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0)
+
         except KeyboardInterrupt:
             pass # if the task has not exited in response to this already, finally will propagate a cancel
         except yapapi.NoPaymentAccountError as e:
