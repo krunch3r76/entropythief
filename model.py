@@ -382,6 +382,7 @@ class model__EntropyThief:
                 # coro = self.taskResultWriter.refresh()
                 # await coro
                 await self.taskResultWriter.refresh()
+                await asyncio.sleep(0.01)
 
                 # 2.2) query task result writer for the number of bytes stored and relay to controller
                 delta = self.hasBytesInPipeChanged()
@@ -400,7 +401,7 @@ class model__EntropyThief:
                 if not self.OP_STOP and not self.OP_PAUSE: # OP_STOP might have been set by the controller hook
                     await self._provision() # only if needed, tested inside
 
-                await asyncio.sleep(0)
+                await asyncio.sleep(0.01)
 
         except KeyboardInterrupt:
             pass # if the task has not exited in response to this already, finally will propagate a cancel

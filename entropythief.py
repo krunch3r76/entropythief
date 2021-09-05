@@ -290,7 +290,7 @@ class Controller:
                             print(msg_from_model['exception'])
                         elif 'daemon' in msg_from_model:
                             daemon_exited = True
-                    await asyncio.sleep(0)
+                    await asyncio.sleep(0.01)
                 await self.themodeltask
 
             locale.setlocale(locale.LC_NUMERIC, '')

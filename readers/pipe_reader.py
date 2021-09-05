@@ -113,7 +113,8 @@ class PipeReader:
         return answer
     """
 
-    # continuously read pipes until read count satisfied
+    # continuously read pipes until read count satisfied, then return the read count
+    # revision shall asynchronously read the pipe and deliver in chunks
     # -------------------------------------------
     def read(self, count) -> bytearray:
     # -------------------------------------------

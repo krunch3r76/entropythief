@@ -360,8 +360,7 @@ class PipeWriter:
                 if len(chunk_of_bytes) == 0:
                     break
                 self._byteQ.append(MyBytesIO(chunk_of_bytes))
-                await asyncio.sleep(0)
-                # await asyncio.sleep(0.01) 
+                await asyncio.sleep(0.01) 
 
             #### reconnect a broken pipe if applicable
             if self._whether_pipe_is_broken():
