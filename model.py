@@ -382,7 +382,6 @@ class model__EntropyThief:
                 # coro = self.taskResultWriter.refresh()
                 # await coro
                 await self.taskResultWriter.refresh()
-                await asyncio.sleep(0.01)
 
                 # 2.2) query task result writer for the number of bytes stored and relay to controller
                 delta = self.hasBytesInPipeChanged()
