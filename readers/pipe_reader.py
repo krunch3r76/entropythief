@@ -138,6 +138,7 @@ class PipeReader:
                 else:
                     remainingCount -= len(_ba)
                     byte_stream.write(_ba)
+                    print(f"remainingCount is {remainingCount}")
             elif bytesInCurrentPipe > 0:
                 try:
                     _ba = os.read(self._fdPipe, bytesInCurrentPipe)
@@ -156,6 +157,7 @@ class PipeReader:
                     self._reopen_pipe()
                 """
             time.sleep(0.01)
+        print(f"read returning {len(byte_stream.getbuffer() )}")
         return byte_stream.getvalue()
 
 

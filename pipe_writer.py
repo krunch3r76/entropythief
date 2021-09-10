@@ -65,7 +65,6 @@ def _log_msg(msg, debug_level=0, stream=sys.stderr):
 
 
 
-# MyBytesIO wraps StringIO so that reads advance the stream to behavior like a file stream
 ##################{}#####################
 
 class MyBytesIO(io.BytesIO):
