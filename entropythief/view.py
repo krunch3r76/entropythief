@@ -14,7 +14,7 @@ import time # debug
 import io
 from queue import SimpleQueue
 
-
+from .pics import DONTPANIC_SPLASH_IMAGE
 
 
 ##############################################
@@ -256,7 +256,7 @@ class Background:
     # inner_height
     # inner_width
     def __init__(self):
-        with open("dontpanic.txt") as f:
+        with open(DONTPANIC_SPLASH_IMAGE) as f:
             self.lines = f.readlines()
                         
         self.inner_height = len(self.lines)

@@ -36,8 +36,8 @@ from yapapi import rest
 from yapapi.strategy import *
 
 # internal
-import  utils
-import  worker_public
+from . import  utils
+from .worker import worker_public
 # from TaskResultWriter import Interleaver
 
 ENTRYPOINT_FILEPATH = Path("/golem/run/worker")
