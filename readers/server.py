@@ -28,6 +28,7 @@ class MyServer(asyncio.Protocol):
         self._transports.remove(closed_transport)
         print(f"Length of transports is now: {len(self._transports)}")
     def data_received(self, data):
+        print("[server.py][MyServer::data_received]")
         self._ondata_cb(self, data)
     def eof_received(self):
         print("DEBUG, EOF RECEIVED")

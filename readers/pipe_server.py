@@ -3,6 +3,7 @@
 import asyncio
 import select
 import sys
+from datetime import datetime
 
 # local dependencies
 from pipe_reader import PipeReader
@@ -24,6 +25,7 @@ class PipeReaderServer(PipeReader):
                 transport.write(temp)
                 # transport.write(self.read(count_of_random_bytes_requested) )
                 print("written")
+                # print(f"written at {str(datetime.now())}")
 
 
 
@@ -39,15 +41,25 @@ class PipeReaderServer(PipeReader):
 async def main():
     loop = asyncio.get_running_loop()
     pipeReaderServer = PipeReaderServer()
-    server = await loop.create_server(lambda: MyServer(pipeReaderServer.handle_message_from_client), host="localhost", port="54321", reuse_address=True)
+    host=None
+    # host="192.168.223.129"
+    port="54321"
+    server = await loop.create_server(lambda: MyServer(pipeReaderServer.handle_message_from_client), host=host, port=port, reuse_address=True)
     # server = await loop.create_server(lambda: MyServer(handle_request_for_bytes), host="localhost", port="54321", reuse_address=True)
-    print(f"server is serving: {server.is_serving()}")
+    print(f"server is serving: {server.is_serving()} on {host}:{port}")
     while True:
         await asyncio.sleep(0.01)
         if select.select([sys.stdin,],[],[],0.0)[0]:
             theinput = sys.stdin.readline()
             if(theinput.strip() == "q"):
                 break
+
+
+
+
+
+
+
 
 if __name__ == "__main__":
     try:
