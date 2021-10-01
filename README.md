@@ -70,16 +70,16 @@ the fields are as described above.
 ./main.log                # development messages that come from the controller are written to this file
 ./entropythief-yapapi.log # INFO and DEBUG messages from yapapi
 ./entropythief.py         # controller-view runnable script that daemonizes the model (Golem executor) and coordinates with the view
-application.py		# main routine
-model.py                # the Golem specific code (daemonized by controller.py)
-TaskResultWriter.py	  # base and derived TaskResultWriter (including Interleaver)
-pipe_writer.py          # buffered named pipe writer
-readers/pipe_reader.py  # API to named pipe
+application.py            # main routine
+model.py                  # the Golem specific code (daemonized by controller.py)
+TaskResultWriter.py       # base and derived TaskResultWriter (including Interleaver)
+pipe_writer.py            # buffered named pipe writer
+readers/pipe_reader.py    # API to named pipe
 /tmp/pilferedbits         # named pipe to which the buffered writes continually occur as needed to top off
-worker/worker_public.py        # public namespace for variables etc needed by requestor to interact with the provider/vm
-worker/Dockerfile              # for vm creation
-worker/worker.py               # for vm creation
-worker/randwriter.c            # for vm, compiled into worker executable
+worker/worker_public.py   # public namespace for variables etc needed by requestor to interact with the provider/vm
+worker/Dockerfile         # for vm creation
+worker/worker.py          # for vm creation
+worker/randwriter.c       # for vm, compiled into worker executable
 ```
 
 # applications
@@ -104,10 +104,6 @@ entropythief solves the scarcity problem of high quality entropy by procuring ra
 this project was inspired by gandom. however, gandom does not draw upon the underlying system's entropy source (kernel/cpu), which Docker reportedly guarantees is attached to every image (inferring gvmkit-build as well). furthermore, gandom mixes bytes (stream cipher) to produce a _single_ value whereas entropythief provides a stream of values, which incidentally are mixed by default, and can be played with in a myriad of ways, including passing thru a stream cipher (XOR'ing). additionally, entropythief stores bits in raw format while presenting to the user a bird's eye view of them in the intelligible base 16 (cf. base64).
 
 scalability of TRNGs remains an issue but that is a component problem. entropythief primarily addresses the scarcity of true "randomness," indirectly addressing scalability. it is noteworthy that entropythief randomness does not attempt to fit the traditional modern definition of randomness, which is expected to have "statistical independence, uniform distribution, and unpredictability" [1], i.e. no sequence bias, no overall bias, no pattern. entropythief does not attempt to fit the definition but rather the connotation. it is therefore not necessary, for example, to prove uniformity, but all these qualities may reasonably be assumed to be met if run indefinitely. however, the proof, imho, would negate the reality of true randomness. if the reader is interested in traditonal randomness, the reader is referred to Intel's RDSEED in combination with software CSPRNGs.
-
-
-
-
 
 ## credits
 Intel provided the inline assembly to obtain random int64's from the processor [1]. entropythief was inspired by its predecessor golem app: https://github.com/reza-hackathons/gandom. the splash screen ascii art was obtained from: https://asciiart.website/index.php?art=logos%20and%20insignias/smiley
