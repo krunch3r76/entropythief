@@ -18,42 +18,6 @@ import time
 import queue
 import collections
 
-"""
-    PipeWriter
-    ----------
-    (_maxCapacity)
-    countAvailable()                " how many bytes the object will accept at the moment
-    len()                           " shall report count bytes currently stored (readable)
-    write(data)                     " shall buffer input bytes
-    refresh()                       " shall top off buffer as needed
-    __del__()                       " shall close pipe ... cleanup
-
-    _set_max_capacity(...)          " sic
-    _countBytesInInternalBuffers()  " sic
-    _whether_pipe_is_broken()       " sic
-    _count_bytes_in_pipe()          " reads the count of bytes as reported by the operating system in the pipe
-    _open_pipe()                    " opens the named pipe file
-    _countBytesInInternalBuffers()  " reports on how many bytes are stored outside of the named pipe
-
-    _byteQ                          " stores MyBytesIO objects containing data pending write to the named pipe
-    _fdPipe                         " stores the file descriptor of the named pipe
-    _pipeCapacity                   " stores the capacity of the pipe as read from the operating system (set by reader)
-    _maxCapacity                    " stores the maximum number of bytes the PipeWriter will hold/buffer at any given time
-
-    kNamedPipeFilePathString = '/tmp/pilferedbits'
-
-
-
-
-    gist: PipeWriter buffers and continually fills a pipe with bytes input via .write
-
-    Data that does not fit within its `_maxCapacity` is discarded.
-    Data is appended to an internal queue (current storing chunks of MyBytesIO) `_byteQ`
-    Its refresh method must be called continually in order to flush bytes into the named pipe.
-    It also tops off the named pipe every write call.
-    The named pipe is topped off with the data in the queue of storage objects _byteQ
-"""
-
 
 _DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL']) if 'PYTHONDEBUGLEVEL' in os.environ else 0
 
@@ -68,8 +32,7 @@ def _log_msg(msg, debug_level=0, stream=sys.stderr):
 ##################{}#####################
 
 class MyBytesIO(io.BytesIO):
-
-#########################################
+    """wraps io.BytesIO to behave like a stream"""
 
     def __init__(self, initial_value):
         super().__init__(initial_value)
@@ -105,10 +68,8 @@ class MyBytesIO(io.BytesIO):
 
 
 ####################### {} ########################
-
 class MyBytesDeque(collections.deque):
-
-###################################################
+    """wraps collections.deque to keep track of size of contents"""
     _runningTotal = 0
 
     def __init__(self):
@@ -148,16 +109,15 @@ class MyBytesDeque(collections.deque):
 
 
 
-  #-------------------------------------------------#
- #           _write_to_pipe                         #
-#-------------------------------------------------#
-# required by: entropythief()
-# pre: named pipe has been polled for writability -> nonblocking
 def _write_to_pipe(fifoWriteEnd, thebytes):
+    """ writes bytes to a fifo
+        required by model__entropythief
+        pre: named pipe has been polled for writability -> nonblocking
+
+        fifoWriteEnd: a file descriptor the a named pipe
+        thebytes: the bytes to write
     """
-    fifoWriteEnd: a file descriptor the a named pipe
-    thebytes: the bytes to write
-    """
+    # required by: entropythief()
     WRITTEN = 0
     try:
         WRITTEN = os.write(fifoWriteEnd, thebytes)
@@ -191,11 +151,9 @@ def _write_to_pipe(fifoWriteEnd, thebytes):
 
 
 
-
-  #############################################################
- #                      PipeWriter{}                         #
-#############################################################
+##################################{}#########################3
 class PipeWriter:
+    """writes as much as it can to a named pipe buffering the rest"""
     _byteQ = MyBytesDeque()
     _fdPipe = None
     _pipeCapacity = 0
@@ -205,9 +163,9 @@ class PipeWriter:
 
 
     # TODO make maxCapacity a required argument
-    # -------------------------------------------
+    # ---------PipeWriter------------------------
     def __init__(self, maxCapacity=2**20):
-    # -----------------------------------------
+        """initializes with how much the named pipe itself is expected to accept"""
         if maxCapacity < 2**20:
             maxCapacity = 2**20
         self._maxCapacity=maxCapacity
@@ -224,8 +182,9 @@ class PipeWriter:
 
 
 
-    # -------------------------------------------
+    # --------------PipeWriter-------------------
     def _set_max_capacity(self, maxcapacity):
+        """informs on a new upper limit for the named pipe"""
         # assert maxcapacity >= 2**20, f"the minimum buffer size is 1 mebibyte or {int(eval('2**20'))}"
         if maxcapacity < 2**20:
             maxcapacity = 2**20
@@ -239,6 +198,7 @@ class PipeWriter:
 
     # -------------------------------------------
     def _whether_pipe_is_broken(self):
+        """determines if the pipe is still available to be written to"""
     # -------------------------------------------
         answer = False
         # consider a non existing fd as a broken pipe
@@ -254,6 +214,7 @@ class PipeWriter:
 
     # -------------------------------------------
     def _count_bytes_in_pipe(self):
+        """counts how many bytes are currently residing in the named pipe"""
     # -------------------------------------------
         if self._whether_pipe_is_broken():
             return 0
@@ -272,6 +233,7 @@ class PipeWriter:
 
     # -------------------------------------------
     def _open_pipe(self):
+        """assigns the pipe to an internal file descriptor if not already set"""
     # -------------------------------------------
         if not self._fdPipe:
             try:
@@ -288,6 +250,7 @@ class PipeWriter:
 
     # -----------------------------------------
     async def refresh(self):
+        """opens a named pipe if not connected and calls to write any buffered"""
     # -----------------------------------------
         self._open_pipe()
         await self.write(bytearray())
@@ -297,6 +260,7 @@ class PipeWriter:
 
     # -----------------------------------------
     def countAvailable(self):
+        """computes at a given moment how many bytes could be accepted assuming all asynchronous work is done"""
     # -----------------------------------------
         return self._maxCapacity - self._count_bytes_in_pipe() - self._byteQ.len()
 
@@ -306,6 +270,7 @@ class PipeWriter:
     # --------------------------------------------
     def len(self):
     # -----------------------------------------
+        """computes the sum of bytes from both the named pipe and internal queued bytechunks"""
         countBytesInPipe = self._count_bytes_in_pipe()
         countBytesInInternalBuffers = self._countBytesInInternalBuffers()
 
@@ -315,7 +280,7 @@ class PipeWriter:
 
     # ----------------------------------------------
     async def write(self, data):
-    # -----------------------------------------
+        """queues/buffers any incoming data then dequeues data to write into named pipe"""
         if data and len(data) > 0:
             _log_msg(f"::[write] received {len(data)} bytes", 3)
         ###############################################################
@@ -339,7 +304,7 @@ class PipeWriter:
         ################################################################
 
 
-        # append queue with data
+        # 1 append queue with input data
         countBytesIn = len(data)
 
         if countBytesIn > self.countAvailable():
@@ -366,7 +331,7 @@ class PipeWriter:
                 self._open_pipe()
 
 
-        # move data from queue to top of pipe
+        # 2 move any data from queue to top of pipe
         _log_msg(f"[::write]] topping off pipe", 10)
         free = ___countAvailableInPipe(self) # empty count
         BLOCKED = False

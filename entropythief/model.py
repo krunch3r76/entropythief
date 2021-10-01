@@ -56,83 +56,6 @@ def _log_msg(msg, debug_level=0, color=utils.TEXT_COLOR_MAGENTA):
         # print(f"\n[model.py] {utils.TEXT_COLOR_MAGENTA}{msg}{utils.TEXT_COLOR_DEFAULT}\n", file=sys.stderr)
 
 
-"""
-    classes:
-        model__EntropyThief
-        MySummaryLogger
-        MyLeastExpensiveLinearPayMS
-    
-    functions:
-        {async} steps(...)
-
-
-    model__EntropyThief
-    ----------------------
-    MINPOOLSIZE             " the target maximum number of random bytes available for reading (misnomer!) {dynamic}
-    MAXWORKERS              " the number of workers to provision per network request (misnomer?) {dynamic}
-    BUDGET                  " the most the clinet is willing to spend before pausing execution {dynamic}
-    IMAGE_HASH              " the hash link for providers to look up the image
-    TASK_TIMEOUT            " how long to give a provider to finish the task
-
-    from_ctl_q              " signals from controller
-    to_ctl_q                " signals to controller
-    taskResultWriter        " the object that processes each finished collection of results (from TaskResultWriter.py) 
-    loop                    " the running loop (same as get_running_loop)
-    args                    " from the argparse module
-
-    __call__                " the object is called to start the asynchronous task of communicating with Golem
-    _hook_controller(...)   " callback for controller signals
-    _provision()            " start a vm on Golem to collect the results
-    ----------------------
-    internal dependencies: [ 'worker_public.py', 'TaskResultWriter.py', 'utils' ]
-
-    summary:
-        The model functions as the Requestor Agent that asynchronously runs the VMs of a Golem application
-        using the Golem network protocol (_provision) while continuously providing information to and
-        receiving from the controller (via from_ctl_q, to_ctrl_q).  Messages received from the controller
-        are passed to _hook_controler(...).
-
-        The model primarily serves as the Requestor Agent using yapapi to send work as a VM runtime (aka exe unit)
-        to providers on the internet via the Golem daemon (yagna) running locally. The VM runtime hash link is input
-        as the `IMAGE_HASH`. The computation problem is to produce a specified number of random bits in units of bytes.
-        The problem is split into partitions (payloads) of sublengths of the total length requested across
-        `MAXWORKERS` execution units. When all work is completed, the results are interleaved so that no two
-        sequential random bytes come from the same payload. The interleaved solution is then fed into a pipe writer
-        (TaskResultWriter.py), which makes the random bytes available to clients as by a named pipe.
-
-        Each VM is given an execution script via the steps (defined below) callback function. There is no input
-        except the running of the command to produce a file containing the random bytes. Once the execution script
-        has exited with normal status, the file is retrieved and stored as the result. The files are collected
-        until all execution units have finished, at which point payment is made and the executor stops until
-        more work is must be completed.
-
-        Whenever the number of bytes stored in the pipe writer falls beneath the set threshold of half of
-        `MINPOOLSIZE`, the requestor agent publishes demand for work and selects offers according to whether
-        the client has requested a kernel source or cpu source of random bytes (viz args.use_rdrand) via
-        the MyLeastExpensiveLinearPayMS Market Strategy class (defined below).
-
-        Market events are monitored via the MySummaryLogger class (defined below) and relevant information
-        communicated to the controller, such as payments made.
-
-    flow:
-    upon aysnchronous invocation (__call__),
-    1)  setup the market strategy to select offers
-    2)  initialize the summary logger to monitor events
-    3)  run a loop until a OP_STOP is received. Inside the loop:
-        2.1) flush any pending processes in the task result writer
-        2.2) query task result writer for the number of bytes stored and relay to controller
-        2.3) receive and handle a message from the controller if any
-        2.4) provision work if needed
-            2.4.1)  test if bytes available from task result writer are beneath threshold
-            2.4.2)  test if funds are available (budget not exceeded)
-            2.4.3)  initialize work needed per node across a list of Task objects
-            2.4.4)  run tasks asynchronously collecting results and returning control after
-                        each result collected
-            2.4.5)  inform task result writer that all results have been collected into it
-
-
-"""
-
 
 class model__EntropyThief:
     """
@@ -144,15 +67,6 @@ class model__EntropyThief:
 
     """
 
- # __          __   __          
-# |  \        |  \ |  \         
- # \▓▓_______  \▓▓_| ▓▓_        
-# |  \       \|  \   ▓▓ \       
-# | ▓▓ ▓▓▓▓▓▓▓\ ▓▓\▓▓▓▓▓▓       
-# | ▓▓ ▓▓  | ▓▓ ▓▓ | ▓▓ __      
-# | ▓▓ ▓▓  | ▓▓ ▓▓ | ▓▓|  \     
-# | ▓▓ ▓▓  | ▓▓ ▓▓  \▓▓  ▓▓     
- # \▓▓\▓▓   \▓▓\▓▓   \▓▓▓▓      
 
     # ---------model_EntropyThief----------
     def __init__(self
@@ -196,6 +110,7 @@ class model__EntropyThief:
 
     # -----------model__EntropyThief------------------------ #
     def hasBytesInPipeChanged(self):
+        """queries whether data has been read from the pipe since last call"""
     # ------------------------------------------------------ #
         bytesInPipe_last = self.bytesInPipe
         self.bytesInPipe = self.taskResultWriter.query_len()
@@ -209,6 +124,7 @@ class model__EntropyThief:
 
     # -----------model__EntropyThief------------------------ #
     def _hook_controller(self, qmsg):
+        """processes the signal from the controller to update internal state"""
     # ------------------------------------------------------ #
         if 'cmd' in qmsg and qmsg['cmd'] == 'stop':
             self.OP_STOP = True
@@ -232,6 +148,10 @@ class model__EntropyThief:
 
     # ----------------- model__EntropyThief --------------- #
     async def _provision(self):
+        """ divides work to be executed in steps on the golem network
+            required by __call__
+        """
+
     # ----------------------------------------------------- #
 
         ## HELPERS
@@ -284,7 +204,6 @@ class model__EntropyThief:
 
 
 
-            #debug
             ############################################################################\
             # initialize and spread work across task objects                            #
             async with yapapi.Golem(
@@ -324,7 +243,7 @@ class model__EntropyThief:
                         _log_msg(f"::[provision()] saw a task result, its contents are {task.result}", 1)
                         self.taskResultWriter.add_result_file(task.result)
                         _log_msg(f"::[provision()] number of task results added to writer: {self.taskResultWriter.count_uncommitted()}", 1)
-                        await self.taskResultWriter.refresh() # review
+                        # await self.taskResultWriter.refresh() # review
 
                     else:
                         _log_msg(f"::[provision()] saw rejected result", 1)
@@ -343,19 +262,12 @@ class model__EntropyThief:
 
 
 
-                   # __ __ 
-                  # |  \  \
-  # _______  ______ | ▓▓ ▓▓
- # /       \|      \| ▓▓ ▓▓
-# |  ▓▓▓▓▓▓▓ \▓▓▓▓▓▓\ ▓▓ ▓▓
-# | ▓▓      /      ▓▓ ▓▓ ▓▓
-# | ▓▓_____|  ▓▓▓▓▓▓▓ ▓▓ ▓▓
- # \▓▓     \\▓▓    ▓▓ ▓▓ ▓▓
-  # \▓▓▓▓▓▓▓ \▓▓▓▓▓▓▓\▓▓\▓▓
-                         
     # ---------model_EntropyThief----------
     async def __call__(self):
-    # -------------------------------------
+        """asynchronously launches a writer then asyncrhonously provisions tasks to submit to it"""
+        # asynchronously launch taskResultWriter's refresh method instead of calling directly
+        thetask = asyncio.create_task(self.taskResultWriter.refresh())
+
         if self.args.rdrand == 1:
             self.rdrand_arg = 'rdrand'
         else:
@@ -379,9 +291,7 @@ class model__EntropyThief:
             while not self.OP_STOP:
 
                 # 2.1) flush any pending processes/buffers in the task result writer
-                # coro = self.taskResultWriter.refresh()
-                # await coro
-                await self.taskResultWriter.refresh()
+                # await self.taskResultWriter.refresh()
 
                 # 2.2) query task result writer for the number of bytes stored and relay to controller
                 delta = self.hasBytesInPipeChanged()
@@ -446,17 +356,18 @@ class model__EntropyThief:
 
 
 
-# required by:  entropythief
 ##############################################################################
 
 async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
+    """ perform steps to produce task result on a provider
+        called from model__entropythief
+    """
 
 ##############################################################################
     Path_output_file = None
     loop = asyncio.get_running_loop()
     async for task in tasks:
-        # loop.run_in_executor(None, task.data['writer'].refresh)
-        await task.data['writer'].refresh()
+        # await task.data['writer'].refresh()
         # request <count> bytes from provider and wait
         try:
             ################################################
@@ -511,17 +422,12 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
 
 
 
-"""
-    to_ctl_q:   the msg queue back to the controller
-"""
 ##########################{}##################################################
-
 class MySummaryLogger(yapapi.log.SummaryLogger):
-
-##############################################################################
-# Required by: model__entropythief
-# the log method is provided as the event-consumer for yapapi.Golem to intercept events
-    to_ctl_q = None
+    """communicate event driven data to controller"""
+    # Required by: model__entropythief
+    # the log method is provided as the event-consumer for yapapi.Golem to intercept events
+    to_ctl_q = None # the msg queue back to the controller
     model = None
 
     # can be removed
@@ -629,12 +535,9 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
 
 
 ############################ {} ######################################################
-
 @dataclass
 class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, object):
-
-######################################################################################
-    """
+    """filters offers
         expected_time_secs: ? TODO, copied from api, required for super
         max_fixed_price: ? TODO, copied from api, required for super
         max_price_for: ? TODO, copied from api, required for super
@@ -652,8 +555,10 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
             self.use_rdrand=use_rdrand
 
     async def decorate_demand(self, demand: DemandBuilder) -> None:
-        if self.use_rdrand:
-            demand.ensure("(golem.inf.cpu.architecture=x86_64)")
+        # limiting the architecture is not necessary, as long as the cpu provides rdrand
+        # retained as an example
+        # if self.use_rdrand:
+        #    demand.ensure("(golem.inf.cpu.architecture=x86_64)")
         await super().decorate_demand(demand)
     
     async def score_offer(

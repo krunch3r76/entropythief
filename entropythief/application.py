@@ -30,89 +30,9 @@ _kMEBIBYTE  = 2**20                   # constant count
 _DEBUGLEVEL = True if 'PYTHONDEBUGLEVEL' in os.environ else False
 
 
-"""
-    Controller
-    ----------
-    IMAGE_HASH                      " the hash link for providers to look up the image
-    MAXWORKERS                      " the number of workers to provision per network request {dynamic}
-    MINPOOLSIZE                     " the target maximum number of random bytes available for reading (misnomer!) {dynamic}
-    BUDGET                          " the most the client is willing to spend before pausing execution
-
-    to_model_q                      " signals going to the model
-    from_model_q                    " signals coming from the model
-    count_workers                   " the number of active workers in the current execution
-    bytesInPipe                     " the number of bytes that the model has made available for reading
-    payment_failed_count            " the current count of successive payment failure events
-    current_total                   " the total costs so far
-    theview                         " the view object
-    themodeltask                    " the model (runs Golem) task object
-    u_update_main_window            " generator that writes the input hexstring to the display
-
-    _hook_model(...)                 " handles the last message from the model (queue element)
-    _hook_view(...)                  " handles the last message from the view (return value)
-    __call__()                      " start provisioning to obtain random bytes
-
-    internal dependencies: [ 'view.py', 'model.py', 'utils.py' ]
-
-    summary:
-
-        The controller is initialized and called from main asynchronously. By default it is initialized
-        with a subclass of the abstract class TaskResultWriter, Interleaver. The
-        client may subclass TaskResultWriter if interested in handling the task results in an alternative
-        fashion than that to Interleaver (see TaskResultWriter.py).
-        
-        The Controller initializes the controller-view and when __call__ed begins provisioning work via
-        the model according to the current BUDGET vs current_total, and current MINPOOLSIZE vs bytesInPipe.
-        Execution is paused if several (10) successive payment failures occur or the current_total is at
-        least within a small amount (0.01) of the BUDGET, and the client must issue a restart command.
-
-        The Controller runs in a loop to poll and process events from the view and the model asynchronously.
-        
-        The view has two components: a display and a input box. If new data (a hexstream) is received from
-        the model, it is fed to a generator on the view to update the display. The generator will write
-        all or a portion of the stream and queue further writes for later to return control for the
-        other asynchronous operations. The controller sends empty messages to the view to prompt for
-        writing any buffered display data. On each iteration, the controller also updates the input
-        box, and its status indicators (e.g. worker count, costs, bytesInPipe), and receives and
-        processes any input from the client.
-
-        The model asynchronously requests work whenever there is available funds and the bytes in the
-        writer have fallen beneath a target level (half the MINPOOLSIZE). The results from the last
-        pool are sent as a signal to controller for processing. The model sends various signals to
-        the controller about its state including events during work (such as PaymentAccepted events
-        to track current_total costs) and state information about the PipeWriter, specifically the
-        number of total bytes stored/readable.
-
-        flow:
-        initialize model to start work on Golem
-        \---------------model------------------------
-        /  -> handle signal  from controller        | 
-        |  <- emit work results                     |
-        |  <- emit Golem specific events            |
-        |  <- emit total bytes in writer            /
-        --------------------------------------------\
-
-        \---------------view-------------------------
-        /  -> handle signal from controller         |
-        |   -> (display) handle new a hexstring     |
-        |   -> (box) handle status updates          |
-        |  <- (box) emit client input               /
-        --------------------------------------------\
-
-        >-------------- controller ------------------------------
-        |                                                       |
-        | update status line and receive client input (if any)  |
-        | process client input                                  |
-        | process model signal                                  |
-        |    refresh display if signal is a task pool result    |
-        | flush writes to display                               |
-        --------------------------------------------------------<
-        X read closing messages from message queue to get
-           stats (namely bytesPurchased)
-"""
 
 class Controller:
-
+    """asynchronously interacts with the view and model"""
     IMAGE_HASH  = "81e0a936ef13f89622e1b59f3934caf8109244c5f8f6998f0f338ed6"
     MAXWORKERS  = 5
     MINPOOLSIZE = 10 * _kMEBIBYTE + 5
@@ -136,22 +56,9 @@ class Controller:
 
 
 
- # __          __   __          
-# |  \        |  \ |  \         
- # \▓▓_______  \▓▓_| ▓▓_        
-# |  \       \|  \   ▓▓ \       
-# | ▓▓ ▓▓▓▓▓▓▓\ ▓▓\▓▓▓▓▓▓       
-# | ▓▓ ▓▓  | ▓▓ ▓▓ | ▓▓ __      
-# | ▓▓ ▓▓  | ▓▓ ▓▓ | ▓▓|  \     
-# | ▓▓ ▓▓  | ▓▓ ▓▓  \▓▓  ▓▓     
- # \▓▓\▓▓   \▓▓\▓▓   \▓▓▓▓      
-                              
-                              
-                              
     #   ---------Controller------------
     def __init__(self, loop):
-    #   -------------------------------
-    # comments: starts golem task
+        """initializes object, asynchronously launches golem task, sets up view coroutine"""
         # parse cli arguments (viz utils.py)
         self.args = argparse.Namespace() # redundant?
         parser = utils.build_parser("pipe entropy to the named pipe /tmp/pilferedbits")
@@ -190,22 +97,9 @@ class Controller:
 
 
 
-                   # __ __ 
-                  # |  \  \
-  # _______  ______ | ▓▓ ▓▓
- # /       \|      \| ▓▓ ▓▓
-# |  ▓▓▓▓▓▓▓ \▓▓▓▓▓▓\ ▓▓ ▓▓
-# | ▓▓      /      ▓▓ ▓▓ ▓▓
-# | ▓▓_____|  ▓▓▓▓▓▓▓ ▓▓ ▓▓
- # \▓▓     \\▓▓    ▓▓ ▓▓ ▓▓
-  # \▓▓▓▓▓▓▓ \▓▓▓▓▓▓▓\▓▓\▓▓
-                         
-    # this is the main entrypoint!                     
-                         
     #   ---------Controller------------
     async def __call__(self):
-    #   -------------------------------
-
+        """asynchronously loops to handle and relay signals between the model and view """
         if not self.args.start_paused:
             msg_to_model = {'cmd': 'unpause execution' }
             self.to_model_q.put_nowait(msg_to_model)
@@ -310,10 +204,10 @@ class Controller:
 
     #   ---------Controller------------
     def _hook_model(self, msg_from_model):
-    #   -------------------------------
-    # process model signal
-    # post: current_total, count_workers, payment_failed_count, bytesInPipe, ui updated
-    # output: error is true if an exception occurs
+        """handles messages from the model"""
+        # process model signal
+        # post: current_total, count_workers, payment_failed_count, bytesInPipe, ui updated
+        # output: error is true if an exception occurs
         ERROR = False
         # log most msg's to mainlog (main.log)
         if 'cmd' in msg_from_model and msg_from_model['cmd'] == 'add_bytes':
@@ -356,10 +250,10 @@ class Controller:
 
     #   ---------Controller------------
     def _hook_view(self, ucmd):
-    #   -------------------------------
-    # process client input
-    # post: MINPOOLSIZE, MAXWORKERS, payment_failed_count, BUDGET
-    # output: error true is view asks controller to stop
+        """handles messages from the view"""
+        # process client input
+        # post: MINPOOLSIZE, MAXWORKERS, payment_failed_count, BUDGET
+        # output: error true is view asks controller to stop
         ERROR = False
         if ucmd == "stop":
             ERROR = True
@@ -402,6 +296,7 @@ class Controller:
 
 
 def main():
+    """sets up asynchronous loop and launches a Controller object into it"""
     loop = asyncio.get_event_loop()
     controller = Controller(loop)
     task = loop.create_task(controller())
