@@ -70,15 +70,16 @@ the fields are as described above.
 ./main.log                # development messages that come from the controller are written to this file
 ./entropythief-yapapi.log # INFO and DEBUG messages from yapapi
 ./entropythief.py         # controller-view runnable script that daemonizes the model (Golem executor) and coordinates with the view
-./model.py                # the Golem specific code (daemonized by controller.py)
-./worker_public.py        # public namespace for variables etc needed by requestor to interact with the provider/vm
-./TaskResultWriter.py	  # base and derived TaskResultWriter (including Interleaver)
-./pipe_writer.py          # buffered named pipe writer
-./readers/pipe_reader.py  # API to named pipe
+application.py		# main routine
+model.py                # the Golem specific code (daemonized by controller.py)
+TaskResultWriter.py	  # base and derived TaskResultWriter (including Interleaver)
+pipe_writer.py          # buffered named pipe writer
+readers/pipe_reader.py  # API to named pipe
 /tmp/pilferedbits         # named pipe to which the buffered writes continually occur as needed to top off
-./Dockerfile              # for vm creation
-./worker.py               # for vm creation
-./randwriter.c            # for vm, compiled into worker executable
+worker/worker_public.py        # public namespace for variables etc needed by requestor to interact with the provider/vm
+worker/Dockerfile              # for vm creation
+worker/worker.py               # for vm creation
+worker/randwriter.c            # for vm, compiled into worker executable
 ```
 
 # applications
