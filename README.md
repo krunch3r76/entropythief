@@ -19,6 +19,7 @@ git checkout v1.0.3
 python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r entropythief/requirements.txt
+yagna payment init --sender
 ./entropythief.py # --help # to change the network from the default rinkeby and the subnet-tag from the default devnet-beta.2
 ```
 
