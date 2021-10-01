@@ -4,7 +4,7 @@ import asyncio
 import concurrent.futures
 import functools
 
-import pipe_writer
+from . import pipe_writer
 import sys # for output to sys.stderr
 
 from abc import ABC, abstractmethod
