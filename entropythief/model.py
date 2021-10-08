@@ -194,6 +194,7 @@ class model__EntropyThief:
         # 2.4.1)  test if bytes available from task result writer are beneath threshold
         #     2   test if within budget
         if count_bytes_requested > 0 and \
+        not self.taskResultWriter.pending and \
         self.bytesInPipe < int(self.MINPOOLSIZE/2) and \
         self._costRunning < (self.BUDGET - 0.02):
             package = await vm.repo(

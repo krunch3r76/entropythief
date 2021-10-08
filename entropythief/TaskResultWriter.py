@@ -131,7 +131,7 @@ class Interleaver(TaskResultWriter):
     # a reference implementation of TaskResultWriter
     _source_groups = [] # sublists of task result groups
     _source_next_group = [] # next sublist of tasks results before being committed
-
+    pending=False
     # ----------------Interleaver-------------------
     @property
     def _page_size(self):
@@ -231,6 +231,7 @@ class Interleaver(TaskResultWriter):
 
             # [ viable source list (2+ members with all having at least a page of bytes) now at head ]
             if len(self._source_groups) > 0: 
+                self.pending=True
                 pages = []
 
                 # read the calculated page size from each file and add to a "pages" list
@@ -287,6 +288,7 @@ class Interleaver(TaskResultWriter):
 
                 for page in pages:
                     page.close() # garbage collect pages (not really necessary in this case)
+                self.pending=False
             await asyncio.sleep(0.01)
         # await self._flush_pipe()
 
