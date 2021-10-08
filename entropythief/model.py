@@ -311,7 +311,7 @@ class model__EntropyThief:
                     await self._provision() # only if needed, tested inside
 
                 await asyncio.sleep(0.01)
-
+            thetask.cancel()
         except KeyboardInterrupt:
             pass # if the task has not exited in response to this already, finally will propagate a cancel
         except yapapi.NoPaymentAccountError as e:
