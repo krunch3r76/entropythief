@@ -100,6 +100,7 @@ class PipeReader:
                 if pl[0][1] & 1:
                     answer=True
         return answer
+
     """
     def _whether_pipe_is_open(self):
         answer = True
@@ -161,6 +162,78 @@ class PipeReader:
         return byte_stream.getvalue()
 
 
+
+    # read pipe up to count returning parts along the way
+    # -------------------------------------------
+    def coro_read(self, count, partitions=6) -> bytearray:
+    # -------------------------------------------
+
+
+        def __partition(total, maxcount=6):
+            if total == 1:
+                return [total]
+
+            if total <= maxcount:
+                count=total
+            else:
+                count=maxcount
+
+            minimum = int(total/count)
+            while minimum == 1:
+                count-=1
+                minimum = int(total/count)
+
+            extra = total % count
+
+            rv = []
+            for _ in range(count-1):
+                rv.append(minimum)
+            rv.append(minimum + extra)
+            return rv
+
+        counts = __partition(count)
+        for subcount in counts:
+            byte_stream = io.BytesIO()
+            remainingCount = subcount
+            while remainingCount > 0:
+                """
+                while not self._whether_pipe_is_open():
+                    self._reopen_pipe()
+                    time.sleep(0.01)
+                """
+                bytesInCurrentPipe = count_bytes_in_pipe(self._fdPipe)
+                if bytesInCurrentPipe >= remainingCount:
+                    try:
+                        _ba = os.read(self._fdPipe, remainingCount)
+                    except BlockingIOError:
+                        _log_msg("pipe reader: BLOCKING ERROR", 5)
+                        pass
+                    except Exception as e:
+                        _log_msg(f"Other exception: {e}", 5)
+                    else:
+                        remainingCount -= len(_ba)
+                        byte_stream.write(_ba)
+                        print(f"remainingCount is {remainingCount}")
+                elif bytesInCurrentPipe > 0:
+                    try:
+                        _ba = os.read(self._fdPipe, bytesInCurrentPipe)
+                    except BlockingIOError:
+                        _log_msg("blocking io error", 5)
+                        pass
+                    except Exception as e:
+                        _log_msg(f"Other exception: {e}", 5)
+                        # self._reopen_pipe()
+                    else:
+                        remainingCount -= len(_ba)
+                        byte_stream.write(_ba)
+
+                    """
+                    if len(ba) == 0: # implies write end has been closed
+                        self._reopen_pipe()
+                    """
+                time.sleep(0.01)
+            print(f"read returning {len(byte_stream.getbuffer() )}")
+            yield byte_stream.getvalue()
 
 
 

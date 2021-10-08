@@ -33,6 +33,7 @@ _DEBUGLEVEL = True if 'PYTHONDEBUGLEVEL' in os.environ else False
 
 class Controller:
     """asynchronously interacts with the view and model"""
+    # IMAGE_HASH  = "9931037256ca1a602a8a706463547d2aecbdd55f296adf07c4e72667"
     IMAGE_HASH  = "81e0a936ef13f89622e1b59f3934caf8109244c5f8f6998f0f338ed6"
     MAXWORKERS  = 5
     MINPOOLSIZE = 10 * _kMEBIBYTE + 5
