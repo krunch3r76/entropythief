@@ -33,7 +33,7 @@ def build_parser(description: str):
     parser.add_argument("--driver", help="Payment driver name, for example `zksync`")
     parser.add_argument("--network", help="Network name, for example `rinkeby`")
     parser.add_argument(
-        "--subnet-tag", default="devnet-beta.2", help="Subnet name; default: %(default)s"
+        "--subnet-tag", default="devnet-beta", help="Subnet name; default: %(default)s"
     )
     parser.add_argument(
         "--log-file",
