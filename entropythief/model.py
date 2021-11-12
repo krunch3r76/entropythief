@@ -358,7 +358,7 @@ class model__EntropyThief:
 
 
 ##############################################################################
-
+# TODO rename to worker or work or provider_work etc
 async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     """ perform steps to produce task result on a provider
         called from model__entropythief
@@ -371,14 +371,11 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     script = _ctx.new_script(timeout=timedelta(minutes=10))
 
     async for task in tasks:
-        # await task.data['writer'].refresh()
-        # request <count> bytes from provider and wait
 
         ################################################
         # execute the worker in the vm                 #
         ################################################
         script.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']), task.data['rdrand_arg'])
-        #yield ctx.commit(timeout=timedelta(seconds=120))
 
         ################################################
         # download the results on successful execution #
@@ -386,11 +383,8 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
         Path_output_file = Path(gettempdir()) / str(uuid4())
         script.download_file(worker_public.RESULT_PATH, str(Path_output_file))
 
-        # yield ctx.commit(timeout=timedelta(seconds=120))
         try:
             yield script
-        #debug
-        # print(f"{task.data['writer']._writerPipe}", file=sys.stderr)
         except rest.activity.BatchTimeoutError: # credit to Golem's blender.py
             print(
                     f"{utils.TEXT_COLOR_RED}"
@@ -412,14 +406,12 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             # raise # exception will be caught by yapapi to place the task back in the queue
             # don't raise because we need to cleanup reject instead
             task.reject_result("unspecified error", retry=True) # timeout maybe?
-            #debug
-            # print(f"Result exists?: {bool(task)}\n", file=sys.stderr)
         else:
             ###################################################
             # accept the downloaded file as the task result   #
             ###################################################
             task.accept_result(result=str(Path_output_file))
-            script = _ctx.new_script(timeout=timedelta(minutes=1)) # image on provider, narrow timeout
+            script = _ctx.new_script(timeout=timedelta(minutes=1)) # image d/l'ed provider, narrow timeout
         finally:
             if not task.result:
                 if Path_output_file and Path_output_file.exists():
