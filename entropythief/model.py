@@ -359,7 +359,7 @@ class model__EntropyThief:
 
 ##############################################################################
 
-async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
+async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     """ perform steps to produce task result on a provider
         called from model__entropythief
     """
@@ -367,25 +367,30 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
 ##############################################################################
     Path_output_file = None
     loop = asyncio.get_running_loop()
+    # allow for time for naive providers to download the image
+    script = _ctx.new_script(timeout=timedelta(minutes=10))
+
     async for task in tasks:
         # await task.data['writer'].refresh()
         # request <count> bytes from provider and wait
+
+        ################################################
+        # execute the worker in the vm                 #
+        ################################################
+        script.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']), task.data['rdrand_arg'])
+        #yield ctx.commit(timeout=timedelta(seconds=120))
+
+        ################################################
+        # download the results on successful execution #
+        ################################################
+        Path_output_file = Path(gettempdir()) / str(uuid4())
+        script.download_file(worker_public.RESULT_PATH, str(Path_output_file))
+
+        # yield ctx.commit(timeout=timedelta(seconds=120))
         try:
-            ################################################
-            # execute the worker in the vm                 #
-            ################################################
-            ctx.run(ENTRYPOINT_FILEPATH.as_posix(), str(task.data['req_byte_count']), task.data['rdrand_arg'])
-            yield ctx.commit(timeout=timedelta(seconds=120))
-
-            ################################################
-            # download the results on successful execution #
-            ################################################
-            Path_output_file = Path(gettempdir()) / str(uuid4())
-            ctx.download_file(worker_public.RESULT_PATH, str(Path_output_file))
-            yield ctx.commit(timeout=timedelta(seconds=120))
-
-            #debug
-            # print(f"{task.data['writer']._writerPipe}", file=sys.stderr)
+            yield script
+        #debug
+        # print(f"{task.data['writer']._writerPipe}", file=sys.stderr)
         except rest.activity.BatchTimeoutError: # credit to Golem's blender.py
             print(
                     f"{utils.TEXT_COLOR_RED}"
@@ -393,6 +398,8 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                     f"{utils.TEXT_COLOR_DEFAULT}"
                     , file=sys.stderr
                 )
+            # raise # this will put the task back into the generator tasks
+            # don't raise because we need to cleanup reject instead
             task.reject_result("timeout", retry=True) # need to ensure a retry occurs! TODO
         except Exception as e: # define exception TODO
             print(
@@ -402,6 +409,8 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                     , file=sys.stderr
             )
             print(e, file=sys.stderr)
+            # raise # exception will be caught by yapapi to place the task back in the queue
+            # don't raise because we need to cleanup reject instead
             task.reject_result("unspecified error", retry=True) # timeout maybe?
             #debug
             # print(f"Result exists?: {bool(task)}\n", file=sys.stderr)
@@ -410,6 +419,7 @@ async def steps(ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             # accept the downloaded file as the task result   #
             ###################################################
             task.accept_result(result=str(Path_output_file))
+            script = _ctx.new_script(timeout=timedelta(minutes=1)) # image on provider, narrow timeout
         finally:
             if not task.result:
                 if Path_output_file and Path_output_file.exists():
