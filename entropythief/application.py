@@ -18,6 +18,8 @@ import argparse
 import fcntl
 import locale
 import asyncio
+import platform
+import subprocess
 
 from . import utils
 from . import view
@@ -95,8 +97,11 @@ class Controller:
         self.u_update_main_window = self.theview.coro_update_mainwindow()
         next(self.u_update_main_window)
 
-
-
+        if platform.system()=='Linux':
+            try:
+                subprocess.Popen(['aplay', 'entropythief/sounds/903__sleep__weird-loop-1.wav'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except:
+                pass
 
     #   ---------Controller------------
     async def __call__(self):
