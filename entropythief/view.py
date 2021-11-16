@@ -408,19 +408,41 @@ class View:
         self.winbox.move(Y, len(self.linebuf)+1)
         self.winbox.clrtoeol()
         ADJUST=15
-        if xMax-53-ADJUST > 0:
-            if whether_paused:
-                self.winbox.addstr(Y, xMax-60-ADJUST, "PAUSED", curses.color_pair(3) | curses.A_BLINK)
-            if xMax-53-ADJUST + 3 > 0:
-                self.winbox.addstr(Y, xMax-53-ADJUST, "ESC", curses.A_ITALIC | curses.A_STANDOUT)
-            if xMax-46-ADJUST + 2 + len(countworkers_str) + 1 + len(maxworkers_str) > 0:
-                self.winbox.addstr(Y, xMax-46-ADJUST, "w")
-                self.winbox.addstr(Y, xMax-46+1-ADJUST, ":" + countworkers_str + "/" + maxworkers_str)
-            if xMax-37-ADJUST + len(current_total_str) + 1 + len(current_budget_str)  > 0:
-                self.winbox.addstr(Y, xMax-37-ADJUST, current_total_str)
-                self.winbox.addstr(Y, xMax-37-ADJUST+len(current_total_str), "/"+current_budget_str)
-            if xMax-15-ADJUST + 14 > 0:
-                self.winbox.addstr(Y, xMax-15-ADJUST, "%.30s" % f"buf:{bytesInPipe}/{str(MINPOOLSIZE)}")
+
+
+        """
+        analysis
+        find the number width of the screen in number of characters
+        find the number of characters for the status message
+        print every part of the status line beginning at offset and adding chars written to offset
+
+        h, w = <window>.getmaxyx() where <window=self.winbox>
+        msg=[]
+
+        """
+
+        msg = []
+        if whether_paused:
+            msg.append( ("PAUSED ", curses.color_pair(3) | curses.A_BLINK)  )
+
+        msg.append( 
+                ("ESC w:" + countworkers_str+"/"+maxworkers_str + " " 
+                    + current_total_str + "/" + current_budget_str + " "
+                    + "%.30s" % f"buf:{bytesInPipe}/{str(MINPOOLSIZE)}",) 
+                )
+        def length_of_status_msg():
+            length=0
+            for msg_pair in msg:
+                length+=len(msg_pair[0])
+            return length
+
+        remaining_space=xMax - length_of_status_msg()
+        if remaining_space>0:
+            start=xMax - length_of_status_msg() - 1
+            for msg_pair in msg:
+                self.winbox.addstr(Y, start, *msg_pair)
+                start+=len(msg_pair[0])
+
         self.winbox.move(Y, X)
 
         ucmd = ""
