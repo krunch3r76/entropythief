@@ -436,6 +436,7 @@ class View:
         remaining_space=xMax - length_of_status_msg()
         if remaining_space>0:
             start=xMax - length_of_status_msg() - 1
+            start-=remaining_space//2
             for msg_pair in msg:
                 self.winbox.addstr(Y, start, *msg_pair)
                 start+=len(msg_pair[0])
