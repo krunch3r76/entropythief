@@ -13,6 +13,7 @@ import string
 import time # debug
 import io
 from queue import SimpleQueue
+import locale
 
 from .pics import DONTPANIC_SPLASH_IMAGE
 
@@ -410,26 +411,22 @@ class View:
         ADJUST=15
 
 
-        """
-        analysis
-        find the number width of the screen in number of characters
-        find the number of characters for the status message
-        print every part of the status line beginning at offset and adding chars written to offset
-
-        h, w = <window>.getmaxyx() where <window=self.winbox>
-        msg=[]
-
-        """
-
+        locale.setlocale(locale.LC_NUMERIC, '')
         msg = []
         if whether_paused:
-            msg.append( ("PAUSED ", curses.color_pair(3) | curses.A_BLINK)  )
+            msg.append( ("PAUSED", curses.color_pair(3) | curses.A_BLINK)  )
+            msg.append( ("  ", ))
+        msg.append( ("ESC", curses.A_ITALIC | curses.A_STANDOUT), )
+        msg.append( ("  ", ))
+        msg.append(
+                    ("w:" + countworkers_str +"/" + maxworkers_str + "  " 
+                    + current_total_str + "/" + current_budget_str + "  "
+                    + "buf:" + locale.format_string("%d", bytesInPipe, grouping=True)
+                    + "/" + locale.format_string("%d", MINPOOLSIZE, grouping=True)
 
-        msg.append( 
-                ("ESC w:" + countworkers_str+"/"+maxworkers_str + " " 
-                    + current_total_str + "/" + current_budget_str + " "
-                    + "%.30s" % f"buf:{bytesInPipe}/{str(MINPOOLSIZE)}",) 
+                    ,)
                 )
+
         def length_of_status_msg():
             length=0
             for msg_pair in msg:
