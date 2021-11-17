@@ -14,6 +14,7 @@ import time # debug
 import io
 from queue import SimpleQueue
 import locale
+import functools
 
 from .pics import DONTPANIC_SPLASH_IMAGE
 
@@ -427,15 +428,12 @@ class View:
                     ,)
                 )
 
-        def length_of_status_msg():
-            length=0
-            for msg_pair in msg:
-                length+=len(msg_pair[0])
-            return length
+        length_of_status_msg=functools.reduce(lambda a, b: a+b, [len(e[0]) for e in msg])
 
-        remaining_space=xMax - length_of_status_msg()
+        remaining_space=xMax - length_of_status_msg
+
         if remaining_space>0:
-            start=xMax - length_of_status_msg() - 1
+            start=xMax - length_of_status_msg - 1
             start-=remaining_space//2
             for msg_pair in msg:
                 self.winbox.addstr(Y, start, *msg_pair)
