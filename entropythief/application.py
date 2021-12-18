@@ -60,12 +60,13 @@ class Controller:
 
 
     #   ---------Controller------------
-    def __init__(self, loop):
+    def __init__(self, loop, args):
         """initializes object, asynchronously launches golem task, sets up view coroutine"""
         # parse cli arguments (viz utils.py)
-        self.args = argparse.Namespace() # redundant?
-        parser = utils.build_parser("pipe entropy to the named pipe /tmp/pilferedbits")
-        self.args = parser.parse_args()
+        # self.args = argparse.Namespace() # redundant?
+        # parser = utils.build_parser("pipe entropy to the named pipe /tmp/pilferedbits")
+        # self.args = parser.parse_args()
+        self.args = args
 
         # setup console streams
         self.mainlog = open("main.log", "w", buffering=1) # monitoring events mostly or other things thought informative for dev ideas
@@ -301,10 +302,10 @@ class Controller:
 
 
 
-def main():
+def main(args):
     """sets up asynchronous loop and launches a Controller object into it"""
     loop = asyncio.get_event_loop()
-    controller = Controller(loop)
+    controller = Controller(loop, args)
     task = loop.create_task(controller())
     try:
         loop.run_until_complete(task)

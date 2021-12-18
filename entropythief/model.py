@@ -23,6 +23,7 @@ import  concurrent.futures
 from    tempfile    import gettempdir
 from uuid import uuid4
 import  yapapi.rest
+from gc__filterms import FilterProviderMS
 
 ## 3rd party
 import  yapapi
@@ -95,7 +96,7 @@ class model__EntropyThief:
         self._costRunning       = 0.0
 
         # output yapapi logger INFO events to stderr and INFO+DEBUG to args.log_fle
-        if self.args.enable_logging:
+        if not self.args.disable_logging:
             yapapi.log.enable_default_logger(
                 log_file=args.log_file
                 , debug_activity_api =True
@@ -210,10 +211,10 @@ class model__EntropyThief:
             async with yapapi.Golem(
                     budget=self.BUDGET-self._costRunning
                     , subnet_tag=self.args.subnet_tag
-                    , network=self.args.network
-                    , driver=self.args.driver
+                    , payment_network=self.args.payment_network
+                    , payment_driver=self.args.payment_driver
                     , event_consumer=MySummaryLogger(self).log
-                    , strategy=self.strat
+                    , strategy=FilterProviderMS(self.strat)
             ) as golem:
 
 
@@ -269,7 +270,7 @@ class model__EntropyThief:
         # asynchronously launch taskResultWriter's refresh method instead of calling directly
         thetask = asyncio.create_task(self.taskResultWriter.refresh())
 
-        if self.args.rdrand == 1:
+        if not self.args.use_dev_random:
             self.rdrand_arg = 'rdrand'
         else:
             self.rdrand_arg = 'devrand'
@@ -283,7 +284,7 @@ class model__EntropyThief:
                             yapapi.props.com.Counter.CPU: Decimal("0.05")
                             , yapapi.props.com.Counter.TIME: Decimal("0.0011")
                         }
-                    , use_rdrand = self.args.rdrand
+                    , use_rdrand = not self.args.use_dev_random
                 ) 
         try:
             # see if there are any bytes already in the pipe # may not be necessary
@@ -591,7 +592,8 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
             # it is not clear at this time how to create a demand that constrains according to cpu
             # features, therefore, we inspect the offer itself and score only if the offer
             # meets this constraint.
-            if 'rdrand' in offer.props["golem.inf.cpu.capabilities"]:
+
+            if 'golem.inf.cpu.capabilities' in offer.props and 'rdrand' in offer.props["golem.inf.cpu.capabilities"]:
                 score = await super().score_offer(offer, history)
         else:
             # we are not using rdrand (using system entropy) so proceed as normal without filtering
