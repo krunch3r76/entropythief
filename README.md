@@ -15,7 +15,7 @@ computers can provide random numbers; however, hardware designs make such number
 # Linux or WSL
 git clone https://github.com/krunch3r76/entropythief.git
 cd entropythief
-git checkout v1.0.9
+git checkout v1.0.10
 python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r entropythief/requirements.txt

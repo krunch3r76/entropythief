@@ -23,7 +23,13 @@ import  concurrent.futures
 from    tempfile    import gettempdir
 from uuid import uuid4
 import  yapapi.rest
-from gc__filterms import FilterProviderMS
+try:
+    moduleFilterProviderMS=False
+    from gc__filterms import FilterProviderMS
+except ModuleNotFoundError:
+    pass
+else:
+    moduleFilterProviderMS=True
 
 ## 3rd party
 import  yapapi
@@ -205,6 +211,10 @@ class model__EntropyThief:
                 )
 
 
+            if moduleFilterProviderMS:
+                strategy=FilterProviderMS(self.strat)
+            else:
+                strategy=self.strat
 
             ############################################################################\
             # initialize and spread work across task objects                            #
@@ -214,7 +224,7 @@ class model__EntropyThief:
                     , payment_network=self.args.payment_network
                     , payment_driver=self.args.payment_driver
                     , event_consumer=MySummaryLogger(self).log
-                    , strategy=FilterProviderMS(self.strat)
+                    , strategy=strategy
             ) as golem:
 
 
