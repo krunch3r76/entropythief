@@ -332,7 +332,7 @@ class PipeWriter:
 
 
         # 2 move any data from queue to top of pipe
-        _log_msg(f"[::write]] topping off pipe", 10)
+        # _log_msg(f"[::write]] topping off pipe", 10)
         free = ___countAvailableInPipe(self) # empty count
         BLOCKED = False
         while free > 0 and not BLOCKED:

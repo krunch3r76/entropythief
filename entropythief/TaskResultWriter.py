@@ -289,6 +289,7 @@ class Interleaver(TaskResultWriter):
                 for page in pages:
                     page.close() # garbage collect pages (not really necessary in this case)
                 self.pending=False
+            await self._writerPipe.refresh()
             await asyncio.sleep(0.01)
         # await self._flush_pipe()
 
