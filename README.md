@@ -8,7 +8,7 @@ get high quality entropy (randomness) at a steal of a rate from multiple provide
 https://krunch3r76.github.io/entropythief # browser must support the ogg codec to view most of these videos as of this writing
 
 # non technical description
-computers can provide random numbers; however, hardware designs make such number sequences somewhat predictable. in computers, numbers are made up of sequences of 1s and 0's. entropythief has several computers produce random bytes and chops and mixes them to make an unpredictable sequence of never before seen random bit stream, like snowflakes. randomness in computers has many scientific and practical applications and may have applications in art. atm entropythief makes no guarantees on the quality of randomness but does facilitate reprogramming to refine or improve the results. at any rate, entropythief may be summed up as a faucet of random 1's and 0's (from which a true random number generator may be rebuilt).
+computers can provide random numbers; however, hardware designs make such number sequences somewhat predictable. in computers, numbers are made up of sequences of 1s and 0's. entropythief has several computers produce random bytes (64 bit integers) and chops and mixes them to make an unpredictable sequence of never before seen random bit stream, like snowflakes, and without any intrinsic periodicity (like a rogue comet). randomness in computers has many scientific and practical applications and may have applications in art. atm entropythief makes no guarantees on the quality of randomness but does facilitate reprogramming to refine or improve the results. at any rate, entropythief may be summed up as a faucet of random 1's and 0's (from which a true random number generator may be rebuilt).
 
 # usage
 ```
