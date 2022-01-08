@@ -14,20 +14,11 @@ import io
 
 
 _DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL']) if 'PYTHONDEBUGLEVEL' in os.environ else 0 
-"""
-try:
-    _DEBUGLEVEL = int(os.environ['PYTHONDEBUGLEVEL'])
-except:
-    _DEBUGLEVEL = None
 
-if not _DEBUGLEVEL:
-    _DEBUGLEVEL=0
-"""
-
-def _log_msg(msg, debug_level=0, file=sys.stderr):
+def _log_msg(msg, debug_level=1, file_=sys.stderr):
     pass
     if debug_level <= _DEBUGLEVEL:
-        print(msg, file=file)
+        print(msg, file=file_)
 
 
 
@@ -101,18 +92,6 @@ class PipeReader:
                     answer=True
         return answer
 
-    """
-    def _whether_pipe_is_open(self):
-        answer = True
-        if not self._fdPipe:
-            answer=False
-        else:
-            pl = self._fdPoll.poll(0)
-            if len(pl) == 1:
-                if pl[0][1] & 64:
-                    answer = False
-        return answer
-    """
 
     # continuously read pipes until read count satisfied, then return the read count
     # revision shall asynchronously read the pipe and deliver in chunks
@@ -122,11 +101,6 @@ class PipeReader:
         byte_stream = io.BytesIO()
         remainingCount = count
         while remainingCount > 0:
-            """
-            while not self._whether_pipe_is_open():
-                self._reopen_pipe()
-                time.sleep(0.01)
-            """
             bytesInCurrentPipe = count_bytes_in_pipe(self._fdPipe)
             if bytesInCurrentPipe >= remainingCount:
                 try:
@@ -139,7 +113,7 @@ class PipeReader:
                 else:
                     remainingCount -= len(_ba)
                     byte_stream.write(_ba)
-                    print(f"remainingCount is {remainingCount}")
+                    # print(f"remainingCount is {remainingCount}")
             elif bytesInCurrentPipe > 0:
                 try:
                     _ba = os.read(self._fdPipe, bytesInCurrentPipe)
@@ -153,12 +127,8 @@ class PipeReader:
                     remainingCount -= len(_ba)
                     byte_stream.write(_ba)
 
-                """
-                if len(ba) == 0: # implies write end has been closed
-                    self._reopen_pipe()
-                """
             time.sleep(0.01)
-        print(f"read returning {len(byte_stream.getbuffer() )}")
+        # print(f"read returning {len(byte_stream.getbuffer() )}")
         return byte_stream.getvalue()
 
 
@@ -196,11 +166,6 @@ class PipeReader:
             byte_stream = io.BytesIO()
             remainingCount = subcount
             while remainingCount > 0:
-                """
-                while not self._whether_pipe_is_open():
-                    self._reopen_pipe()
-                    time.sleep(0.01)
-                """
                 bytesInCurrentPipe = count_bytes_in_pipe(self._fdPipe)
                 if bytesInCurrentPipe >= remainingCount:
                     try:
@@ -213,7 +178,7 @@ class PipeReader:
                     else:
                         remainingCount -= len(_ba)
                         byte_stream.write(_ba)
-                        print(f"remainingCount is {remainingCount}")
+                        # print(f"remainingCount is {remainingCount}")
                 elif bytesInCurrentPipe > 0:
                     try:
                         _ba = os.read(self._fdPipe, bytesInCurrentPipe)
@@ -227,10 +192,6 @@ class PipeReader:
                         remainingCount -= len(_ba)
                         byte_stream.write(_ba)
 
-                    """
-                    if len(ba) == 0: # implies write end has been closed
-                        self._reopen_pipe()
-                    """
                 time.sleep(0.01)
             print(f"read returning {len(byte_stream.getbuffer() )}")
             yield byte_stream.getvalue()
