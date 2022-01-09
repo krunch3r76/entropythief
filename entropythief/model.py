@@ -405,7 +405,8 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                 )
             # raise # this will put the task back into the generator tasks
             # don't raise because we need to cleanup reject instead
-            task.reject_result("timeout", retry=True) # need to ensure a retry occurs! TODO
+            # the task is automatically retried after an exception, no need to reject
+            # task.reject_result("timeout", retry=True) # need to ensure a retry occurs! TODO
         except Exception as e: # define exception TODO
             print(
                     f"{utils.TEXT_COLOR_RED}"
@@ -416,7 +417,8 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             print(e, file=sys.stderr)
             # raise # exception will be caught by yapapi to place the task back in the queue
             # don't raise because we need to cleanup reject instead
-            task.reject_result("unspecified error", retry=True) # timeout maybe?
+            # the task is automatically retried after an exception, no need to reject
+            # task.reject_result("unspecified error", retry=True) # timeout maybe?
         else:
             ###################################################
             # accept the downloaded file as the task result   #
