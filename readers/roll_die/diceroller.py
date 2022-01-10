@@ -3,6 +3,12 @@
 # implements a DieRoller functor that represents a die of a specified number of sides and can be rolled repeatedly
 # implements a DiceRoller functor that rolls as many die that have the same number of sies and returns the sorted result
 
+from pathlib import Path
+import os
+import sys
+PATH_TO_PIPE_READERS=Path(os.path.dirname(__file__)).resolve().parents[0]
+sys.path.append(str(PATH_TO_PIPE_READERS))
+
 from bitreader import EntropyBitReader
 
 class _Ball:
@@ -85,3 +91,9 @@ class DiceRoller():
         for _ in range(dice_count):
             throw.append(self._die_roller())
         return tuple(sorted(throw))
+
+
+if __name__ == '__main__':
+    roller=DiceRoller()
+    print(roller())
+
