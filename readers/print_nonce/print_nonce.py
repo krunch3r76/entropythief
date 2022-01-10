@@ -28,5 +28,5 @@ try:
                 print(f"usage: {sys.argv[0]} burn <nonce count [counts of 8 bytes]>")
                 sys.exit(127)
 except KeyboardInterrupt:
-    print("Goodbye")
+    print("\nGoodbye")
 

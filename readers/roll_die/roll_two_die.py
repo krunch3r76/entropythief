@@ -18,6 +18,7 @@ def _sum_freq_table(t):
 
 
 def _print_freq_table(t, rowcount=6, with_freqs=True):
+    print("\033[0;33;1m", end="") # yellow
     first_tuple=next(iter(t))
     assert len(first_tuple) == 2, "only indexing when exactly two die are thrown!"
 
@@ -48,6 +49,8 @@ def _print_freq_table(t, rowcount=6, with_freqs=True):
         _print(False)
 
     locale.setlocale(locale.LC_NUMERIC, '')
+    print("\033[0m", end="") # yellow
+
     print(f"\nfrom total rolls: "
             + locale.format_string("%d", sum_, grouping=True))
 
@@ -81,7 +84,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     print(f"rolling two 6-sided dice: {rollcount} times")
-    print(f"to change the number of rolls, rerun with the count after\ne.g. ./python3 roll_two_die.py 250000")
+    print(f"\033[0;33mto change the number of rolls, rerun with the count after\ne.g. \033[0;3m./python3 roll_two_die.py 250000\033[0m")
     freq_table = _build_base_freq_table()
     # roll the dice /rollcount/ times and print the frequency table
 
