@@ -25,15 +25,15 @@ class _Ball:
 
 class DieRoller:
     """roller for a die of a fixed number of sides"""
-    def __init__(self, bit_generator, side_count=6):
+    def __init__(self, bit_generator, face_count=6):
         """
         in:
             bit_generator: an object that implements the generator protocol to return a 1 or 0
-            side_count: the number of sides on the die (1 to side_count)
+            face_count: the number of sides on the die (1 to face_count)
         """
-        self._side_count=side_count
+        self._face_count=face_count
         self._ball = _Ball(bit_generator)
-        self._universe = set( [ num for num in range(1, self._side_count+1)] )
+        self._universe = set( [ num for num in range(1, self._face_count+1)] )
 
 
     def _choose_randomly_from(self, uni):
@@ -87,9 +87,9 @@ class DieRoller:
 
 class DiceRoller():
     """rolls n dice and return result as a sorted tuple so order is not important"""
-    def __init__(self, bit_generator=EntropyBitReader(), side_count=6):
-        self._side_count=side_count
-        self._die_roller=DieRoller(bit_generator)
+    def __init__(self, bit_generator=EntropyBitReader(), face_count=6):
+        self._face_count=face_count
+        self._die_roller=DieRoller(bit_generator=bit_generator, face_count=face_count)
 
     def __call__(self, dice_count=2):
         throw=[]
@@ -99,6 +99,26 @@ class DiceRoller():
 
 
 if __name__ == '__main__':
-    roller=DiceRoller()
-    print(roller())
+    start_error = False
+    dice_count=2
+    face_count=6
+    if len(sys.argv) !=1:
+        if len(sys.argv) > 3:
+            start_error=True
+        else:
+            try:
+                if len(sys.argv) > 1:
+                    dice_count=int(sys.argv[1])
+                if len(sys.argv) == 3:
+                    face_count=int(sys.argv[2])
+            except:
+                start_error=True
+    if start_error:
+        print(f"Usage: {sys.argv[0]} [<number of dice>=2] [<faces_per_die=6>]")
+        sys.exit(1)
+        
+    bit_generator=EntropyBitReader(1) # just reserve 1 byte for the buffer
+
+    roller=DiceRoller(bit_generator=bit_generator, face_count=face_count)
+    print(roller(dice_count))
 
