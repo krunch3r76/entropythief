@@ -62,6 +62,11 @@ start
 # API
 once entropythief runs, it displays the random bytes produced from workers as they arrive and are fed to a named pipe, topping it off. the named pipe can be accessed via any programming language and a sample Python API is provided at `readers/pipe_reader.py`, and an example script is in `readers/print_nonce`. The script retrieves 8 bytes from the pool of /tmp/pilferedbits and prints the corresponding 64bit nonce value. 
 
+additionally, to generate a random 1 or 0, developers can import EntropyBitReader from readers/entropybitreader.py
+
+and to get a truly random number, developers can import DiceRoller from readers/roll_die/diceroller.py
+
+this application may expose sparsely undocumented parts of Golem's Python API, yapapi, to handle specific events in a novel way and to filter providers. see the code for details.
 
 # UI components
 ```
@@ -84,18 +89,20 @@ application.py            # main routine
 model.py                  # the Golem specific code (daemonized by controller.py)
 TaskResultWriter.py       # base and derived TaskResultWriter (including Interleaver)
 pipe_writer.py            # buffered named pipe writer
-readers/pipe_reader.py    # API to named pipe
-/tmp/pilferedbits         # named pipe to which the buffered writes continually occur as needed to top off
-worker/worker_public.py   # public namespace for variables etc needed by requestor to interact with the provider/vm
-worker/Dockerfile         # for vm creation
-worker/worker.py          # for vm creation
-worker/randwriter.c       # for vm, compiled into worker executable
+readers/pipe_reader.py        # API to named pipe
+readers/entropybitreader.py   # provides a EntropyBitReader generator class to generate random bits
+readers/roll_die/diceroller.py        # provides the DiceRoller class to function as a TRNG
+/tmp/pilferedbits             # named pipe to which the buffered writes continually occur as needed to top off
+worker/worker_public.py       # public namespace for variables etc needed by requestor to interact with the provider/vm
+worker/Dockerfile             # for vm creation
+worker/worker.py              # for vm creation
+worker/randwriter.c           # for vm, compiled into worker executable
 ```
 
 # applications
 have fun with a unpredictable and exotic stream of 1's and 0's!
 
-this application exposes undocumented parts of Golem's Python API, yapapi, to handle specific events in a novel way and to filter providers. see the code for details (elaboration to follow).
+
 
 # discussion
 randomness is different things to different people. John Venn described it as raindrops falling on a surface touching different spots until the surface has been completely, or uniformly, saturated [0]. but the randomness here is not so "perfect," as randomness commonly connotes otherwise! randomness with any uniformity and (potential) periodicity similar to what Venn described is considered pseudo randomness, and in the context of using computers for research purposes this is often desired. however, some endeavor to obtain true randomness (say for cryptography, monte carlo simulations...). one obstacle to such however is the intrinsic determinism in any algorithm tied to the computer generating the numbers. the linux kernel offers "true" random power of 2 ranged numbers by altering random numbers according to "random" inputs, such as mouse movements. the amount of randomness thus generated is called entropy. however, there can only be so much user interaction before such randomness is exhausted. to solve this problem, Intel added a feature and corresponding instruction to its 64 bit processors called RDRAND [1], [2]. it is regarded as a hardware true random number generator (base-2 ranged e.g. 16-bit, 32-bit, or 64-bit ranges). however, it has received criticism as being of untrustworthy quality because of its black box nature and the fact that has been "engineered" at the hardware level suggesting it could have a deterministic quality [2]. 
