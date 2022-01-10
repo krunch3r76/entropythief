@@ -2,7 +2,12 @@
 # diceroller.py
 # implements a DieRoller functor that represents a die of a specified number of sides and can be rolled repeatedly
 # implements a DiceRoller functor that rolls as many die that have the same number of sies and returns the sorted result
-
+"""extended description
+DieRoller leverages entropythief's bit reader by creating a universe of possible face values for a roll
+then randomly chooses to keep or discard each of the values in the universe (e.g. 1, 2, 3, 4, 5, 6)
+then repeats this logic over the next set until only one is left or if all have decided to have been discarded
+repeats with a new universe (e.g. 1, 2, 3, 4, 5, 6)
+"""
 from pathlib import Path
 import os
 import sys
