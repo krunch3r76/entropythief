@@ -117,7 +117,7 @@ if __name__ == '__main__':
         print(f"Usage: {sys.argv[0]} [<number of dice>=2] [<faces_per_die=6>]")
         sys.exit(1)
         
-    bit_generator=EntropyBitReader(1) # just reserve 1 byte for the buffer
+    bit_generator=EntropyBitReader(10) # just reserve 10 bytes for the buffer
 
     roller=DiceRoller(bit_generator=bit_generator, face_count=face_count)
     print(roller(dice_count))
