@@ -291,8 +291,8 @@ class model__EntropyThief:
                     max_fixed_price=Decimal("0.00") # testing, ideally this works with the epsilon in model...
                     , max_price_for=
                         {
-                            yapapi.props.com.Counter.CPU: Decimal("0.05")
-                            , yapapi.props.com.Counter.TIME: Decimal("0.0011")
+                            yapapi.props.com.Counter.CPU: Decimal("0.37")/Decimal("3600.0")
+                            , yapapi.props.com.Counter.TIME: Decimal("0.19")/Decimal("3600.0")
                         }
                     , use_rdrand = not self.args.use_dev_random
                 ) 

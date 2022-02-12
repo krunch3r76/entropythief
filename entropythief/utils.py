@@ -59,7 +59,7 @@ def print_env_info(args):
     )
     print(f"logging:\t{TEXT_COLOR_YELLOW}", end='')
     if not args.disable_logging:
-        print(f"{args.log_file} {TEXT_COLOR_DEFAULT}and {TEXT_COLOR_YELLOW}./stdrr", end='')
+        print(f"{args.log_file} {TEXT_COLOR_DEFAULT}and {TEXT_COLOR_YELLOW}./stderr", end='')
     else:
         print(f"disabled", end='')
     print(f"{TEXT_COLOR_DEFAULT}")
