@@ -485,14 +485,17 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
 
         to_controller_msg = None
         if isinstance(event, yapapi.events.InvoiceAccepted):
+            print(f"{event.__class__.__name__}...{event.amount}", file=sys.stderr)
             added_cost=float(event.amount)
             self.costRunning = self.costRunning + added_cost
             to_controller_msg = {
-                'event': event.__class__.__name__ # PaymentAccepted
+                'event': event.__class__.__name__ # InvoiceAccepted
                 , 'agr_id': event.agr_id
-                , 'inv_id': event.inv_id
+                , 'inv_id': event.job_id
                 , 'amount': event.amount
             }
+            print(f"{to_controller_msg}", file=sys.stderr)
+
             #to_controller_msg = {
             #    'cmd': 'add cost', 'amount': added_cost}
 

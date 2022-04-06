@@ -185,13 +185,15 @@ class Controller:
                         #         print(msg_from_model)
                         if 'bytesPurchased' in msg_from_model:
                             bytesPurchased = msg_from_model['bytesPurchased']
-                        elif 'event' in msg_from_model and msg_from_model['event'] == 'PaymentAccepted':
+                        elif 'event' in msg_from_model and msg_from_model['event'] == 'InvoiceAccepted':
                             self.current_total += float(msg_from_model['amount'])
                         elif 'exception' in msg_from_model:
                             print("unhandled exception reported by model:\n")
                             print(msg_from_model['exception'])
                         elif 'daemon' in msg_from_model:
                             daemon_exited = True
+#                        else:
+#                            print(f"\033[1mevent message seen but not handled: {msg_from_model}\033[0m", file=sys.stderr)
                     await asyncio.sleep(0.01)
                 await self.themodeltask
 
@@ -234,7 +236,7 @@ class Controller:
                 self.whether_paused=True
         elif 'event' in msg_from_model and msg_from_model['event'] == 'AgreementTerminated':
             self.count_workers-=1
-        elif 'event' in msg_from_model and msg_from_model['event'] == 'PaymentAccepted':
+        elif 'event' in msg_from_model and msg_from_model['event'] == 'InvoiceAccepted':
             self.current_total += float(msg_from_model['amount'])
         elif 'event' in msg_from_model:
             print(msg_from_model, file=self.mainlog) # report event to developer stream
