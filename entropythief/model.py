@@ -39,6 +39,7 @@ from    yapapi.payload  import vm
 from types import MappingProxyType
 from typing import Dict, Mapping, Optional
 from yapapi.props import com, Activity
+from yapapi.props.builder import DemandBuilder
 from yapapi import rest
 from yapapi.strategy import *
 
@@ -287,15 +288,22 @@ class model__EntropyThief:
 
         self.OP_STOP = False
         self.OP_PAUSE = True # wait for controller to send start signal as restart
-        self.strat = MyLeastExpensiveLinearPayMS( # these MS parameters are not clearly documented ?
-                    max_fixed_price=Decimal("0.00") # testing, ideally this works with the epsilon in model...
-                    , max_price_for=
-                        {
-                            yapapi.props.com.Counter.CPU: Decimal("0.37")/Decimal("3600.0")
-                            , yapapi.props.com.Counter.TIME: Decimal("0.19")/Decimal("3600.0")
-                        }
-                    , use_rdrand = not self.args.use_dev_random
-                ) 
+        self.strat = None
+        try:
+            self.strat = MyLeastExpensiveLinearPayuMS(
+                    LeastExpensiveLinearPayuMS( # these MS parameters are not clearly documented ?
+                        max_fixed_price=Decimal("0.00") # testing, ideally this works with the epsilon in model...
+                        , max_price_for=
+                            {
+                                yapapi.props.com.Counter.CPU: Decimal("0.37")/Decimal("3600.0")
+                                , yapapi.props.com.Counter.TIME: Decimal("0.19")/Decimal("3600.0")
+                            }
+                                              ),
+                    use_rdrand = not self.args.use_dev_random
+                                                     )
+        except Exception as e:
+            print(f"Exception thrown in call to model: {e}\n", file=sys.stderr)
+            sys.exit(1)
         try:
             # see if there are any bytes already in the pipe # may not be necessary
             self.bytesInPipe = self.taskResultWriter.query_len() # note bytesInPipe is the lazy count
@@ -476,7 +484,7 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
             msg = {'bytesInPipe': self.model.bytesInPipe}; self.model.to_ctl_q.put_nowait(msg)
 
         to_controller_msg = None
-        if isinstance(event, yapapi.events.PaymentAccepted):
+        if isinstance(event, yapapi.events.InvoiceAccepted):
             added_cost=float(event.amount)
             self.costRunning = self.costRunning + added_cost
             to_controller_msg = {
@@ -551,8 +559,40 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
 
 
 ############################ {} ######################################################
+class MyLeastExpensiveLinearPayuMS(WrappingMarketStrategy, object):
+    def __init__(self, base_strategy: BaseMarketStrategy, use_rdrand):
+        self.use_rdrand=use_rdrand
+        super().__init__(base_strategy)
+    async def score_offer(self, offer: rest.market.OfferProposal) -> float:
+        score = SCORE_REJECTED
+
+        """
+        # deprecated
+        if self.use_rdrand:
+            if offer.props["golem.inf.cpu.architecture"] == "x86_64":
+                if 'rdrand' in offer.props["golem.inf.cpu.capabilities"]:
+                    score = await super().score_offer(offer, history)
+        else:
+            score = await super().score_offer(offer, history)
+        return score
+        """
+
+        if self.use_rdrand:
+            # review
+            # it is not clear at this time how to create a demand that constrains according to cpu
+            # features, therefore, we inspect the offer itself and score only if the offer
+            # meets this constraint.
+
+            if 'golem.inf.cpu.capabilities' in offer.props and 'rdrand' in offer.props["golem.inf.cpu.capabilities"]:
+                score = await super().score_offer(offer)
+        else:
+            # we are not using rdrand (using system entropy) so proceed as normal without filtering
+            score = await super().score_offer(offer)
+        return score
+
+
 @dataclass
-class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, object):
+class MyLeastExpensiveLinearPayMS_deprecated(yapapi.strategy.LeastExpensiveLinearPayuMS, object):
     """filters offers
         expected_time_secs: ? TODO, copied from api, required for super
         max_fixed_price: ? TODO, copied from api, required for super
@@ -562,7 +602,7 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
     golem = None
     def __init__(
         self
-        , expected_time_secs: int = 60
+        , expected_time_secs: int = 6
         , max_fixed_price: Decimal = Decimal("inf")
         , max_price_for: Mapping[com.Counter, Decimal] = MappingProxyType({})
         , use_rdrand=False
@@ -577,9 +617,7 @@ class MyLeastExpensiveLinearPayMS(yapapi.strategy.LeastExpensiveLinearPayuMS, ob
         #    demand.ensure("(golem.inf.cpu.architecture=x86_64)")
         await super().decorate_demand(demand)
     
-    async def score_offer(
-        self, offer: rest.market.OfferProposal, history: Optional[ComputationHistory] = None
-    ) -> float:
+    async def score_offer( self, offer: rest.market.OfferProposal) -> float:
         score = SCORE_REJECTED
 
         """
