@@ -562,7 +562,7 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
 
 
 ############################ {} ######################################################
-class MyLeastExpensiveLinearPayuMS(WrappingMarketStrategy, object):
+class MyLeastExpensiveLinearPayuMS(WrappingMarketStrategy):
     def __init__(self, base_strategy: BaseMarketStrategy, use_rdrand):
         self.use_rdrand=use_rdrand
         super().__init__(base_strategy)
@@ -587,10 +587,13 @@ class MyLeastExpensiveLinearPayuMS(WrappingMarketStrategy, object):
             # meets this constraint.
 
             if 'golem.inf.cpu.capabilities' in offer.props and 'rdrand' in offer.props["golem.inf.cpu.capabilities"]:
-                score = await super().score_offer(offer)
+                try:
+                    score = await self.base_strategy.score_offer(offer)
+                except Exception as e:
+                    print(f"unhandled exception in MyLeastExpensiveLinearPayuMS: {e}", file=sys.stderr)
         else:
             # we are not using rdrand (using system entropy) so proceed as normal without filtering
-            score = await super().score_offer(offer)
+            score = await super().base_strategy.score_offer(offer)
         return score
 
 
