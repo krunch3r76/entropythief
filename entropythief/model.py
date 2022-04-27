@@ -355,7 +355,12 @@ class model__EntropyThief:
                 f"See {handbook_url} on how to initialize payment accounts for a requestor node."
                 f"{utils.TEXT_COLOR_DEFAULT}"
             )
-            emsg += f"\nMaybe you forgot to invoke {utils.TEXT_COLOR_YELLOW}yagna payment init --sender{utils.TEXT_COLOR_DEFAULT}"
+            emsg += (
+                f"\nMaybe you forgot to invoke {utils.TEXT_COLOR_YELLOW}yagna payment"
+                f" init --sender{utils.TEXT_COLOR_DEFAULT}"
+                "\nalternatively, ensure YAGNA_APPKEY environment variable corresponds to the current"
+                " payment account."
+            )
             msg = {"exception": emsg}
             self.to_ctl_q.put_nowait(msg)
         except aiohttp.client_exceptions.ClientConnectorError as e:
