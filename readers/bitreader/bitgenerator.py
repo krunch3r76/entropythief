@@ -1,4 +1,4 @@
-#randbit.py
+# randbit.py
 # implements a random bit generator
 
 import random
@@ -7,6 +7,7 @@ import sys
 
 class BitGenerator:
     """generate a bit (value of 1 or 0) upon every call"""
+
     """
     _bitstring
     _cb_returnRandomNumber
@@ -16,9 +17,10 @@ class BitGenerator:
     _offset
 
     """
+
     def __init__(self, cb_returnRandomNumber, returned_byte_length):
         """
-        in: 
+        in:
         cb_returnRandomNumber : callback with zero arguments returning _k_bytelength count bytes
         returned_byte_length: the number of bytes that make up the random number returned by the callback
 
@@ -31,8 +33,8 @@ class BitGenerator:
         post:
         bitstring : the "buffer" of bits
         """
-        self._k_bytelength=returned_byte_length
-        self._k_bitstringlen=self._k_bytelength*8
+        self._k_bytelength = returned_byte_length
+        self._k_bitstringlen = self._k_bytelength * 8
         self._cb_returnRandomNumber = cb_returnRandomNumber
 
         self.refill_bitstring()
@@ -45,10 +47,9 @@ class BitGenerator:
         post: self._bitstring, self._offset=0
         """
         bits64 = self._cb_returnRandomNumber()
-        int64=int.from_bytes(bits64,byteorder="little")
-        self._bitstring=format(int64, '0{l}b'.format(l=self._k_bytelength*8))
-        self._offset=0
-
+        int64 = int.from_bytes(bits64, byteorder="little")
+        self._bitstring = format(int64, "0{l}b".format(l=self._k_bytelength * 8))
+        self._offset = 0
 
     def __next__(self):
         if self._offset == self._k_bitstringlen:
@@ -57,7 +58,5 @@ class BitGenerator:
             rv = int(self._bitstring[self._offset])
         except IndexError:
             raise
-        self._offset+=1
+        self._offset += 1
         return rv
-
-

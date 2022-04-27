@@ -11,30 +11,35 @@ repeats with a new universe (e.g. 1, 2, 3, 4, 5, 6)
 from pathlib import Path
 import os
 import sys
-PATH_TO_PIPE_READERS=Path(os.path.dirname(__file__)).resolve().parents[0]
+
+PATH_TO_PIPE_READERS = Path(os.path.dirname(__file__)).resolve().parents[0]
 sys.path.append(str(PATH_TO_PIPE_READERS))
 
 from bitreader import EntropyBitReader
 
+
 class _Ball:
     """called to return T or F based on next bit from the bit generator it was instantiated with"""
+
     def __init__(self, bit_generator):
-        self._bit_generator=bit_generator
+        self._bit_generator = bit_generator
+
     def __call__(self):
-        return True if next(self._bit_generator)==1 else False
+        return True if next(self._bit_generator) == 1 else False
+
 
 class DieRoller:
     """roller for a die of a fixed number of sides"""
+
     def __init__(self, bit_generator, face_count=6):
         """
         in:
             bit_generator: an object that implements the generator protocol to return a 1 or 0
             face_count: the number of sides on the die (1 to face_count)
         """
-        self._face_count=face_count
+        self._face_count = face_count
         self._ball = _Ball(bit_generator)
-        self._universe = set( [ num for num in range(1, self._face_count+1)] )
-
+        self._universe = set([num for num in range(1, self._face_count + 1)])
 
     def _choose_randomly_from(self, uni):
         """traverse each universe element consulting ball as to whether to keep by adding to a new set. repeat on new set until one or zero kept. returns empty or single element set
@@ -43,7 +48,7 @@ class DieRoller:
         out: sub universe of 0 or more picks
         """
         new_uni = set()
-     
+
         for pick in uni:
             if self._ball() == True:
                 new_uni.add(pick)
@@ -51,8 +56,6 @@ class DieRoller:
         uni.clear()
 
         return new_uni
-
-
 
     def __call__(self):
         """
@@ -74,7 +77,7 @@ class DieRoller:
         final chosen number from universe
         """
 
-        new_universe=set()
+        new_universe = set()
         while len(new_universe) == 0:
             new_universe = self._universe.copy()
             while len(new_universe) > 1:
@@ -83,42 +86,40 @@ class DieRoller:
         return list(new_universe)[0]
 
 
-
-
-class DiceRoller():
+class DiceRoller:
     """rolls n dice and return result as a sorted tuple so order is not important"""
+
     def __init__(self, bit_generator=EntropyBitReader(), face_count=6):
-        self._face_count=face_count
-        self._die_roller=DieRoller(bit_generator=bit_generator, face_count=face_count)
+        self._face_count = face_count
+        self._die_roller = DieRoller(bit_generator=bit_generator, face_count=face_count)
 
     def __call__(self, dice_count=2):
-        throw=[]
+        throw = []
         for _ in range(dice_count):
             throw.append(self._die_roller())
         return tuple(sorted(throw))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     start_error = False
-    dice_count=2
-    face_count=6
-    if len(sys.argv) !=1:
+    dice_count = 2
+    face_count = 6
+    if len(sys.argv) != 1:
         if len(sys.argv) > 3:
-            start_error=True
+            start_error = True
         else:
             try:
                 if len(sys.argv) > 1:
-                    dice_count=int(sys.argv[1])
+                    dice_count = int(sys.argv[1])
                 if len(sys.argv) == 3:
-                    face_count=int(sys.argv[2])
+                    face_count = int(sys.argv[2])
             except:
-                start_error=True
+                start_error = True
     if start_error:
         print(f"Usage: {sys.argv[0]} [<number of dice>=2] [<faces_per_die=6>]")
         sys.exit(1)
-        
-    bit_generator=EntropyBitReader(10) # just reserve 10 bytes for the buffer
 
-    roller=DiceRoller(bit_generator=bit_generator, face_count=face_count)
+    bit_generator = EntropyBitReader(10)  # just reserve 10 bytes for the buffer
+
+    roller = DiceRoller(bit_generator=bit_generator, face_count=face_count)
     print(roller(dice_count))
-
