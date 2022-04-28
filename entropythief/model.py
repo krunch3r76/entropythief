@@ -55,7 +55,9 @@ from .worker import worker_public
 # from TaskResultWriter import Interleaver
 
 ENTRYPOINT_FILEPATH = Path("/golem/run/worker")
-kTASK_TIMEOUT = timedelta(minutes=10)
+kTASK_TIMEOUT = timedelta(
+    minutes=10
+)  # should be >= script timeout, which is actually used
 DEVELOPER_LOG_EVENTS = True
 
 
@@ -399,9 +401,11 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     """perform steps to produce task result on a provider
     called from model__entropythief
     """
-    SCRIPT_TIMEOUT = timedelta(
-        minutes=5
-    )  # should be ample time for typical workloads/downloads
+    SCRIPT_TIMEOUT = (  # has to be at least kTASK_TIMEOUT, assigned to task itself
+        # previously on the executor
+        kTASK_TIMEOUT
+    )
+
     ##############################################################################
     Path_output_file = None
     loop = asyncio.get_running_loop()
@@ -436,11 +440,7 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                 f"{utils.TEXT_COLOR_DEFAULT}",
                 file=sys.stderr,
             )
-            task.reject_result(retry=True)
-            # raise # this will put the task back into the generator tasks
-            # don't raise because we need to cleanup reject instead
-            # the task automatically retried after an exception maybe, no need to reject just raise?
-            task.reject_result("timeout", retry=True)
+            task.reject_result("timeout", retry=True)  # retry false is scary
         except Exception as e:  # define exception TODO
             print(
                 f"{utils.TEXT_COLOR_RED}"
@@ -451,7 +451,7 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             print(e, file=sys.stderr)
             # raise # exception will be caught by yapapi to place the task back in the queue???
             # maybe don't raise because we need to cleanup reject instead
-            task.reject_result("unspecified error", retry=True)
+            task.reject_result("unspecified error", retry=True)  # retry false is scary
         else:
             ###################################################
             # accept the downloaded file as the task result   #
