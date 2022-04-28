@@ -404,7 +404,7 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     Path_output_file = None
     loop = asyncio.get_running_loop()
     # allow for time for naive providers to download the image
-    script = _ctx.new_script(timeout=timedelta(minutes=10))
+    script = _ctx.new_script(timeout=timedelta(minutes=15))
 
     async for task in tasks:
 
@@ -428,7 +428,7 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
         except rest.activity.BatchTimeoutError:  # credit to Golem's blender.py
             print(
                 f"{utils.TEXT_COLOR_RED}"
-                f"Task {task} timed out on {ctx.provider_name}, time: {task.running_time}"
+                f"Task {task} timed out on {_ctx.provider_name}, time: {task.running_time}"
                 f"{utils.TEXT_COLOR_DEFAULT}",
                 file=sys.stderr,
             )

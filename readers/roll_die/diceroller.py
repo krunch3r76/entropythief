@@ -89,7 +89,9 @@ class DieRoller:
 class DiceRoller:
     """rolls n dice and return result as a sorted tuple so order is not important"""
 
-    def __init__(self, bit_generator=EntropyBitReader(), face_count=6):
+    def __init__(self, bit_generator=None, face_count=6):
+        if bit_generator == None:
+            bit_generator = EntropyBitReader()
         self._face_count = face_count
         self._die_roller = DieRoller(bit_generator=bit_generator, face_count=face_count)
 
