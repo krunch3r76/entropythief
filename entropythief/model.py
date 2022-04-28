@@ -425,6 +425,8 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
         Path_output_file = Path(gettempdir()) / str(uuid4())
         script.download_file(worker_public.RESULT_PATH, str(Path_output_file))
 
+        # note: reject_result on exceptions behavior may have changed with recent yapapi updates
+        # TODO: test
         try:
             yield script
         except rest.activity.BatchTimeoutError:  # credit to Golem's blender.py
@@ -437,7 +439,7 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             task.reject_result(retry=True)
             # raise # this will put the task back into the generator tasks
             # don't raise because we need to cleanup reject instead
-            # the task automatically retried after an exception maybe, no need to reject? ???
+            # the task automatically retried after an exception maybe, no need to reject just raise?
             task.reject_result("timeout", retry=True)
         except Exception as e:  # define exception TODO
             print(
@@ -447,10 +449,9 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                 file=sys.stderr,
             )
             print(e, file=sys.stderr)
-            # raise # exception will be caught by yapapi to place the task back in the queue
-            # don't raise because we need to cleanup reject instead
-            # the task is automatically retried after an exception, no need to reject
-            # task.reject_result("unspecified error", retry=True) # timeout maybe?
+            # raise # exception will be caught by yapapi to place the task back in the queue???
+            # maybe don't raise because we need to cleanup reject instead
+            task.reject_result("unspecified error", retry=True)
         else:
             ###################################################
             # accept the downloaded file as the task result   #
