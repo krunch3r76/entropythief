@@ -399,12 +399,14 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     """perform steps to produce task result on a provider
     called from model__entropythief
     """
-
+    SCRIPT_TIMEOUT = timedelta(
+        minutes=5
+    )  # should be ample time for typical workloads/downloads
     ##############################################################################
     Path_output_file = None
     loop = asyncio.get_running_loop()
     # allow for time for naive providers to download the image
-    script = _ctx.new_script(timeout=timedelta(minutes=15))
+    script = _ctx.new_script(timeout=SCRIPT_TIMEOUT)
 
     async for task in tasks:
 
@@ -432,10 +434,11 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
                 f"{utils.TEXT_COLOR_DEFAULT}",
                 file=sys.stderr,
             )
+            task.reject_result(retry=True)
             # raise # this will put the task back into the generator tasks
             # don't raise because we need to cleanup reject instead
-            # the task is automatically retried after an exception, no need to reject
-            # task.reject_result("timeout", retry=True) # need to ensure a retry occurs! TODO
+            # the task automatically retried after an exception maybe, no need to reject? ???
+            task.reject_result("timeout", retry=True)
         except Exception as e:  # define exception TODO
             print(
                 f"{utils.TEXT_COLOR_RED}"
@@ -453,9 +456,7 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
             # accept the downloaded file as the task result   #
             ###################################################
             task.accept_result(result=str(Path_output_file))
-            script = _ctx.new_script(
-                timeout=timedelta(minutes=1)
-            )  # image d/l'ed provider, narrow timeout
+            script = _ctx.new_script(timeout=SCRIPT_TIMEOUT)
         finally:
             if not task.result:
                 if Path_output_file and Path_output_file.exists():
