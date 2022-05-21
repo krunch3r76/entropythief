@@ -59,6 +59,7 @@ def build_parser(description: str):
         "--use-dev-random",
         action="store_true",
         help="use /dev/random instead of rdrand",
+        default=False,
     )
     parser.add_argument(
         "--start-paused",
