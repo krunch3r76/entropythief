@@ -3,6 +3,13 @@ import sys
 
 try:
     import yapapi
+
+    version_list = yapapi.__version__.split(".")
+    if int(version_list[1]) < 9:
+        print(
+            f"Sorry, the version of a required python module, yapapi, is outdated. Currently it is {yapapi.__version__}. It needs to be updated to at least version 0.9.1 to run."
+        )
+        sys.exit(1)
 except ModuleNotFoundError:
     print(
         "Uh oh, did you forget to install the requirements? I could not find a required module: yapapi! Please see the readme for direction."

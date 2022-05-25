@@ -4,6 +4,10 @@
 
 get high quality entropy (randomness) at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (**default**). requests are sent whenever the pipe falls below half the set threshold. 
 
+# requirements
+a requestor installation of golem (see https://handbook.golem.network/requestor-tutorials/flash-tutorial-of-requestor-development)
+yapapi module version 0.9.1 (satisfied by following usage directions below)
+
 # video demo
 https://krunch3r76.github.io/entropythief # browser must support the ogg codec to view most of these videos as of this writing
 
@@ -22,7 +26,7 @@ computers can provide random numbers; however, hardware designs make such number
 # Linux or WSL
 git clone https://github.com/krunch3r76/entropythief.git
 cd entropythief
-git checkout v1.1.2
+git checkout v1.1.3
 python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r entropythief/requirements.txt
