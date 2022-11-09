@@ -226,7 +226,9 @@ class PipeWriter:
     def countAvailable(self):
         """computes at a given moment how many bytes could be accepted assuming all asynchronous work is done"""
         # -----------------------------------------
-        return self._maxCapacity - self._count_bytes_in_pipe() - self._byteQ.len()
+        available = self._maxCapacity - self._count_bytes_in_pipe() - self._byteQ.len()
+
+        return available
 
     # --------------------------------------------
     def len(self):
@@ -280,6 +282,9 @@ class PipeWriter:
                 self._byteQ.append(MyBytesIO(chunk_of_bytes))
                 await asyncio.sleep(0.01)
 
+            # kludge, closing explicitly may prevent memory overfilling, dumping the no usable remaining
+            # bytestream.close()
+
             #### reconnect a broken pipe if applicable
             if self._whether_pipe_is_broken():
                 self._open_pipe()
@@ -295,6 +300,7 @@ class PipeWriter:
                     written = _write_to_pipe(self._fdPipe, first.getbuffer())
                     if written == 0:
                         BLOCKED = True
+                        # debug kludge: discard for better memory management
                         self._byteQ.appendleft(first)
                     else:
                         free -= first.len()  # assumes all written
@@ -304,8 +310,10 @@ class PipeWriter:
                     written = _write_to_pipe(self._fdPipe, frame[:free])
                     if written == 0:
                         BLOCKED = True
+                        # as a debug kludge to not put back: do not put back any otherwise memory backlogs?
                         first.putback(free)
 
+                    # as a debug kludge memory manager do not appendleft
                     self._byteQ.appendleft(first)
             except IndexError:
                 break

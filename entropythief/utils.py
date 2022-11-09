@@ -66,6 +66,11 @@ def build_parser(description: str):
         action="store_true",
         help="start paused instead of beginning execution immediately",
     )
+    parser.add_argument(
+        "--conceal-view",
+        action="store_true",
+        help="do not stream bytes to console - prevents backlog in memory",
+    )
     return parser
 
 

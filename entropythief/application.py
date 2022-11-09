@@ -80,7 +80,7 @@ class Controller:
         if self.MINPOOLSIZE < 2**20:  # enforce minimum pool size
             self.MINPOOLSIZE = 2**20
 
-        self.theview = view.View()
+        self.theview = view.View(concealedview=self.args.conceal_view)
 
         # self.taskResultWriter = Interleaver(self.to_ctl_q, self.MINPOOLSIZE)
 

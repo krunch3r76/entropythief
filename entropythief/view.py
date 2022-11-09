@@ -278,9 +278,10 @@ class View:
     # ..View.........................#
     # .          __init__           .#
     # ...............................#
-    def __init__(self):
+    def __init__(self, concealedview=False):
         self.background = Background()
         self._init_screen()
+        self._concealedview = concealedview
 
     # ..View.......................................#
     # .          coro_update_mainwindow           .#
@@ -308,7 +309,10 @@ class View:
                 )  # whatever is sent to this generator is assigned to msg here and loop starts
                 # True is returned to inform caller to manually refresh
                 if msg_in:
-                    q.put(io.StringIO(msg_in))
+                    pass
+                    # debug, see if queue is causing memory backlog commenting out put
+                    if not self._concealedview:
+                        q.put(io.StringIO(msg_in))
 
                 if whether_stream_is_at_end(messageBuffered):
                     messageBuffered.close()
