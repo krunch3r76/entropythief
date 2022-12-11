@@ -36,7 +36,7 @@ print()
 try:
     print(
         "to change any of the settings, ctrl-c and pass the arguments desired on the command line."
-        f" for example:\n\033[4m./entropythief.py --payment-network {TEXT_COLOR_YELLOW}polygon{TEXT_COLOR_DEFAULT}\033[4m --subnet-tag {TEXT_COLOR_YELLOW}public-beta{TEXT_COLOR_DEFAULT}.\n"
+        f" for example:\n\033[4m./entropythief.py --payment-network {TEXT_COLOR_YELLOW}polygon{TEXT_COLOR_DEFAULT}\033[4m --subnet-tag {TEXT_COLOR_YELLOW}public{TEXT_COLOR_DEFAULT}.\n"
     )
     if sys.version_info >= (3, 10):
         print(

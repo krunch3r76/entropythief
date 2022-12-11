@@ -42,8 +42,8 @@ def build_parser(description: str):
     )
     parser.add_argument(
         "--subnet-tag",
-        default="devnet-beta",
-        help="Subnet name e.g. `devnet-beta`, `public-beta`; default: \033[1m%(default)s\033[0m",
+        default="public",
+        help="Subnet name e.g. `public`; default: \033[1m%(default)s\033[0m",
     )
     parser.add_argument(
         "--log-file",
