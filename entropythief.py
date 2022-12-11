@@ -38,11 +38,11 @@ try:
         "to change any of the settings, ctrl-c and pass the arguments desired on the command line."
         f" for example:\n\033[4m./entropythief.py --payment-network {TEXT_COLOR_YELLOW}polygon{TEXT_COLOR_DEFAULT}\033[4m --subnet-tag {TEXT_COLOR_YELLOW}public{TEXT_COLOR_DEFAULT}.\n"
     )
-    if sys.version_info >= (3, 10):
+    if sys.version_info > (3, 10):
         print(
             f"\033[1mWARNING\033[0m You are using Python version {sys.version}, but"
             " only earlier versions have been tested. Please consider using Python"
-            " version 3.9.x or less instead. \033[1mWARNING\033[0m"
+            " version 3.10.x or less instead. \033[1mWARNING\033[0m"
         )
     input("press enter to accept the above arguments and proceed")
     print("")

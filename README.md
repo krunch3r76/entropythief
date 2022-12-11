@@ -1,12 +1,11 @@
 # entropythief
 
-**A golem requestor installation is needed to run this app. Please visit https://www.golem.network for details** **NOTE: as of Decemer 8, 2022, golem network is undergoing an awkward upgrade and this project may not run until golem finishes its new SDK and network services, after which this project shall be updated**
-
+**A golem requestor installation is needed to run this app. Please visit https://www.golem.network for details**
 get high quality entropy (randomness) at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (**default**). requests are sent whenever the pipe falls below half the set threshold. 
 
 # requirements
 a requestor installation of golem (see https://handbook.golem.network/requestor-tutorials/flash-tutorial-of-requestor-development)
-yapapi module version 0.9.1 (satisfied by following usage directions below)
+yapapi module version 0.10.0 (satisfied by following usage directions below)
 
 # video demo
 https://krunch3r76.github.io/entropythief # browser must support the ogg codec to view most of these videos as of this writing
