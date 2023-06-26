@@ -37,7 +37,7 @@ def build_parser(description: str):
     )
     parser.add_argument(
         "--payment-network",
-        default="rinkeby",
+        default="goerli",
         help="Network name, e.g. `mainnet`, `rinkeby`, `goerli`, `polygon`, `mumbai`; default: \033[1m%(default)s\033[0m",
     )
     parser.add_argument(
