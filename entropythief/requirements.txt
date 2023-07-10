@@ -1,2 +1,2 @@
-gvmkit-build==0.2.7
-yapapi==0.10.0
+gvmkit-build==0.3.13
+yapapi==0.11.0
