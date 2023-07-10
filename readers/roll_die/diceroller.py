@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
 # diceroller.py
-# implements a DieRoller functor that represents a die of a specified number of sides and can be rolled repeatedly
-# implements a DiceRoller functor that rolls as many die that have the same number of sies and returns the sorted result
-"""extended description
-DieRoller leverages entropythief's bit reader by creating a universe of possible face values for a roll
-then randomly chooses to keep or discard each of the values in the universe (e.g. 1, 2, 3, 4, 5, 6)
-then repeats this logic over the next set until only one is left or if all have decided to have been discarded
-repeats with a new universe (e.g. 1, 2, 3, 4, 5, 6)
-"""
+
 from pathlib import Path
 import os
 import sys
@@ -16,90 +9,72 @@ PATH_TO_PIPE_READERS = Path(os.path.dirname(__file__)).resolve().parents[0]
 sys.path.append(str(PATH_TO_PIPE_READERS))
 
 from bitreader import EntropyBitReader
-
-
-class _Ball:
-    """called to return T or F based on next bit from the bit generator it was instantiated with"""
-
-    def __init__(self, bit_generator):
-        self._bit_generator = bit_generator
-
-    def __call__(self):
-        return True if next(self._bit_generator) == 1 else False
-
-
-class DieRoller:
-    """roller for a die of a fixed number of sides"""
-
-    def __init__(self, bit_generator, face_count=6):
-        """
-        in:
-            bit_generator: an object that implements the generator protocol to return a 1 or 0
-            face_count: the number of sides on the die (1 to face_count)
-        """
-        self._face_count = face_count
-        self._ball = _Ball(bit_generator)
-        self._universe = set([num for num in range(1, self._face_count + 1)])
-
-    def _choose_randomly_from(self, uni):
-        """traverse each universe element consulting ball as to whether to keep by adding to a new set. repeat on new set until one or zero kept. returns empty or single element set
-
-        in: full universe
-        out: sub universe of 0 or more picks
-        """
-        new_uni = set()
-
-        for pick in uni:
-            if self._ball() == True:
-                new_uni.add(pick)
-
-        uni.clear()
-
-        return new_uni
-
-    def __call__(self):
-        """
-        inputs
-        ------
-        universe_of_numbers (_universe)
-
-        process
-        -------
-        new_universe {empty}
-        *----------
-            [ len(new_universe) == 0 ]
-                new_universe <-copy- _universe
-                **---len(new_universe)>1--------------
-                    new_universe <- krunch universe
-
-        output
-        ------
-        final chosen number from universe
-        """
-
-        new_universe = set()
-        while len(new_universe) == 0:
-            new_universe = self._universe.copy()
-            while len(new_universe) > 1:
-                new_universe = self._choose_randomly_from(new_universe)
-
-        return list(new_universe)[0]
+from pipe_reader import PipeReader
+from die import Die
 
 
 class DiceRoller:
-    """rolls n dice and return result as a sorted tuple so order is not important"""
+    """roll 2 or more Die to return a tuple of random rolls"""
 
-    def __init__(self, bit_generator=None, face_count=6):
-        if bit_generator == None:
-            bit_generator = EntropyBitReader()
-        self._face_count = face_count
-        self._die_roller = DieRoller(bit_generator=bit_generator, face_count=face_count)
+    def __init__(
+        self,
+        high_face=6,
+        low_face=1,
+        number_of_dice=2,
+        as_sorted=False,
+        allow_repeats=True,
+        read_buffer_size=None,
+    ):
+        """
+        initialize DiceRoller
 
-    def __call__(self, dice_count=2):
-        throw = []
-        for _ in range(dice_count):
-            throw.append(self._die_roller())
-        return tuple(sorted(throw))
+        pre: none
+        in:
+        - high_face: the highest face of the dice [6]
+        - low_face: the lowest face of the dice [1]
+        - number_of_dice: how many dice to roll [2]
+        - as_sorted: whether to sort the dice faces [TRUE]
+        - allow_repeats: whether to allow the same number to come up [TRUE]
+        - [read_buffer_size]: override the default pipe reader's buffer value
+        post:
+        - _number_of_dice
+        - _as_sorted
+        - _allow_repeats
+        """
+        self._number_of_dice = number_of_dice
+        self._as_sorted = as_sorted
+        self._allow_repeats = allow_repeats
+
+        pipe_reader = PipeReader(read_buffer_size)
+        self._die = Die(
+            high_face,
+            low_face,
+            pipe_reader=pipe_reader,
+            algorithm=Die.Algorithm.MODULOBYTES,
+        )
+
+    def __call__(self):
+        """
+        pre: none
+        in: none
+        out:
+        - a tuple of random rolls that may be sorted and may have repeats excluded as specified
+        post: entropypool depleted of bytes/bits
+        """
+        rolls = []
+        if self._allow_repeats:
+            for _ in range(self._number_of_dice):
+                rolls.append(self._die())
+        else:
+            while len(rolls) < number_of_dice:
+                roll = self._die()
+                if roll not in rolls:
+                    rolls.append(roll)
+
+        if self._as_sorted:
+            rolls.sort()
+
+        return tuple(rolls)
 
 
 if __name__ == "__main__":
@@ -121,7 +96,5 @@ if __name__ == "__main__":
         print(f"Usage: {sys.argv[0]} [<number of dice>=2] [<faces_per_die=6>]")
         sys.exit(1)
 
-    bit_generator = EntropyBitReader(10)  # just reserve 10 bytes for the buffer
-
-    roller = DiceRoller(bit_generator=bit_generator, face_count=face_count)
-    print(roller(dice_count))
+    diceroller = DiceRoller(high_face=face_count, number_of_dice=dice_count)
+    print(diceroller())

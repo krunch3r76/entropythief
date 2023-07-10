@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # provides a generator class that produces a bit on demand utilizing entropythief's pipe_reader
+# author: krunch3r (KJM github.com/krunch3r76)
+# license: General Poetic License (GPL3)
 
 from pathlib import Path
 import os, sys
@@ -19,27 +21,60 @@ except:
 class EntropyBitReader:
     """encapsulate a generic bitreader to utilize et's pipe reader"""
 
-    def __init__(self, kCountBytesToBuffer=10000):
-        self._kCountBytesToBuffer = kCountBytesToBuffer
-        self._readerPipe = PipeReader()
+    def __init__(self , countBytesToBuffer=( 2**19 ), pipe_reader=None):
+        """
+        pre: with defaults, entropy source should be able to eventually have half a megabyte of
+         bits read from it
+        in:
+            countBytesToBuffer: how many bytes to read into memory from entropy source at a time
+            pipe_reader: optionally use a pipe reader already instantiated, must implement .read()
+
+        post:
+            _kCountBytesToBuffer: arbitrarily sets read size to help mitigate overhead from too many lowlevel reads
+            _readerPipe: an new instance of PipeReader
+            _bitgenerator: a new instance of BitGenerator initialized with the count and pipereader
+        """
+        self._kCountBytesToBuffer = countBytesToBuffer
+        self._readerPipe = PipeReader() if pipe_reader is None else pipe_reader
         self._bitgenerator = BitGenerator(
-            lambda: self._readerPipe.read(self._kCountBytesToBuffer),
+            self._readerPipe,
             self._kCountBytesToBuffer,
         )
 
+    def __call__(self):
+        """provide an alternative to next() to directly get the next random bit
+
+        pre: none
+        in: none
+        post: one less bit in self._bitgenerator's bitpool
+        """
+        return self.__next__()
+
     def __iter__(self):
-        pass
+        """This method makes EntropyBitReader iterable
+
+        pre: none
+        in: none
+        post: _bitgenerator less 1 bit
+        out: 1 or 0
+        """
+        while True:
+            yield self.__next__()
 
     def __next__(self):
-        """get the next 1 or 0 from the internal bitgenerator"""
+        """get the next 1 or 0 from the internal bitgenerator
+
+        pre: none
+        in: none
+        post: _bitgenerator less 1 bit
+        out: 1 or 0
+        """
         return next(self._bitgenerator)
 
 
 if __name__ == "__main__":
-    print(
-        "reading bits from the entropy stream. first bit printed. press enter for next"
-    )
-    ebr = EntropyBitReader(1)
+    print("buffering bits from the entropy stream. first bit will print momentarily. press enter for next")
+    ebr = EntropyBitReader()
     while True:
         try:
             print(next(ebr), end="")

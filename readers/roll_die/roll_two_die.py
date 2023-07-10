@@ -2,9 +2,14 @@
 # debug diceroller.py
 
 import sys
+from die import Die
 
-# sys.path.append("/home/krunch3r/golem/entropythief/readers")
-# from bitreader import EntropyBitReader
+import os, sys
+from pathlib import Path
+
+PATH_TO_PIPE_READERS = Path(os.path.dirname(__file__)).resolve().parents[0]
+sys.path.append(str(PATH_TO_PIPE_READERS))
+from pipe_reader import PipeReader
 from diceroller import DiceRoller
 
 # import pprint
@@ -65,7 +70,7 @@ def _build_base_freq_table(high_num=6):
 
 
 if __name__ == "__main__":
-    diceroller = DiceRoller()
+    diceroller = DiceRoller(high_face=6, number_of_dice=2, as_sorted=True)
     error = False
     rollcount = 100000
     if len(sys.argv) == 2:
@@ -88,6 +93,8 @@ if __name__ == "__main__":
     # roll the dice /rollcount/ times and print the frequency table
 
     for _ in range(rollcount):
-        freq_table[diceroller()] += 1
+        roll = diceroller()
+        # print(roll)
+        freq_table[roll] += 1
 
     _print_freq_table(freq_table)

@@ -11,6 +11,7 @@ import select
 import sys
 import io
 
+from utils.count_bytes_in_pipe import count_bytes_in_pipe
 
 _DEBUGLEVEL = (
     int(os.environ["PYTHONDEBUGLEVEL"]) if "PYTHONDEBUGLEVEL" in os.environ else 0
@@ -23,30 +24,53 @@ def _log_msg(msg, debug_level=1, file_=sys.stderr):
         print(msg, file=file_)
 
 
-# ****************************************
-def count_bytes_in_pipe(fd):
-    # ****************************************
-    buf = bytearray(4)
-    fcntl.ioctl(fd, termios.FIONREAD, buf, 1)
-    bytesInPipe = int.from_bytes(buf, "little")
-    return bytesInPipe
-
-
 # ******************{}********************
-class PipeReader:
+class _PipeReader:
     # ******************{}********************
+    """
+    create an interface to read from entropythief's designated named pipe
+
+    recreates pipe if needed (note, if another user runs this it will
+    require changing permissions so entropythief can write to it) REVIEW
+
+    methods:
+        read(count): return count number of bytes as type bytes
+    """
     _kNamedPipeFilePathString = "/tmp/pilferedbits"
-    _fdPipe = None
-    _fdPoll = select.poll()
-    _F_SETPIPE_SZ = 1031
+    _F_SETPIPE_SZ = 1031  # opcode for fnctl to setpipe size
 
     # --------------------------------------
     def __init__(self):
         # --------------------------------------
+        """set up interface to pipe, open, and populate attributes
+
+        post:
+            _fdPipe : file descriptor to opened named pipe
+            _fdPoll : poll object with which to monitor pipe
+
+            _fdPipe is None if not available at time of initialization
+
+        notes: the named pipe open is the constant self._kNamedPipeFilePathString
+        """
+        self._fdPipe = None
+        self._fdPoll = select.poll()
         self._open_pipe()
 
     # .......................
     def _open_pipe(self):
+        """try to open the named pipe for reading
+
+        pre: _fdPoll is unregistered of previous pipe (weak)
+        in: none
+        out: none
+        post:
+            _fdPipe : descriptor to current or newly created named pipe
+            _fdPoll : registered with newly opened pipe
+
+            notes:
+            named pipe created if needed and pipe size set to 1mb,
+             register pipe with internal poll object
+        """
         # .......................
         _log_msg("opening pipe", 5)
         if not os.path.exists(self._kNamedPipeFilePathString):
@@ -61,6 +85,13 @@ class PipeReader:
     # ........................................
     def _reopen_pipe(self):
         # ........................................
+        """close pipe if applicable and open
+
+        pre: none
+        in: none
+        out: none
+        post: _fdPipe (None if failed to open)
+        """
         if self._fdPipe:
             try:
                 os.close(self._fdPipe)
@@ -71,10 +102,17 @@ class PipeReader:
         self._open_pipe()
 
     # ........................................
-    def _whether_pipe_is_readable(self):
+    def _whether_pipe_is_readable(self) -> bool:
         # ........................................
+        """indicate whether the pipe is currently readable
+
+        pre: none
+        in: none
+        out: True or False
+        post: none
+        """
         answer = False
-        if not self._fdPipe:
+        if self._fdPipe is None:
             answer = False
         else:
             pl = self._fdPoll.poll(0)
@@ -86,8 +124,16 @@ class PipeReader:
     # continuously read pipes until read count satisfied, then return the read count
     # revision shall asynchronously read the pipe and deliver in chunks
     # -------------------------------------------
-    def read(self, count) -> bytearray:
+    def read(self, count) -> bytes:
         # -------------------------------------------
+        """ read from pipe until count number and return
+        pre: None
+        in:
+            - count: the number of bytes to read and return
+        post: None
+        out:
+            /bytes/ of length \count\
+        """
         byte_stream = io.BytesIO()
         remainingCount = count
         while remainingCount > 0:
@@ -121,67 +167,8 @@ class PipeReader:
         # print(f"read returning {len(byte_stream.getbuffer() )}")
         return byte_stream.getvalue()
 
-    # read pipe up to count returning parts along the way
-    # -------------------------------------------
-    def coro_read(self, count, partitions=6) -> bytearray:
-        # -------------------------------------------
-
-        def __partition(total, maxcount=6):
-            if total == 1:
-                return [total]
-
-            if total <= maxcount:
-                count = total
-            else:
-                count = maxcount
-
-            minimum = int(total / count)
-            while minimum == 1:
-                count -= 1
-                minimum = int(total / count)
-
-            extra = total % count
-
-            rv = []
-            for _ in range(count - 1):
-                rv.append(minimum)
-            rv.append(minimum + extra)
-            return rv
-
-        counts = __partition(count)
-        for subcount in counts:
-            byte_stream = io.BytesIO()
-            remainingCount = subcount
-            while remainingCount > 0:
-                bytesInCurrentPipe = count_bytes_in_pipe(self._fdPipe)
-                if bytesInCurrentPipe >= remainingCount:
-                    try:
-                        _ba = os.read(self._fdPipe, remainingCount)
-                    except BlockingIOError:
-                        _log_msg("pipe reader: BLOCKING ERROR", 5)
-                        pass
-                    except Exception as e:
-                        _log_msg(f"Other exception: {e}", 5)
-                    else:
-                        remainingCount -= len(_ba)
-                        byte_stream.write(_ba)
-                        # print(f"remainingCount is {remainingCount}")
-                elif bytesInCurrentPipe > 0:
-                    try:
-                        _ba = os.read(self._fdPipe, bytesInCurrentPipe)
-                    except BlockingIOError:
-                        _log_msg("blocking io error", 5)
-                        pass
-                    except Exception as e:
-                        _log_msg(f"Other exception: {e}", 5)
-                        # self._reopen_pipe()
-                    else:
-                        remainingCount -= len(_ba)
-                        byte_stream.write(_ba)
-
-                time.sleep(0.01)
-            print(f"read returning {len(byte_stream.getbuffer() )}")
-            yield byte_stream.getvalue()
+    # potential issues
+    # undefined behavior if named pipe is deleted elsewhere
 
     # -------------------------------------------
     def __del__(self):
@@ -192,5 +179,93 @@ class PipeReader:
         # maybe the writer should be unlinking it when done?
 
 
-# potential issues
-# undefined behavior if named pipe is deleted elsewhere
+class PipeReader(_PipeReader):
+    def __init__(self, buffer_size=None):
+        super().__init__()
+        if buffer_size is None:
+            buffer_size = 2**20
+        self.buffer_size = buffer_size
+        self.buffer = bytearray(buffer_size)
+        self.buffer_pos = buffer_size  # Pointing one past the end, so refill will be triggered on first read
+
+    def read(self, count):
+        remaining = len(self.buffer) - self.buffer_pos
+        if remaining >= count:
+            # We have enough data in the buffer
+            result = self.buffer[self.buffer_pos : self.buffer_pos + count]
+            self.buffer_pos += count
+        else:
+            # We need to refill the buffer
+            # But first, return the remaining bytes in the buffer
+            result = self.buffer[self.buffer_pos :]
+            # Now refill the buffer
+            bytes_read = super().read(self.buffer_size)
+            self.buffer[: len(bytes_read)] = bytes_read  # Refill the buffer
+            self.buffer_pos = 0
+            # Append to result and recursively call read() for the remaining data
+            result += self.buffer[self.buffer_pos : count - remaining]
+            self.buffer_pos += count - remaining
+        return result
+
+
+# saved
+# # read pipe up to count returning parts along the way
+# # -------------------------------------------
+# def coro_read(self, count, partitions=6) -> bytes:
+#     # -------------------------------------------
+
+#     def __partition(total, maxcount=6):
+#         if total == 1:
+#             return [total]
+
+#         if total <= maxcount:
+#             count = total
+#         else:
+#             count = maxcount
+
+#         minimum = int(total / count)
+#         while minimum == 1:
+#             count -= 1
+#             minimum = int(total / count)
+
+#         extra = total % count
+
+#         rv = []
+#         for _ in range(count - 1):
+#             rv.append(minimum)
+#         rv.append(minimum + extra)
+#         return rv
+
+#     counts = __partition(count)
+#     for subcount in counts:
+#         byte_stream = io.BytesIO()
+#         remainingCount = subcount
+#         while remainingCount > 0:
+#             bytesInCurrentPipe = count_bytes_in_pipe(self._fdPipe)
+#             if bytesInCurrentPipe >= remainingCount:
+#                 try:
+#                     _ba = os.read(self._fdPipe, remainingCount)
+#                 except BlockingIOError:
+#                     _log_msg("pipe reader: BLOCKING ERROR", 5)
+#                     pass
+#                 except Exception as e:
+#                     _log_msg(f"Other exception: {e}", 5)
+#                 else:
+#                     remainingCount -= len(_ba)
+#                     byte_stream.write(_ba)
+#                     # print(f"remainingCount is {remainingCount}")
+#             elif bytesInCurrentPipe > 0:
+#                 try:
+#                     _ba = os.read(self._fdPipe, bytesInCurrentPipe)
+#                 except BlockingIOError:
+#                     _log_msg("blocking io error", 5)
+#                     pass
+#                 except Exception as e:
+#                     _log_msg(f"Other exception: {e}", 5)
+#                     # self._reopen_pipe()
+#                 else:
+#                     remainingCount -= len(_ba)
+#                     byte_stream.write(_ba)
+
+#             time.sleep(0.01)
+#         yield byte_stream.getvalue()
