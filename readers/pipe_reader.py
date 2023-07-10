@@ -179,32 +179,48 @@ class _PipeReader:
         # maybe the writer should be unlinking it when done?
 
 
+import io
+
+
 class PipeReader(_PipeReader):
+    """read entropythief's named pipe into a local before"""
+
     def __init__(self, buffer_size=None):
         super().__init__()
         if buffer_size is None:
-            buffer_size = 2**20
-        self.buffer_size = buffer_size
-        self.buffer = bytearray(buffer_size)
-        self.buffer_pos = buffer_size  # Pointing one past the end, so refill will be triggered on first read
+            self.buffer_size = 4096
+        else:
+            self.buffer_size = buffer_size
+        self.buffer = bytearray(self.buffer_size)
+        self.buffer_pos = 0
+        self.buffer_end = 0
 
     def read(self, count):
-        remaining = len(self.buffer) - self.buffer_pos
+        remaining = self.buffer_end - self.buffer_pos
         if remaining >= count:
             # We have enough data in the buffer
             result = self.buffer[self.buffer_pos : self.buffer_pos + count]
             self.buffer_pos += count
         else:
-            # We need to refill the buffer
-            # But first, return the remaining bytes in the buffer
-            result = self.buffer[self.buffer_pos :]
-            # Now refill the buffer
-            bytes_read = super().read(self.buffer_size)
-            self.buffer[: len(bytes_read)] = bytes_read  # Refill the buffer
+            # Not enough data in the buffer, need to refill
+            result = self.buffer[
+                self.buffer_pos : self.buffer_end
+            ]  # take remaining data
+            new_data = super().read(
+                max(self.buffer_size, count - remaining)
+            )  # get more data
+            result += new_data[
+                : count - remaining
+            ]  # append required amount to the result
+
+            # Put the rest of the new data (if any) in the buffer
+            remaining_from_new = len(new_data) - (count - remaining)
+            self.buffer[:remaining_from_new] = new_data[
+                count - remaining :
+            ]  # move the rest to the beginning of the buffer
             self.buffer_pos = 0
-            # Append to result and recursively call read() for the remaining data
-            result += self.buffer[self.buffer_pos : count - remaining]
-            self.buffer_pos += count - remaining
+            self.buffer_end = remaining_from_new
+
         return result
 
 

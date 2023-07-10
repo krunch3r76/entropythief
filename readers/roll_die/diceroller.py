@@ -10,7 +10,7 @@ sys.path.append(str(PATH_TO_PIPE_READERS))
 
 from bitreader import EntropyBitReader
 from pipe_reader import PipeReader
-from die import Die
+from roll_die.die import Die
 
 
 class DiceRoller:
@@ -66,7 +66,7 @@ class DiceRoller:
             for _ in range(self._number_of_dice):
                 rolls.append(self._die())
         else:
-            while len(rolls) < number_of_dice:
+            while len(rolls) < self._number_of_dice:
                 roll = self._die()
                 if roll not in rolls:
                     rolls.append(roll)
