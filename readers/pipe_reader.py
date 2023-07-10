@@ -183,7 +183,13 @@ import io
 
 
 class PipeReader(_PipeReader):
-    """read entropythief's named pipe into a local before"""
+    """read entropythief's named pipe into a local before
+
+
+    credits: as of this writing the implementation of this buffering logic
+        can be credited almost wholly to chatgpt-4 and from whomever chatgpt-4
+        sourced it
+    """
 
     def __init__(self, buffer_size=None):
         super().__init__()
