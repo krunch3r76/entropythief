@@ -4,8 +4,11 @@
 # license: General Poetic License (GPL3)
 ##external modules
 
-MAX_PRICE_CPU_HR = "0.019"
-MAX_PRICE_DUR_HR = "0.0"
+import decimal
+
+MAX_PRICE_CPU_HR = decimal.Decimal("0.2")
+MAX_PRICE_DUR_HR = decimal.Decimal("0.2")
+MAX_FIXED_PRICE = decimal.Decimal("0.0")
 
 # standard
 import aiohttp  # to catch connection exception
@@ -216,7 +219,6 @@ class model__EntropyThief:
                 event_consumer=MySummaryLogger(self).log,
                 strategy=strategy,
             ) as golem:
-
                 # partition the work into evenly spaced lengths except for last
                 bytes_partitioned = helper__partition(
                     count_bytes_requested, self.MAXWORKERS
@@ -289,15 +291,16 @@ class model__EntropyThief:
         if self.args.payment_network in ["rinkeby", "goerli"]:
             max_price_for_cpu = Decimal("inf")
             max_price_for_dur = Decimal("inf")
+            max_fixed_price = Decimal("inf")
         else:
             max_price_for_cpu = Decimal(MAX_PRICE_CPU_HR)
             max_price_for_dur = Decimal(MAX_PRICE_DUR_HR)
-
+            max_fixed_price = Decimal(MAX_FIXED_PRICE)
         try:
             self.strat = MyLeastExpensiveLinearPayuMS(
                 LeastExpensiveLinearPayuMS(  # these MS parameters are not clearly documented ?
                     max_fixed_price=Decimal(
-                        "0.00"
+                        max_fixed_price
                     ),  # testing, ideally this works with the epsilon in model...
                     max_price_for={
                         yapapi.props.com.Counter.CPU: max_price_for_cpu
@@ -318,7 +321,6 @@ class model__EntropyThief:
             )  # note bytesInPipe is the lazy count
 
             while not self.OP_STOP:
-
                 # 2.1) flush any pending processes/buffers in the task result writer
                 # await self.taskResultWriter.refresh()
 
@@ -413,7 +415,6 @@ async def steps(_ctx: yapapi.WorkContext, tasks: AsyncIterable[yapapi.Task]):
     script = _ctx.new_script(timeout=SCRIPT_TIMEOUT)
 
     async for task in tasks:
-
         ################################################
         # execute the worker in the vm                 #
         ################################################
@@ -491,7 +492,6 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
         # self.event_log_file = open("events.log", "w")
 
     def log(self, event: yapapi.events.Event) -> None:
-
         # during an execution we are interested in updating the state
         # while executions are pending, we hook to inspect the buffer
         # state and update the controller here while events are emitted

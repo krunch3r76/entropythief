@@ -24,6 +24,7 @@ class DiceRoller:
         as_sorted=False,
         allow_repeats=True,
         read_buffer_size=None,
+        algorithm=Die.Algorithm.SCALING
     ):
         """
         initialize DiceRoller
@@ -81,20 +82,27 @@ if __name__ == "__main__":
     start_error = False
     dice_count = 2
     face_count = 6
+    algorithm = None
     if len(sys.argv) != 1:
-        if len(sys.argv) > 3:
+        if len(sys.argv) > 4:
             start_error = True
         else:
             try:
                 if len(sys.argv) > 1:
                     dice_count = int(sys.argv[1])
-                if len(sys.argv) == 3:
+                if len(sys.argv) >= 3:
                     face_count = int(sys.argv[2])
+                if len(sys.argv) == 4:
+                    if sys.argv[3] == "scaling":
+                        algorithm = Die.Algorithm.SCALING
+                    else:
+                        algorithm = Die.Algorithm.MODULOBYTES
+
             except:
                 start_error = True
     if start_error:
         print(f"Usage: {sys.argv[0]} [<number of dice>=2] [<faces_per_die=6>]")
         sys.exit(1)
 
-    diceroller = DiceRoller(high_face=face_count, number_of_dice=dice_count)
+    diceroller = DiceRoller(high_face=face_count, number_of_dice=dice_count, algorithm=algorithm)
     print(diceroller())
