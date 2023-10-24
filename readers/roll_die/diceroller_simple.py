@@ -17,7 +17,7 @@ sys.path.append(str(PATH_TO_PIPE_READERS))
 
 from bitreader import EntropyBitReader
 
-DISCARDBITCOUNT = 5  # arbitrarily chosen bit discard value
+DISCARDBITCOUNT = 1  # arbitrarily chosen bit discard value
 
 
 class _Ball:
@@ -28,9 +28,9 @@ class _Ball:
 
     def __call__(self):
         for _ in range(DISCARDBITCOUNT):
-            next(self._bit_generator)
+            bit = next(self._bit_generator)
 
-        return True if next(self._bit_generator) == 1 else False
+        return True if bit else False
 
 
 class DieRoller:
@@ -47,7 +47,9 @@ class DieRoller:
         self._universe = set([num for num in range(1, self._face_count + 1)])
 
     def _choose_randomly_from(self, uni):
-        """traverse each universe element consulting ball as to whether to keep by adding to a new set. repeat on new set until one or zero kept. returns empty or single element set
+        """traverse the elements in the universe discarding picks at random and returning those not discarded if any
+
+        notes: allows for the possibility of an empty set (choosing nothing)
 
         in: full universe
         out: sub universe of 0 or more picks
@@ -55,12 +57,10 @@ class DieRoller:
         new_uni = set()
 
         for pick in uni:
-            if self._ball() == True:
+            if self._ball():
                 new_uni.add(pick)
 
-        uni.clear()
-
-        return new_uni
+        return uni - new_uni
 
     def __call__(self):
         """
@@ -83,8 +83,8 @@ class DieRoller:
         """
 
         new_universe = set()
-        while len(new_universe) == 0:
-            new_universe = self._universe.copy()
+        while len(new_universe) != 1:
+            new_universe = self._choose_randomly_from(self._universe)
             while len(new_universe) > 1:
                 new_universe = self._choose_randomly_from(new_universe)
 
@@ -94,15 +94,26 @@ class DieRoller:
 class DiceRollerSimple:
     """rolls n dice and return result as a sorted tuple so order is not important"""
 
-    def __init__(self, bit_generator=None, face_count=6, subtraction=0, repeats=False):
-        if bit_generator == None:
-            bit_generator = EntropyBitReader()
+    def __init__(
+        self,
+        bit_generator=None,
+        face_count=6,
+        subtraction=0,
+        repeats=False,
+        entropy_buffer_bytecount=None,
+    ):
+        if entropy_buffer_bytecount is None:
+            entropy_buffer_bytecount = 2**16
+        if bit_generator is None:
+            bit_generator = EntropyBitReader(
+                countBytesToBuffer=entropy_buffer_bytecount
+            )
         self._face_count = face_count
         self._die_roller = DieRoller(bit_generator=bit_generator, face_count=face_count)
         self._subtraction = subtraction
         self._repeats = repeats
 
-    def __call__(self, dice_count=1):
+    def __call__(self, dice_count=1, as_sorted=False):
         throw = []
         while len(throw) < dice_count:
             result = self._die_roller() - self._subtraction
@@ -111,7 +122,10 @@ class DiceRollerSimple:
             else:
                 if result not in throw:
                     throw.append(result)
-        return tuple(sorted(throw))
+        if as_sorted:
+            return tuple(sorted(throw))
+        else:
+            return tuple(throw)
 
 
 if __name__ == "__main__":
@@ -135,5 +149,5 @@ if __name__ == "__main__":
 
     bit_generator = EntropyBitReader(10)  # just reserve 10 bytes for the buffer
 
-    roller = DiceRoller(bit_generator=bit_generator, face_count=face_count)
+    roller = DiceRollerSimple(bit_generator=bit_generator, face_count=face_count)
     print(roller(dice_count))

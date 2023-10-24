@@ -35,7 +35,9 @@ class BitGenerator:
         self._k_buffer_bit_length = self._k_bytelength * 8
         self._bytes_reader = bytes_reader
         self._bitpool = None
+        self._bitpool_set = set()
         # self._bitpool_queued = None
+        # self._bytes_reader.read(length_random_bytes)
         self.refill_bits()
 
     def __call__(self):
@@ -68,6 +70,14 @@ class BitGenerator:
         """
         random_bytes = self._bytes_reader.read(self._k_bytelength)
         self._bitpool = int.from_bytes(random_bytes, byteorder="little")
+        lastlen = len(self._bitpool_set)
+        self._bitpool_set.add(self._bitpool)
+        if lastlen == len(self._bitpool_set):
+            print("uh oh repeat randomness")
+            import sys
+
+            sys.exit(1)
+
         self._offset = 0
 
     def __next__(self) -> int:

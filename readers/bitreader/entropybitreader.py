@@ -21,7 +21,7 @@ except:
 class EntropyBitReader:
     """encapsulate a generic bitreader to utilize et's pipe reader"""
 
-    def __init__(self , countBytesToBuffer=( 2**19 ), pipe_reader=None):
+    def __init__(self, countBytesToBuffer=(2**16), pipe_reader=None):
         """
         pre: with defaults, entropy source should be able to eventually have half a megabyte of
          bits read from it
@@ -73,7 +73,9 @@ class EntropyBitReader:
 
 
 if __name__ == "__main__":
-    print("buffering bits from the entropy stream. first bit will print momentarily. press enter for next")
+    print(
+        "buffering bits from the entropy stream. first bit will print momentarily. press enter for next"
+    )
     ebr = EntropyBitReader()
     while True:
         try:
