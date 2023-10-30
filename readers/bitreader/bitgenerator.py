@@ -2,16 +2,20 @@
 # implements a random bit generator given a reader object
 # author: krunch3r (KJM github.com/krunch3r76)
 # license: General Poetic License (GPL3)
+from enum import Enum, auto
+
+
+class StorageKind(Enum):
+    BITFIELD = auto()
+    BITSTRING = auto()
 
 
 class BitGenerator:
-    """generate a bit (int of 1 or 0) upon every call given a readable source of an arbitrary number of bytes
+    """Base class for BitGenerator"""
 
-    stores bits in a single large integer of fixed length which is replaced when all bits have
-    been iterated upon
-    """
-
-    def __init__(self, bytes_reader=None, length_random_bytes=None):
+    def __init__(
+        self, bytes_reader=None, length_random_bytes=None, kind=StorageKind.BITFIELD
+    ):
         """
         pre: None
         in:
@@ -26,6 +30,8 @@ class BitGenerator:
         - _bitpool : the "buffer" of bits from a large integer of size length_random_bytes
         # - _bitpool_queued : a read ahead for the next pool
         """
+        # self._implementation = implementation(bytes_reader, length_random_bytes)
+
         if length_random_bytes is None:
             raise Exception(
                 "BitGenerator requires explictly setting the length of random bytes to read from the entropy source 𝘳𝘦𝘢𝘥𝘦𝘳 at a time. This can be arbitrarily high as PipeReader will yield for the entropy source to refill to offer as many as needed."
@@ -35,20 +41,9 @@ class BitGenerator:
         self._k_buffer_bit_length = self._k_bytelength * 8
         self._bytes_reader = bytes_reader
         self._bitpool = None
-        self._bitpool_set = set()
-        # self._bitpool_queued = None
-        # self._bytes_reader.read(length_random_bytes)
-        self.refill_bits()
-
-    def __call__(self):
-        """iterate to get the next bit
-
-        pre: None
-        in: None
-        post: _bitpool has one less bit
-        out: integer that is 1 or 0
-        """
-        return self.__next__()
+        self._offset = None
+        self._kind = kind
+        self._refill_bits()
 
     def __iter__(self):
         """
@@ -61,7 +56,17 @@ class BitGenerator:
         while True:
             yield self.__next__()
 
-    def refill_bits(self):
+    def __call__(self):
+        """iterate to get the next bit
+
+        pre: None
+        in: None
+        post: _bitpool has one less bit
+        out: integer that is 1 or 0
+        """
+        return self.__next__()
+
+    def _refill_bits(self):
         """replace the internal "buffer" with a new bitpool of length _k_buffer_bit_length
         pre : None
         in  : None
@@ -69,15 +74,15 @@ class BitGenerator:
         out : None
         """
         random_bytes = self._bytes_reader.read(self._k_bytelength)
-        self._bitpool = int.from_bytes(random_bytes, byteorder="little")
-        lastlen = len(self._bitpool_set)
-        self._bitpool_set.add(self._bitpool)
-        if lastlen == len(self._bitpool_set):
-            print("uh oh repeat randomness")
-            import sys
-
-            sys.exit(1)
-
+        if self._kind == StorageKind.BITSTRING:
+            self._bitpool = bin(int.from_bytes(random_bytes, byteorder="little"))[2:]
+            self._bitpool = self._bitpool.zfill(self._k_buffer_bit_length)
+            # print(
+            #     f"\n\n{self._k_bytelength} {self._k_buffer_bit_length} {len(self._bitpool)}\n\n"
+            # )
+        else:
+            # self._bitpool = int.from_bytes(random_bytes, byteorder="little")
+            self._bitpool = bytes(random_bytes)  # ensure bytes
         self._offset = 0
 
     def __next__(self) -> int:
@@ -87,12 +92,20 @@ class BitGenerator:
         post: _offset, [[ self._bitpool ]]
         out: 1 or 0
         """
-        if self._offset == self._k_buffer_bit_length:
-            self.refill_bits()
-        bit = (self._bitpool >> self._offset) & 1
+        bit = None
+
+        if self._offset >= self._k_buffer_bit_length:
+            self._refill_bits()
+
+        if self._kind == StorageKind.BITSTRING:
+            bit = int(self._bitpool[self._offset])
+        else:
+            if self._offset >= self._k_buffer_bit_length:
+                self._refill_bits()
+            byte_index = self._offset // 8
+            bit_index = self._offset % 8
+            bit = (self._bitpool[byte_index] >> bit_index) & 1
+            # bit = (self._bitpool >> self._offset) & 1
+
         self._offset += 1
         return bit
-
-
-# class BitsGenerator
-# TODO implement an iterator that returns an Int object with n random bits

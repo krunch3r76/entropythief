@@ -103,7 +103,7 @@ class DiceRollerSimple:
         entropy_buffer_bytecount=None,
     ):
         if entropy_buffer_bytecount is None:
-            entropy_buffer_bytecount = 2**16
+            entropy_buffer_bytecount = 2**12
         if bit_generator is None:
             bit_generator = EntropyBitReader(
                 countBytesToBuffer=entropy_buffer_bytecount
@@ -130,8 +130,8 @@ class DiceRollerSimple:
 
 if __name__ == "__main__":
     start_error = False
-    dice_count = 2
-    face_count = 6
+    dice_count = 10
+    face_count = 80
     if len(sys.argv) != 1:
         if len(sys.argv) > 3:
             start_error = True
