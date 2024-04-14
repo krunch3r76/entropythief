@@ -288,7 +288,7 @@ class model__EntropyThief:
         self.OP_PAUSE = True  # wait for controller to send start signal as restart
         self.strat = None
 
-        if self.args.payment_network in ["rinkeby", "goerli"]:
+        if self.args.payment_network in ["rinkeby", "goerli", "holesky"]:
             max_price_for_cpu = Decimal("inf")
             max_price_for_dur = Decimal("inf")
             max_fixed_price = Decimal("inf")

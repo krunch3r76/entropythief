@@ -37,8 +37,8 @@ def build_parser(description: str):
     )
     parser.add_argument(
         "--payment-network",
-        default="goerli",
-        help="Network name, e.g. `mainnet`, `rinkeby`, `goerli`, `polygon`, `mumbai`; default: \033[1m%(default)s\033[0m",
+        default="holesky",
+        help="Network name, e.g. `mainnet`, `rinkeby`, `goerli`, `holesky`, `polygon`, `mumbai`; default: \033[1m%(default)s\033[0m",
     )
     parser.add_argument(
         "--subnet-tag",
@@ -75,7 +75,6 @@ def build_parser(description: str):
 
 
 def print_env_info(args):
-
     from yapapi import __version__ as yapapi_version
 
     print(
