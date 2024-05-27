@@ -10,7 +10,7 @@ yapapi module version 0.10.0 (satisfied by following usage directions below)
 # Video Demo
 See all videos at [https://krunch3r76.github.io/entropythief](https://krunch3r76.github.io/entropythief). Note: your browser must support the ogg codec to view most of these videos as of this writing.
 
-[![Watch the video](https://krunch3r76.github.io/entropythief/thumbnail1.png)](https://krunch3r76.github.io/entropythief/video1.mp4)
+[![Watch the video]()](https://krunch3r76.github.io/entropythief/video2.ogg)
 
 [![Watch the video](https://krunch3r76.github.io/entropythief/thumbnail2.png)](https://user-images.githubusercontent.com/46289600/148718743-b365840e-86c3-436e-91b6-4852615bbe66.mp4)
 
