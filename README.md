@@ -7,15 +7,14 @@ get high quality entropy (randomness) at a steal of a rate from multiple provide
 a requestor installation of golem (see https://handbook.golem.network/requestor-tutorials/flash-tutorial-of-requestor-development)
 yapapi module version 0.10.0 (satisfied by following usage directions below)
 
-# video demo
-https://krunch3r76.github.io/entropythief # browser must support the ogg codec to view most of these videos as of this writing
+# Video Demo
+See all videos at [https://krunch3r76.github.io/entropythief](https://krunch3r76.github.io/entropythief). Note: your browser must support the ogg codec to view most of these videos as of this writing.
 
+[![Watch the video](https://krunch3r76.github.io/entropythief/thumbnail1.png)](https://krunch3r76.github.io/entropythief/video1.mp4)
 
+[![Watch the video](https://krunch3r76.github.io/entropythief/thumbnail2.png)](https://user-images.githubusercontent.com/46289600/148718743-b365840e-86c3-436e-91b6-4852615bbe66.mp4)
 
-https://user-images.githubusercontent.com/46289600/148718743-b365840e-86c3-436e-91b6-4852615bbe66.mp4
-
-
-the in line video here demonstrates the readers API (see API sectoin) by running the included example scripts: these leverage the entropy to get random results such as dice throws or 1's and 0's
+The inline video here demonstrates the readers API (see API section) by running the included example scripts: these leverage the entropy to get random results such as dice throws or 1's and 0's.
 
 # non technical description
 computers can provide random numbers; however, hardware designs make such number sequences somewhat predictable. in computers, numbers are made up of sequences of 1s and 0's stored as bytes. entropythief has several computers produce random sequences of bytes and chops and mixes them to make an unpredictable sequence of never before seen random bit stream, like snowflakes, and without any intrinsic periodicity. randomness in computers has many scientific and practical applications and may have applications in art. atm entropythief makes no guarantees on the quality of randomness but does facilitate reprogramming to refine or improve the results. at any rate, entropythief may be summed up as a faucet of random 1's and 0's (from which a true random number generator may be built).
