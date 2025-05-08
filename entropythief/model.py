@@ -88,14 +88,12 @@ class model__EntropyThief:
 
     # ---------model_EntropyThief----------
     def __init__(
-        self
-        # -------------------------------------
-        ,
+        self,
         loop,
         args,
         from_ctl_q,
         to_ctl_q,
-        MINPOOLSIZE,
+        ENTROPY_BUFFER_CAPACITY,
         MAXWORKERS,
         BUDGET,
         IMAGE_HASH,
@@ -106,13 +104,13 @@ class model__EntropyThief:
         self.args = args
         self.from_ctl_q = from_ctl_q
         self.to_ctl_q = to_ctl_q
-        self.MINPOOLSIZE = MINPOOLSIZE
         self.MAXWORKERS = MAXWORKERS
         self.BUDGET = BUDGET
         self.IMAGE_HASH = IMAGE_HASH
         self.taskResultWriter = taskResultWriter
         self.TASK_TIMEOUT = TASK_TIMEOUT
         self._costRunning = 0.0
+        self.ENTROPY_BUFFER_CAPACITY = ENTROPY_BUFFER_CAPACITY
 
         # output yapapi logger INFO events to stderr and INFO+DEBUG to args.log_fle
         if not self.args.disable_logging:
@@ -127,9 +125,11 @@ class model__EntropyThief:
     def hasBytesInPipeChanged(self):
         """queries whether data has been read from the pipe since last call"""
         # ------------------------------------------------------ #
-        bytesInPipe_last = self.bytesInPipe
-        self.bytesInPipe = self.taskResultWriter.query_len()
-        return bytesInPipe_last - self.bytesInPipe
+        # bytesInPipe_last = self.bytesInPipe
+        # self.bytesInPipe = len(self.taskResultWriter)
+        # return bytesInPipe_last - self.bytesInPipe
+        # This method is now obsolete since we no longer track previous value.
+        pass
 
     # -----------model__EntropyThief------------------------ #
     def _hook_controller(self, qmsg):
@@ -138,8 +138,8 @@ class model__EntropyThief:
         if "cmd" in qmsg and qmsg["cmd"] == "stop":
             self.OP_STOP = True
         elif "cmd" in qmsg and qmsg["cmd"] == "set buflim":
-            self.MINPOOLSIZE = qmsg["limit"]
-            self.taskResultWriter.update_capacity(self.MINPOOLSIZE)
+            self.ENTROPY_BUFFER_CAPACITY = qmsg["limit"]
+            # self.taskResultWriter.update_capacity(self.ENTROPY_BUFFER_CAPACITY)
         elif "cmd" in qmsg and qmsg["cmd"] == "set maxworkers":
             self.MAXWORKERS = qmsg["count"]
         elif "cmd" in qmsg and qmsg["cmd"] == "pause execution":
@@ -186,7 +186,7 @@ class model__EntropyThief:
             return rv
 
         ## BEGIN ROUTINE _provision
-        count_bytes_requested = self.taskResultWriter.count_bytes_requesting()
+        count_bytes_requested = self.ENTROPY_BUFFER_CAPACITY - len(self.taskResultWriter)
 
         ####################################################################|
         # check whether task result writer can/should accept more bytes     #
@@ -197,7 +197,7 @@ class model__EntropyThief:
         if (
             count_bytes_requested > 0
             and not self.taskResultWriter.pending
-            and self.bytesInPipe < int(self.MINPOOLSIZE / 2)
+            and len(self.taskResultWriter) < int(self.ENTROPY_BUFFER_CAPACITY / 2)
             and self._costRunning < (self.BUDGET - 0.02)
         ):
             package = await vm.repo(
@@ -316,21 +316,15 @@ class model__EntropyThief:
             sys.exit(1)
         try:
             # see if there are any bytes already in the pipe # may not be necessary
-            self.bytesInPipe = (
-                self.taskResultWriter.query_len()
-            )  # note bytesInPipe is the lazy count
+            # self.bytesInPipe = len(self.taskResultWriter)
 
             while not self.OP_STOP:
                 # 2.1) flush any pending processes/buffers in the task result writer
                 # await self.taskResultWriter.refresh()
 
                 # 2.2) query task result writer for the number of bytes stored and relay to controller
-                delta = self.hasBytesInPipeChanged()
-                if delta != 0:
-                    msg = {"bytesInPipe": self.bytesInPipe}
-                    self.to_ctl_q.put_nowait(msg)
-                    if delta < 0:
-                        _log_msg(f"The bytesInPipe has increased by {abs(delta)}", 10)
+                msg = {"bytesInPipe": len(self.taskResultWriter)}
+                self.to_ctl_q.put_nowait(msg)
 
                 # 2.3) receive and handle a message from the controller if any
                 if not self.from_ctl_q.empty():
@@ -500,7 +494,7 @@ class MySummaryLogger(yapapi.log.SummaryLogger):
         # _log_msg(f"[MySummaryLogger{{}}] REFRESHing taskResultWriter on log event", 10)
         delta = self.model.hasBytesInPipeChanged()
         if delta != 0:
-            msg = {"bytesInPipe": self.model.bytesInPipe}
+            msg = {"bytesInPipe": len(self.model.taskResultWriter)}
             self.model.to_ctl_q.put_nowait(msg)
 
         to_controller_msg = None

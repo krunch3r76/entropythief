@@ -346,7 +346,7 @@ class View:
     def getinput(
         self,
         current_total,
-        MINPOOLSIZE,
+        ENTROPY_BUFFER_CAPACITY,
         BUDGET,
         MAXWORKERS,
         count_workers,
@@ -389,7 +389,7 @@ class View:
                 + "buf:"
                 + locale.format_string("%d", bytesInPipe, grouping=True)
                 + "/"
-                + locale.format_string("%d", MINPOOLSIZE, grouping=True),
+                + locale.format_string("%d", ENTROPY_BUFFER_CAPACITY, grouping=True),
             )
         )
 

@@ -20,27 +20,19 @@ class TaskResultWriter(ABC):
     _writerPipe = None
     to_ctl_q = None
 
-    def __init__(self, to_ctl_q, POOL_LIMIT, writer=pipe_writer.PipeWriter):
+    def __init__(self, to_ctl_q, writer=pipe_writer.PipeWriter):
         """initialize TaskResultWriter with a message queue to the controller and a pipe writer"""
         self.to_ctl_q = to_ctl_q
-        self._writerPipe = writer(POOL_LIMIT)
+        self._writerPipe = writer()
 
     async def _write_to_pipe(self, data):
         """writes data to the pipe"""
         written = await self._writerPipe.write(data)
         return written
 
-    def update_capacity(self, new_capacity):
-        """informs on the most number of bytes the writer can hold at a given time"""
-        self._writerPipe._set_max_capacity(new_capacity)
-
-    def query_len(self) -> int:
-        """queries the number of bytes in the pipe writer"""
+    def __len__(self):
+        """Return the number of bytes currently buffered in the writer."""
         return self._writerPipe.len()
-
-    def count_bytes_requesting(self) -> int:
-        """queries the most number of bytes the pipe writer will accept without discarding"""
-        return self._writerPipe.countAvailable()
 
     # the inheritor may wish to write processed data first then calling this as a super
     async def refresh(self):
@@ -117,10 +109,18 @@ class Interleaver__Source:
 class Interleaver(TaskResultWriter):
     """implements TaskResultWriter to aggregate then interleave task results writing out as a random byte stream"""
 
-    # a reference implementation of TaskResultWriter
     _source_groups = []  # sublists of task result groups
     _source_next_group = []  # next sublist of tasks results before being committed
     pending = False
+    
+    def __init__(self, to_ctl_q):
+        super().__init__(to_ctl_q)
+        self._entropy_buffer_size = None  # internal entropy buffer size
+
+    # def update_capacity(self, new_capacity):
+    #     """Update the internal entropy buffer size variable."""
+    #     self._entropy_buffer_size = new_capacity
+
     # ----------------Interleaver-------------------
     @property
     def _page_size(self):
@@ -144,11 +144,6 @@ class Interleaver(TaskResultWriter):
     """
 
     # -----------------Interleaver--------------------------
-    def __init__(self, to_ctl_q, POOL_LIMIT):
-        # ------------------------------------------------------
-        super().__init__(to_ctl_q, POOL_LIMIT)
-
-    # ------------Interleaver-----------
     def add_result_file(self, filepathstring):  # implement
         # ----------------------------------
         source = Interleaver__Source(filepathstring)
@@ -218,7 +213,7 @@ class Interleaver(TaskResultWriter):
                 # read the calculated page size from each file and add to a "pages" list
                 for source in self._source_groups[0]:
                     pages.append(io.BytesIO(source.read(self._page_size)))
-                    await asyncio.sleep(0)  # ------- yield ---------
+                    # await asyncio.sleep(0)  # ------- yield ---------
 
                 # write the pages into a single book, alternating each byte across all pages
                 book = io.BytesIO()
@@ -243,7 +238,7 @@ class Interleaver(TaskResultWriter):
                     if bytes_read >= k_yield_byte_count:
                         bytes_read = 0
                         intervalcount += 1
-                        await asyncio.sleep(0)  # --------- yield -----------
+                        # await asyncio.sleep(0)  # --------- yield -----------
                         # upon every intervalcount intervals write whatever was written in the book (intervalcount * k_yield_byte_count)
                         if intervalcount == k_interval_reset_count:
                             intervalcount = 0
@@ -266,9 +261,9 @@ class Interleaver(TaskResultWriter):
                             book = io.BytesIO()
 
                             # directly inform controller of any change in pipe, which is next to guaranteed
-                            msg = {"bytesInPipe": self.query_len()}
+                            msg = {"bytesInPipe": len(self)}
                             self.to_ctl_q.put_nowait(msg)
-                    await asyncio.sleep(0)
+                    # await asyncio.sleep(0)
                 # write remaining that is less than yield_byte_count
                 written = await self._write_to_pipe(book.getbuffer())
 
@@ -296,3 +291,7 @@ class Interleaver(TaskResultWriter):
         for source_group in self._source_groups:
             source_group.clear()  # deletes underlying files
         super().__del__()
+
+    def __len__(self):
+        """Return the number of bytes currently buffered in the interleaver's writer."""
+        return super().__len__()

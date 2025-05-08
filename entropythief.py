@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import sys
+sys.stderr = open("stderr", "w", buffering=1)
+import os
 
 
 try:
@@ -33,6 +35,15 @@ parser = build_parser("pilfer entropy stashes from providers")
 args = parser.parse_args()
 print_env_info(args)
 print()
+
+# Check if the YAGNA_APPKEY environment variable is set
+if 'YAGNA_APPKEY' not in os.environ:
+    print(
+        "Oops, it seems like the environment variable 'YAGNA_APPKEY' is not set."
+        " Please set it before rerunning the script. Check the readme for guidance."
+    )
+    sys.exit(1)
+
 try:
     print(
         "to change any of the settings, ctrl-c and pass the arguments desired on the command line."

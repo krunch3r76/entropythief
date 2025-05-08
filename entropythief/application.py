@@ -38,7 +38,7 @@ class Controller:
     # IMAGE_HASH  = "9931037256ca1a602a8a706463547d2aecbdd55f296adf07c4e72667"
     IMAGE_HASH = "d9c6582abf7430c60d1b2b235f990bd92d40d418af0ec54e2f84934b"
     MAXWORKERS = 5
-    MINPOOLSIZE = 10 * _kMEBIBYTE + 5
+    ENTROPY_BUFFER_CAPACITY = 10 * _kMEBIBYTE + 5
     BUDGET = 2.0
     DEVELOPERDEBUG = _DEBUGLEVEL
     to_model_q = asyncio.Queue()
@@ -77,24 +77,24 @@ class Controller:
         )  # messages from project and if logging enabled INFO messages from rest
         sys.stderr = self.stderr2file  # replace stderr stream with file stream
 
-        if self.MINPOOLSIZE < 2**20:  # enforce minimum pool size
-            self.MINPOOLSIZE = 2**20
+        if self.ENTROPY_BUFFER_CAPACITY < 2**20:  # enforce minimum pool size
+            self.ENTROPY_BUFFER_CAPACITY = 2**20
 
         self.theview = view.View(concealedview=self.args.conceal_view)
 
-        # self.taskResultWriter = Interleaver(self.to_ctl_q, self.MINPOOLSIZE)
+        # self.taskResultWriter = Interleaver(self.to_ctl_q)
 
         self.themodeltask = loop.create_task(
             model.model__EntropyThief(
-                loop,
-                self.args,
-                self.to_model_q,
-                self.from_model_q,
-                self.MINPOOLSIZE,
-                self.MAXWORKERS,
-                self.BUDGET,
-                self.IMAGE_HASH,
-                Interleaver(self.from_model_q, self.MINPOOLSIZE),
+                loop=loop,
+                args=self.args,
+                from_ctl_q=self.to_model_q,
+                to_ctl_q=self.from_model_q,
+                ENTROPY_BUFFER_CAPACITY=self.ENTROPY_BUFFER_CAPACITY,
+                MAXWORKERS=self.MAXWORKERS,
+                BUDGET=self.BUDGET,
+                IMAGE_HASH=self.IMAGE_HASH,
+                taskResultWriter=Interleaver(self.from_model_q),
             )()
         )
 
@@ -128,7 +128,7 @@ class Controller:
                 #########################################################
                 ucmd = self.theview.getinput(
                     self.current_total,
-                    self.MINPOOLSIZE,
+                    self.ENTROPY_BUFFER_CAPACITY,
                     self.BUDGET,
                     self.MAXWORKERS,
                     self.count_workers,
@@ -292,21 +292,21 @@ class Controller:
     def _hook_view(self, ucmd):
         """handles messages from the view"""
         # process client input
-        # post: MINPOOLSIZE, MAXWORKERS, payment_failed_count, BUDGET
+        # post: ENTROPY_BUFFER_CAPACITY, MAXWORKERS, payment_failed_count, BUDGET
         # output: error true is view asks controller to stop
         ERROR = False
         if ucmd == "stop":
             ERROR = True
         elif "set buflim=" in ucmd:
             tokens = ucmd.split("=")
-            self.MINPOOLSIZE = int(eval(tokens[-1]))
-            if self.MINPOOLSIZE < 2**20:
-                self.MINPOOLSIZE = (
+            self.ENTROPY_BUFFER_CAPACITY = int(eval(tokens[-1]))
+            if self.ENTROPY_BUFFER_CAPACITY < 2**20:
+                self.ENTROPY_BUFFER_CAPACITY = (
                     2**20
                 )  # the pool writer minimum buffer size is set to 1 MiB
                 # ideally this requirement would be done on the model end and an update occur over the wire
                 # TODO
-            msg_to_model = {"cmd": "set buflim", "limit": self.MINPOOLSIZE}
+            msg_to_model = {"cmd": "set buflim", "limit": self.ENTROPY_BUFFER_CAPACITY}
             self.to_model_q.put_nowait(msg_to_model)
         elif "set maxworkers=" in ucmd:
             tokens = ucmd.split("=")

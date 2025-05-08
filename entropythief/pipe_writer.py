@@ -24,10 +24,15 @@ _DEBUGLEVEL = (
 )
 
 
-def _log_msg(msg, debug_level=0, stream=sys.stderr):
-    pass
+def _log_msg(msg, debug_level=0, stream=None):
     if debug_level <= _DEBUGLEVEL:
-        print(f"\n[pipe_writer.py] {msg}\n", file=sys.stderr)
+        log_dir = ".debug"
+        log_file = os.path.join(log_dir, "pipe_writer.log")
+        os.makedirs(log_dir, exist_ok=True)
+        with open(log_file, "w") as f:
+            print(f"\n[pipe_writer.py] {msg}\n", file=f, flush=True)
+
+
 
 
 ##################{}#####################
@@ -144,36 +149,51 @@ class PipeWriter:
 
     _byteQ = MyBytesDeque()
     _fdPipe = None
-    _pipeCapacity = 0
-    _maxCapacity = None
-    _kNamedPipeFilePathString = "/tmp/pilferedbits"
+    # _NAMED_PIPE_CAPACITY and _pipeCapacity are no longer persistent
+    # _kNamedPipeFilePathString = "/tmp/pilferedbits"
     _F_GETPIPE_SZ = 1032
+    _F_SETPIPE_SZ = 1031
 
-    # TODO make maxCapacity a required argument
-    # ---------PipeWriter------------------------
-    def __init__(self, maxCapacity=2**20):
-        """initializes with how much the named pipe itself is expected to accept"""
-        if maxCapacity < 2**20:
-            maxCapacity = 2**20
-        self._maxCapacity = maxCapacity
-        # _maxCapacity is the limit of bytes total the object will store (across pipe and internal buffers)
-        # enforce a _maxCapacity that is no less than the theoretical maximum named pipe capacity 2**20
-        # assert maxcapacity >= 2**20, f"the minimum buffer size is 1 mebibyte or {int(eval('2**20'))}"
+    def __init__(self, namedPipeFilePathString="/tmp/pilferedbits"):
+        """initializes and sets the pipe size to the system's maximum pipe size"""
+        _log_msg("TEST LOG: pipe_writer.py logging is working.", 0)
+        self._kNamedPipeFilePathString = namedPipeFilePathString
+        try:
+            with open("/proc/sys/fs/pipe-max-size", "r") as f:
+                self._desired_pipe_capacity = int(f.read().strip())
+        except (FileNotFoundError, PermissionError, ValueError):
+            self._desired_pipe_capacity = 2**20
+            _log_msg("Could not read system pipe max size, using default of 1MiB", 1)
         self._open_pipe()
+
+    @property
+    def named_pipe_system_capacity(self):
+        """Return the current system capacity of the named pipe (via F_GETPIPE_SZ)."""
         if self._fdPipe:
-            self._pipeCapacity = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
-            bytesInPipe = self._count_bytes_in_pipe()
-            assert bytesInPipe <= self._maxCapacity
+            return fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
+        return 0
 
-    # --------------PipeWriter-------------------
-    def _set_max_capacity(self, maxcapacity):
-        """informs on a new upper limit for the named pipe"""
-        # assert maxcapacity >= 2**20, f"the minimum buffer size is 1 mebibyte or {int(eval('2**20'))}"
-        if maxcapacity < 2**20:
-            maxcapacity = 2**20
-        self._maxCapacity = maxcapacity
+    def _open_pipe(self):
+        """assigns the pipe to an internal file descriptor if not already set, and sets its size"""
+        if not self._fdPipe:
+            try:
+                self._fdPipe = os.open(
+                    self._kNamedPipeFilePathString, os.O_WRONLY | os.O_NONBLOCK
+                )
+                # Set the pipe size to the desired value
+                try:
+                    fcntl.fcntl(self._fdPipe, self._F_SETPIPE_SZ, self._desired_pipe_capacity)
+                except Exception as e:
+                    _log_msg(f"Failed to set pipe size: {e}", 0)
+                # Log the actual pipe size
+                actual_size = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
+                _log_msg(f"Named pipe opened with system capacity: {actual_size} bytes", 0)
+            except OSError as e:
+                pass
 
-    # -------------------------------------------
+    def get_bytes_in_pipeline(self):
+        """returns the total number of bytes currently stored in both the pipe and internal buffer"""
+        return self.len()
 
     # -------------------------------------------
     def _whether_pipe_is_broken(self):
@@ -202,20 +222,6 @@ class PipeWriter:
         return bytesInPipe
 
     # -------------------------------------------
-    def _open_pipe(self):
-        """assigns the pipe to an internal file descriptor if not already set"""
-        # -------------------------------------------
-        if not self._fdPipe:
-            try:
-                self._fdPipe = os.open(
-                    self._kNamedPipeFilePathString, os.O_WRONLY | os.O_NONBLOCK
-                )
-                self._pipeCapacity = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
-                _log_msg("_open_pipe: pipe opened!", 1)
-            except OSError:
-                pass
-
-    # -----------------------------------------
     async def refresh(self):
         """opens a named pipe if not connected and calls to write any buffered"""
         # -----------------------------------------
@@ -226,7 +232,7 @@ class PipeWriter:
     def countAvailable(self):
         """computes at a given moment how many bytes could be accepted assuming all asynchronous work is done"""
         # -----------------------------------------
-        available = self._maxCapacity - self._count_bytes_in_pipe() - self._byteQ.len()
+        available = self.named_pipe_system_capacity - self._count_bytes_in_pipe() - self._byteQ.len()
 
         return available
 
@@ -251,7 +257,7 @@ class PipeWriter:
             # .........................................
             if self._fdPipe:
                 bytesInPipe = self._count_bytes_in_pipe()
-                return self._pipeCapacity - bytesInPipe
+                return self.named_pipe_system_capacity - bytesInPipe
             else:
                 return 0
 
@@ -263,8 +269,8 @@ class PipeWriter:
         # 1 append queue with input data
         countBytesIn = len(data)
 
-        if countBytesIn > self.countAvailable():
-            countBytesIn = self.countAvailable()
+        # if countBytesIn > self.countAvailable():
+        #     countBytesIn = self.countAvailable()
 
         bytesToStore = countBytesIn
 
@@ -339,7 +345,7 @@ class PipeWriter:
     def __repr__(self):
         # -------------------------------------------
         output = f"""
-max capacity: {self._maxCapacity}
+max capacity: {self.named_pipe_system_capacity}
 bytes in pipe: {self._count_bytes_in_pipe()}
 bytes in internal buffers: {self._countBytesInInternalBuffers()}
 total available: {self.countAvailable()}
