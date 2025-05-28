@@ -24,7 +24,7 @@ class DiceRoller:
         as_sorted=False,
         allow_repeats=True,
         read_buffer_size=None,
-        algorithm=Die.Algorithm.SCALING
+        algorithm=Die.Algorithm.MODULOBYTES
     ):
         """
         initialize DiceRoller
