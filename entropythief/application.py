@@ -20,6 +20,7 @@ import locale
 import asyncio
 import platform
 import subprocess
+import shutil
 
 from . import utils
 from . import view
@@ -276,11 +277,22 @@ class Controller:
             self.bytesInPipe = msg_from_model["bytesInPipe"]
         elif "model exception" in msg_from_model:
             self.theview.destroy()  # to do, use the idiomatic del?
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            # Copy yagna log
+            home = os.path.expanduser("~")
+            src = os.path.join(home, ".local/share/yagna/yagna_rCURRENT.log")
+            dst = f"/tmp/yagna_rCURRENT_{timestamp}.log"
+            try:
+                shutil.copy2(src, dst)
+            except Exception as e:
+                print(f"Failed to copy yagna log: {e}")
+            
             print(
                 utils.TEXT_COLOR_BLUE
                 + "The model threw the following exception:"
                 + utils.TEXT_COLOR_DEFAULT
                 + "\n"
+                + f"[{timestamp}] "
                 + msg_from_model["model exception"]["name"]
                 + "\n"
                 + msg_from_model["model exception"]["what"]
