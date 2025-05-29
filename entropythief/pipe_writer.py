@@ -20,6 +20,7 @@ import termios
 import io
 import collections
 import time
+import logging
 from typing import Optional, Union
 
 
@@ -28,10 +29,72 @@ _DEBUGLEVEL = (
 )
 
 
+# Configure file-based logging for pipe_writer (NO stderr output)
+def _setup_pipe_writer_logging():
+    """Set up file-based logging for pipe_writer module"""
+    logger = logging.getLogger('pipe_writer')
+    
+    # Don't add handlers if already configured
+    if logger.handlers:
+        return logger
+    
+    # Set log level based on PYTHONDEBUGLEVEL
+    if _DEBUGLEVEL >= 3:
+        logger.setLevel(logging.DEBUG)
+    elif _DEBUGLEVEL >= 2:
+        logger.setLevel(logging.INFO)
+    elif _DEBUGLEVEL >= 1:
+        logger.setLevel(logging.WARNING)
+    else:
+        logger.setLevel(logging.ERROR)
+    
+    # Create file handler - write to .debug/pipe_writer.log
+    log_dir = ".debug"
+    log_file = os.path.join(log_dir, "pipe_writer.log")
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        file_handler = logging.FileHandler(log_file, mode='a')
+    except Exception:
+        # Fallback to /tmp if main log directory fails
+        fallback_log = f"/tmp/pipe_writer_fallback_{os.getpid()}.log"
+        file_handler = logging.FileHandler(fallback_log, mode='a')
+    
+    # Create formatter with thread information
+    formatter = logging.Formatter(
+        '[%(asctime)s] [Thread-%(thread)d] [%(name)s] [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(formatter)
+    
+    # Add handler to logger
+    logger.addHandler(file_handler)
+    
+    # Prevent propagation to root logger (avoid any stderr output)
+    logger.propagate = False
+    
+    return logger
+
+
+# Initialize the logger
+_logger = _setup_pipe_writer_logging()
+
+
 def _log_msg(msg: str, debug_level: int = 0) -> None:
-    """Simple logging function"""
-    if debug_level <= _DEBUGLEVEL:
-        print(f"[pipe_writer] {msg}")
+    """File-based logging function - NO stderr output"""
+    # Map debug levels to logging levels
+    if debug_level <= 0:
+        _logger.error(msg)
+    elif debug_level == 1:
+        _logger.warning(msg)
+    elif debug_level == 2:
+        _logger.info(msg)
+    else:  # debug_level >= 3
+        _logger.debug(msg)
+
+
+def log_exception(e: Exception, location: str) -> None:
+    """Log exception details to file with context"""
+    _logger.error(f"Exception in {location}: {type(e).__name__}: {e}")
 
 
 class OptimizedBytesIO(io.BytesIO):
@@ -125,13 +188,13 @@ class PipeWriter:
                 # Set pipe to maximum size
                 try:
                     fcntl.fcntl(self._fdPipe, self._F_SETPIPE_SZ, self._desired_pipe_capacity)
-                except Exception:
-                    pass  # Not critical if this fails
+                except Exception as e:
+                    _log_msg(f"Failed to set pipe size: {e}", 1)
                 
                 # Log actual pipe size
                 try:
                     actual_size = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
-                    _log_msg(f"Pipe opened with capacity: {actual_size} bytes", 1)
+                    _log_msg(f"Named pipe opened with system capacity: {actual_size} bytes", 1)
                 except Exception:
                     pass
                     
@@ -178,6 +241,7 @@ class PipeWriter:
         
         # PHASE 1: Chunk incoming data into buffer queue
         if isinstance(data, (bytes, bytearray, memoryview)) and len(data) > 0:
+            _log_msg(f"write: received {len(data)} bytes", 3)
             bytestream = io.BytesIO(data)
             chunk_count = 0
             
@@ -253,9 +317,11 @@ class PipeWriter:
                     self._restore_partial_write(buffers_used, total_written)
                     
             except BlockingIOError:
+                _log_msg("BlockingIOError during vectored write", 2)
                 # Restore all buffers if write blocked
                 self._restore_all_buffers(buffers_used)
             except BrokenPipeError:
+                _log_msg("BrokenPipeError during vectored write", 2)
                 # Pipe broken - mark as such and restore buffers
                 self._fdPipe = None
                 self._restore_all_buffers(buffers_used)
@@ -313,6 +379,7 @@ class PipeWriter:
             self._open_pipe()
             await self._flush_buffers()
         except Exception as e:
+            log_exception(e, "PipeWriter.refresh")
             _log_msg(f"Error in refresh: {e}", 0)
             # Try to recover
             if self._fdPipe:
