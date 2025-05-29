@@ -22,8 +22,9 @@ class DiceRoller:
         number_of_dice=2,
         as_sorted=False,
         allow_repeats=True,
-        read_buffer_size=32768,
-        algorithm=Die.Algorithm.MODULOBYTES
+        read_buffer_size=None,
+        algorithm=Die.Algorithm.MODULOBYTES,
+        pipe_reader=None
     ):
         """
         initialize DiceRoller
@@ -45,7 +46,11 @@ class DiceRoller:
         self._as_sorted = as_sorted
         self._allow_repeats = allow_repeats
 
-        pipe_reader = PipeReader(read_buffer_size)
+        if pipe_reader is None:
+            pipe_reader = PipeReader(read_buffer_size)
+        else:
+            pipe_reader = pipe_reader
+
         self._die = Die(
             high_face,
             low_face,

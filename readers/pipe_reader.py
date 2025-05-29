@@ -154,20 +154,20 @@ import io
 
 
 class PipeReader(_PipeReader):
-    """read entropythief's named pipe into a local before
-
+    """read entropythief's named pipe into a local buffer with 32KB max read size
 
     credits: as of this writing the implementation of this buffering logic
         can be credited almost wholly to chatgpt-4 and from whomever chatgpt-4
         sourced it
     """
 
-    def __init__(self, buffer_size=None):
+    def __init__(self, buffer_size=None, max_read_size=32768):
         super().__init__()
         if buffer_size is None:
-            self.buffer_size = 32768  # Optimal 32KB for best single and multi-thread performance
+            self.buffer_size = 2**30  # 1GB default buffer
         else:
             self.buffer_size = buffer_size
+        self.max_read_size = max_read_size  # 32KB default max read
         self.buffer = bytearray(self.buffer_size)
         self.buffer_pos = 0
         self.buffer_end = 0
@@ -185,9 +185,12 @@ class PipeReader(_PipeReader):
             if remaining > 0:
                 # Use memoryview for the buffer slice
                 result += memoryview(self.buffer)[self.buffer_pos : self.buffer_end]
-            # Read enough to fill the request
-            new_data = super().read(max(self.buffer_size, count - remaining))
+            
+            # KEY FIX: Cap read size to max_read_size (32KB) instead of entire buffer
             need = count - remaining
+            read_amount = min(max(need, 4096), self.max_read_size)  # 4KB minimum, 32KB maximum
+            new_data = super().read(read_amount)
+            
             # Use memoryview for new_data as well
             result += memoryview(new_data)[:need]
             # Save any excess in the buffer for next time
