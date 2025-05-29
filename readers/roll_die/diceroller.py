@@ -8,7 +8,6 @@ import sys
 PATH_TO_PIPE_READERS = Path(os.path.dirname(__file__)).resolve().parents[0]
 sys.path.append(str(PATH_TO_PIPE_READERS))
 
-from bitreader import EntropyBitReader
 from pipe_reader import PipeReader
 from roll_die.die import Die
 
@@ -23,8 +22,8 @@ class DiceRoller:
         number_of_dice=2,
         as_sorted=False,
         allow_repeats=True,
-        read_buffer_size=None,
-        algorithm=Die.Algorithm.SCALING
+        read_buffer_size=32768,
+        algorithm=Die.Algorithm.MODULOBYTES
     ):
         """
         initialize DiceRoller
@@ -51,7 +50,7 @@ class DiceRoller:
             high_face,
             low_face,
             pipe_reader=pipe_reader,
-            algorithm=Die.Algorithm.MODULOBYTES,
+            algorithm=algorithm
         )
 
     def __call__(self):
@@ -67,10 +66,11 @@ class DiceRoller:
             for _ in range(self._number_of_dice):
                 rolls.append(self._die())
         else:
-            while len(rolls) < self._number_of_dice:
+            rolls_set = set()
+            while len(rolls_set) < self._number_of_dice:
                 roll = self._die()
-                if roll not in rolls:
-                    rolls.append(roll)
+                rolls_set.add(roll)
+            rolls = list(rolls_set)
 
         if self._as_sorted:
             rolls.sort()
