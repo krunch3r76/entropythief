@@ -6,17 +6,21 @@
 Advanced pipe writer for named pipes with buffering, caching, and configurable performance.
 
 Usage Examples:
-    # Default configuration
+    # Default configuration (optimized for performance)
     writer = PipeWriter("/tmp/myfifo")
     
     # High-performance configuration
     config = PipeWriterConfig.high_performance()
     writer = PipeWriter("/tmp/myfifo", config=config)
     
+    # Rate-limited configuration (intentional throttling)
+    config = PipeWriterConfig.rate_limited(delay_seconds=0.01)
+    writer = PipeWriter("/tmp/myfifo", config=config)
+    
     # Custom configuration
     custom_config = PipeWriterConfig(
         chunk_size=8192,
-        async_sleep=0.005,
+        async_sleep=0,        # No delays for maximum performance
         max_write_retries=20
     )
     writer = PipeWriter("/tmp/myfifo", config=custom_config)
@@ -140,7 +144,7 @@ class PipeWriterConfig:
     
     def __init__(self,
                  chunk_size: int = 4096,
-                 async_sleep: float = 0.01,
+                 async_sleep: float = 0,
                  default_pipe_capacity: int = 2**20,
                  max_write_retries: int = 10,
                  cache_ttl: float = 0.001,
@@ -149,7 +153,9 @@ class PipeWriterConfig:
         
         Args:
             chunk_size: Size in bytes for data chunking (default: 4096)
-            async_sleep: Sleep time in seconds during async operations (default: 0.01)
+            async_sleep: Sleep time in seconds during async operations (default: 0)
+                        0 = pure yielding without delay (recommended for performance)
+                        >0 = intentional delay for rate limiting or resource sharing
             default_pipe_capacity: Default pipe capacity in bytes (default: 1MiB)
             max_write_retries: Maximum retry attempts for blocked writes (default: 10)
             cache_ttl: Cache TTL in seconds for pipe byte count (default: 0.001)
@@ -190,7 +196,7 @@ class PipeWriterConfig:
         """Create a high-performance configuration"""
         return cls(
             chunk_size=8192,      # Larger chunks
-            async_sleep=0.005,    # Less sleep time
+            async_sleep=0,        # No artificial delays
             cache_ttl=0.002,      # Longer cache TTL
             chunks_per_yield=16   # More chunks per yield
         )
@@ -200,9 +206,21 @@ class PipeWriterConfig:
         """Create a low-latency configuration"""
         return cls(
             chunk_size=1024,      # Smaller chunks for responsiveness
-            async_sleep=0.001,    # Minimal sleep
+            async_sleep=0,        # No artificial delays
             cache_ttl=0.0005,     # Shorter cache TTL
             chunks_per_yield=4    # Fewer chunks per yield
+        )
+    
+    @classmethod
+    def rate_limited(cls, delay_seconds: float = 0.01) -> 'PipeWriterConfig':
+        """Create a rate-limited configuration with intentional delays
+        
+        Args:
+            delay_seconds: Intentional delay between chunk batches for rate limiting
+        """
+        return cls(
+            async_sleep=delay_seconds,  # Intentional delay for rate limiting
+            chunks_per_yield=4          # Smaller batches with delays
         )
     
     def __repr__(self) -> str:
@@ -588,8 +606,13 @@ class PipeWriter:
             if chunk_batch == 0:
                 break
                 
-            # Yield control less frequently for better performance
-            await asyncio.sleep(self.config.async_sleep)
+            # Yield control to other async tasks
+            if self.config.async_sleep > 0:
+                # Intentional delay for rate limiting
+                await asyncio.sleep(self.config.async_sleep)
+            else:
+                # Pure yielding without delay (cooperative multitasking)
+                await asyncio.sleep(0)
             
         _log_msg(f"_queue_data: Created {chunks_created} chunks, total queue size now: {self._byteQ.len()}", 3)
         return bytes_to_store
