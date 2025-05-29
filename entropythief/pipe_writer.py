@@ -34,53 +34,6 @@ def _log_msg(msg: str, debug_level: int = 0) -> None:
         print(f"[pipe_writer] {msg}")
 
 
-# Configuration class for backward compatibility
-class PipeWriterConfig:
-    """Configuration for PipeWriter - maintained for backward compatibility"""
-    
-    def __init__(self,
-                 chunk_size: int = 4096,
-                 async_sleep: float = 0,
-                 default_pipe_capacity: int = 2**20,
-                 max_write_retries: int = 10,
-                 cache_ttl: float = 0.001,
-                 chunks_per_yield: int = 4):
-        """Initialize PipeWriter configuration"""
-        self.chunk_size = chunk_size
-        self.async_sleep = async_sleep
-        self.default_pipe_capacity = default_pipe_capacity
-        self.max_write_retries = max_write_retries
-        self.cache_ttl = cache_ttl
-        self.chunks_per_yield = chunks_per_yield
-        
-        # fcntl constants
-        self.F_GETPIPE_SZ = 1032
-        self.F_SETPIPE_SZ = 1031
-    
-    @classmethod
-    def default(cls) -> 'PipeWriterConfig':
-        """Create a default configuration"""
-        return cls()
-    
-    @classmethod  
-    def high_performance(cls) -> 'PipeWriterConfig':
-        """Create a high-performance configuration"""
-        return cls(
-            chunk_size=65536,     # 64KB chunks
-            async_sleep=0,        # No delays
-            chunks_per_yield=8    # More chunks per yield
-        )
-    
-    @classmethod
-    def interleaver_optimized(cls) -> 'PipeWriterConfig':
-        """Optimized for TaskResultWriter/Interleaver usage"""
-        return cls(
-            chunk_size=65536,     # 64KB chunks for large buffers
-            async_sleep=0,        # No delays
-            chunks_per_yield=8    # Balanced yielding
-        )
-
-
 class OptimizedBytesIO(io.BytesIO):
     """Optimized BytesIO wrapper for efficient streaming"""
     
@@ -143,19 +96,10 @@ class PipeWriter:
     """High-performance pipe writer using vectored I/O and intelligent buffering"""
     
     def __init__(self, namedPipeFilePathString: str = "/tmp/pilferedbits", 
-                 config: Optional[PipeWriterConfig] = None,
                  chunk_size: int = 4096):
         """Initialize PipeWriter with optimized settings"""
         self._kNamedPipeFilePathString = namedPipeFilePathString
-        
-        # Use config if provided, otherwise use chunk_size parameter
-        if config is not None:
-            self.config = config
-            self.chunk_size = config.chunk_size
-        else:
-            self.config = PipeWriterConfig(chunk_size=chunk_size)
-            self.chunk_size = chunk_size
-            
+        self.chunk_size = chunk_size
         self._fdPipe: Optional[int] = None
         self._byteQ = OptimizedBytesDeque()
         
@@ -164,7 +108,7 @@ class PipeWriter:
             with open("/proc/sys/fs/pipe-max-size", "r") as f:
                 self._desired_pipe_capacity = int(f.read().strip())
         except (FileNotFoundError, PermissionError, ValueError):
-            self._desired_pipe_capacity = self.config.default_pipe_capacity
+            self._desired_pipe_capacity = 2**20  # 1MB default
         
         # fcntl constants
         self._F_GETPIPE_SZ = 1032
@@ -246,11 +190,8 @@ class PipeWriter:
                 chunk_count += 1
                 
                 # Yield periodically to prevent blocking event loop
-                if chunk_count % self.config.chunks_per_yield == 0:
-                    if self.config.async_sleep > 0:
-                        await asyncio.sleep(self.config.async_sleep)
-                    else:
-                        await asyncio.sleep(0)
+                if chunk_count % 4 == 0:
+                    await asyncio.sleep(0)
             
             bytes_written = len(data)
         
