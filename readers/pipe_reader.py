@@ -3,9 +3,7 @@
 # license: General Poetic License (GPL3)
 
 import os
-import json
 import fcntl
-import termios
 import time
 import select
 import sys
@@ -46,32 +44,25 @@ class _PipeReader:
 
         post:
             _fdPipe : file descriptor to opened named pipe
-            _fdPoll : poll object with which to monitor pipe
-
-            _fdPipe is None if not available at time of initialization
 
         notes: the named pipe open is the constant self._kNamedPipeFilePathString
         """
         self._fdPipe = None
-        self._fdPoll = select.poll()
         self._open_pipe()
 
     # .......................
     def _open_pipe(self):
         """try to open the named pipe for reading
 
-        pre: _fdPoll is unregistered of previous pipe (weak)
+        pre: none
         in: none
         out: none
         post:
             _fdPipe : descriptor to current or newly created named pipe
-            _fdPoll : registered with newly opened pipe
 
             notes:
-            named pipe created if needed and pipe size set to 1mb,
-             register pipe with internal poll object
+            named pipe created if needed and pipe size set to 1mb
         """
-        # .......................
         _log_msg("opening pipe", 5)
         if not os.path.exists(self._kNamedPipeFilePathString):
             os.mkfifo(self._kNamedPipeFilePathString)
@@ -79,12 +70,10 @@ class _PipeReader:
             self._kNamedPipeFilePathString, os.O_RDONLY | os.O_NONBLOCK
         )
         fcntl.fcntl(self._fdPipe, self._F_SETPIPE_SZ, 2**20)
-        self._fdPoll.register(self._fdPipe)
         _log_msg("opened pipe", 5)
 
     # ........................................
     def _reopen_pipe(self):
-        # ........................................
         """close pipe if applicable and open
 
         pre: none
@@ -97,75 +86,48 @@ class _PipeReader:
                 os.close(self._fdPipe)
             except OSError:
                 pass
-            self._fdPoll.unregister(self._fdPipe)
             self._fdPipe = None
         self._open_pipe()
 
-    # ........................................
-    def _whether_pipe_is_readable(self) -> bool:
-        # ........................................
-        """indicate whether the pipe is currently readable
-
-        pre: none
-        in: none
-        out: True or False
-        post: none
-        """
-        answer = False
+    def _whether_pipe_is_readable(self, timeout_ms=0) -> bool:
+        """Check if pipe is readable, waiting up to timeout_ms milliseconds"""
         if self._fdPipe is None:
-            answer = False
-        else:
-            pl = self._fdPoll.poll(0)
-            if len(pl) == 1:
-                if pl[0][1] & 1:
-                    answer = True
-        return answer
+            return False
+        
+        # Convert milliseconds to seconds for select
+        timeout_seconds = timeout_ms / 1000.0
+        
+        # Use select.select() instead of poll() - avoids concurrency issues
+        rlist, _, _ = select.select([self._fdPipe], [], [], timeout_seconds)
+        return bool(rlist)
 
     # continuously read pipes until read count satisfied, then return the read count
     # revision shall asynchronously read the pipe and deliver in chunks
     # -------------------------------------------
-    def read(self, count) -> bytes:
-        # -------------------------------------------
-        """ read from pipe until count number and return
-        pre: None
-        in:
-            - count: the number of bytes to read and return
-        post: None
-        out:
-            /bytes/ of length \count\
-        """
-        byte_stream = io.BytesIO()
-        remainingCount = count
-        while remainingCount > 0:
-            bytesInCurrentPipe = count_bytes_in_pipe(self._fdPipe)
-            if bytesInCurrentPipe >= remainingCount:
-                try:
-                    _ba = os.read(self._fdPipe, remainingCount)
-                except BlockingIOError:
-                    _log_msg("pipe reader: BLOCKING ERROR", 5)
-                    pass
-                except Exception as e:
-                    _log_msg(f"Other exception: {e}", 5)
-                else:
-                    remainingCount -= len(_ba)
-                    byte_stream.write(_ba)
-                    # print(f"remainingCount is {remainingCount}")
-            elif bytesInCurrentPipe > 0:
-                try:
-                    _ba = os.read(self._fdPipe, bytesInCurrentPipe)
-                except BlockingIOError:
-                    _log_msg("blocking io error", 5)
-                    pass
-                except Exception as e:
-                    _log_msg(f"Other exception: {e}", 5)
-                    # self._reopen_pipe()
-                else:
-                    remainingCount -= len(_ba)
-                    byte_stream.write(_ba)
 
-            time.sleep(0.01)
-        # print(f"read returning {len(byte_stream.getbuffer() )}")
-        return byte_stream.getvalue()
+    def read(self, count) -> bytes:
+        result = bytearray()
+        remainingCount = count
+
+        while remainingCount > 0:
+            if not self._whether_pipe_is_readable(0):  # Pure immediate polling - max performance
+                continue
+            
+            try:
+                _ba = os.read(self._fdPipe, remainingCount)
+            except BlockingIOError:
+                _log_msg("pipe reader: BLOCKING ERROR", 5)
+                continue
+            except Exception as e:
+                _log_msg(f"Other exception: {e}", 5)
+                continue
+            else:
+                if not _ba:
+                    break  # EOF reached
+                remainingCount -= len(_ba)
+                result.extend(_ba)
+        return bytes(result)
+
 
     # potential issues
     # undefined behavior if named pipe is deleted elsewhere
@@ -173,10 +135,19 @@ class _PipeReader:
     # -------------------------------------------
     def __del__(self):
         # -------------------------------------------
-        # for now, the reader will destroy anything remaining in the pipe
-        os.close(self._fdPipe)
-        # os.unlink(self._kNamedPipeFilePathString) # unlinking the named pipe will mean the writer will not be seen next time
-        # maybe the writer should be unlinking it when done?
+        """close the pipe when the object is destroyed
+
+        pre: none
+        in: none
+        out: none
+        post: _fdPipe is closed
+        """
+        try:
+            if self._fdPipe is not None:
+                os.close(self._fdPipe)
+        except Exception:
+            pass
+
 
 
 import io
@@ -194,7 +165,7 @@ class PipeReader(_PipeReader):
     def __init__(self, buffer_size=None):
         super().__init__()
         if buffer_size is None:
-            self.buffer_size = 4096
+            self.buffer_size = 32768  # Optimal 32KB for best single and multi-thread performance
         else:
             self.buffer_size = buffer_size
         self.buffer = bytearray(self.buffer_size)
@@ -204,27 +175,25 @@ class PipeReader(_PipeReader):
     def read(self, count):
         remaining = self.buffer_end - self.buffer_pos
         if remaining >= count:
-            # We have enough data in the buffer
-            result = self.buffer[self.buffer_pos : self.buffer_pos + count]
+            # Use memoryview to avoid extra copy
+            result_mv = memoryview(self.buffer)[self.buffer_pos : self.buffer_pos + count]
             self.buffer_pos += count
+            return bytes(result_mv)  # Ensure return type is bytes
         else:
             # Not enough data in the buffer, need to refill
-            result = self.buffer[
-                self.buffer_pos : self.buffer_end
-            ]  # take remaining data
-            new_data = super().read(
-                max(self.buffer_size, count - remaining)
-            )  # get more data
-            result += new_data[
-                : count - remaining
-            ]  # append required amount to the result
-
-            # Put the rest of the new data (if any) in the buffer
-            remaining_from_new = len(new_data) - (count - remaining)
-            self.buffer[:remaining_from_new] = new_data[
-                count - remaining :
-            ]  # move the rest to the beginning of the buffer
+            result = bytearray()
+            if remaining > 0:
+                # Use memoryview for the buffer slice
+                result += memoryview(self.buffer)[self.buffer_pos : self.buffer_end]
+            # Read enough to fill the request
+            new_data = super().read(max(self.buffer_size, count - remaining))
+            need = count - remaining
+            # Use memoryview for new_data as well
+            result += memoryview(new_data)[:need]
+            # Save any excess in the buffer for next time
+            remaining_from_new = len(new_data) - need
+            if remaining_from_new > 0:
+                self.buffer[:remaining_from_new] = memoryview(new_data)[need:]
             self.buffer_pos = 0
             self.buffer_end = remaining_from_new
-
-        return result
+            return bytes(result)
