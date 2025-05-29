@@ -106,6 +106,12 @@ class _PipeReader:
     # -------------------------------------------
 
     def read(self, count) -> bytes:
+        # Validate input parameter
+        if count is None:
+            raise ValueError("read() count parameter cannot be None")
+        if not isinstance(count, int) or count < 0:
+            raise ValueError(f"read() count parameter must be a non-negative integer, got {type(count).__name__}: {count}")
+        
         result = bytearray()
         remainingCount = count
 
@@ -161,14 +167,20 @@ class PipeReader(_PipeReader):
         sourced it
     """
 
-    def __init__(self, buffer_size=None, max_read_size=4096, greedy_read_size=256*1024):
+    def __init__(self, buffer_size=None, max_read_size=4096, greedy_read_size=None):
         super().__init__()
         if buffer_size is None:
             self.buffer_size = 2**30  # 1GB default buffer
         else:
             self.buffer_size = buffer_size
         self.max_read_size = max_read_size  # 4KB default max read - matches pipe page size
-        self.greedy_read_size = greedy_read_size  # 256KB default greedy read for efficiency
+        
+        # Set default greedy_read_size if None
+        if greedy_read_size is None:
+            self.greedy_read_size = 65536  # 64KB default greedy read size
+        else:
+            self.greedy_read_size = greedy_read_size
+            
         self.buffer = bytearray(self.buffer_size)
         self.buffer_pos = 0
         self.buffer_end = 0
@@ -206,6 +218,10 @@ class PipeReader(_PipeReader):
             else:
                 # For larger requests, use normal logic with max_read_size cap
                 read_amount = min(max(need, 4096), self.max_read_size)
+            
+            # Safeguard: ensure read_amount is valid
+            if read_amount is None or read_amount <= 0:
+                read_amount = max(need, 4096)  # Fallback to at least what we need or 4KB
             
             new_data = super().read(read_amount)
             self._total_pipe_reads += 1

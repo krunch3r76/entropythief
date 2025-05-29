@@ -79,8 +79,8 @@ class Controller:
         )  # messages from project and if logging enabled INFO messages from rest
         sys.stderr = self.stderr2file  # replace stderr stream with file stream
 
-        if self.ENTROPY_BUFFER_CAPACITY < 2**20:  # enforce minimum pool size
-            self.ENTROPY_BUFFER_CAPACITY = 2**20
+        if self.ENTROPY_BUFFER_CAPACITY < 2*2**20:  # enforce minimum pool size
+            self.ENTROPY_BUFFER_CAPACITY = 2*2**20
 
         self.theview = view.View(concealedview=self.args.conceal_view)
 
