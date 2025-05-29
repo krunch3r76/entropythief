@@ -154,25 +154,35 @@ import io
 
 
 class PipeReader(_PipeReader):
-    """read entropythief's named pipe into a local buffer with 4KB max read size
+    """read entropythief's named pipe into a local buffer with 4KB max read size and greedy buffering
 
     credits: as of this writing the implementation of this buffering logic
         can be credited almost wholly to chatgpt-4 and from whomever chatgpt-4
         sourced it
     """
 
-    def __init__(self, buffer_size=None, max_read_size=4096):
+    def __init__(self, buffer_size=None, max_read_size=4096, greedy_read_size=256*1024):
         super().__init__()
         if buffer_size is None:
             self.buffer_size = 2**30  # 1GB default buffer
         else:
             self.buffer_size = buffer_size
         self.max_read_size = max_read_size  # 4KB default max read - matches pipe page size
+        self.greedy_read_size = greedy_read_size  # 256KB default greedy read for efficiency
         self.buffer = bytearray(self.buffer_size)
         self.buffer_pos = 0
         self.buffer_end = 0
+        
+        # Stats tracking for performance monitoring
+        self._total_requests = 0
+        self._total_pipe_reads = 0
+        self._total_bytes_requested = 0
+        self._total_bytes_read_from_pipe = 0
 
     def read(self, count):
+        self._total_requests += 1
+        self._total_bytes_requested += count
+        
         remaining = self.buffer_end - self.buffer_pos
         if remaining >= count:
             # Use memoryview to avoid extra copy
@@ -186,10 +196,20 @@ class PipeReader(_PipeReader):
                 # Use memoryview for the buffer slice
                 result += memoryview(self.buffer)[self.buffer_pos : self.buffer_end]
             
-            # KEY FIX: Cap read size to max_read_size (4KB) instead of entire buffer
+            # GREEDY BUFFERING STRATEGY: Read much more than needed for future requests
             need = count - remaining
-            read_amount = min(max(need, 4096), self.max_read_size)  # 4KB minimum, 4KB maximum
+            
+            # For very small requests (like dice rolls), be maximally greedy
+            if need <= 64:  # Small requests like dice rolls (8 bytes) 
+                # Use full greedy read size to dramatically improve efficiency
+                read_amount = self.greedy_read_size
+            else:
+                # For larger requests, use normal logic with max_read_size cap
+                read_amount = min(max(need, 4096), self.max_read_size)
+            
             new_data = super().read(read_amount)
+            self._total_pipe_reads += 1
+            self._total_bytes_read_from_pipe += len(new_data)
             
             # Use memoryview for new_data as well
             result += memoryview(new_data)[:need]
@@ -200,3 +220,32 @@ class PipeReader(_PipeReader):
             self.buffer_pos = 0
             self.buffer_end = remaining_from_new
             return bytes(result)
+    
+    def get_efficiency_stats(self) -> dict:
+        """Return efficiency statistics for performance monitoring"""
+        if self._total_requests == 0:
+            return {
+                "total_requests": 0,
+                "total_pipe_reads": 0,
+                "efficiency_ratio": 0,
+                "average_requests_per_pipe_read": 0,
+                "bytes_requested": 0,
+                "bytes_read_from_pipe": 0,
+                "amplification_factor": 0,
+                "buffer_utilization": f"{self.buffer_end - self.buffer_pos} bytes available"
+            }
+        
+        efficiency_ratio = self._total_requests / max(1, self._total_pipe_reads)
+        amplification = self._total_bytes_read_from_pipe / max(1, self._total_bytes_requested)
+        
+        return {
+            "total_requests": self._total_requests,
+            "total_pipe_reads": self._total_pipe_reads,
+            "efficiency_ratio": efficiency_ratio,
+            "average_requests_per_pipe_read": efficiency_ratio,
+            "bytes_requested": self._total_bytes_requested,
+            "bytes_read_from_pipe": self._total_bytes_read_from_pipe,
+            "amplification_factor": amplification,
+            "buffer_utilization": f"{self.buffer_end - self.buffer_pos} bytes available",
+            "greedy_read_size": f"{self.greedy_read_size} bytes"
+        }
