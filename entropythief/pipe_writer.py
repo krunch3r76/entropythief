@@ -409,50 +409,67 @@ class PipeWriter:
 
     def _open_pipe(self) -> None:
         """assigns the pipe to an internal file descriptor if not already set, and sets its size"""
-        if not self._fdPipe:
+        if self._fdPipe is not None:
+            # Pipe is already open, don't open again
+            _logger.debug(f"Pipe already open with fd: {self._fdPipe}")
+            return
+            
+        try:
+            _logger.debug(f"Attempting to open pipe: {self._kNamedPipeFilePathString}")
+            fd = os.open(
+                self._kNamedPipeFilePathString, os.O_WRONLY | os.O_NONBLOCK
+            )
+            _logger.debug(f"Successfully opened pipe fd: {fd}")
+            
             try:
-                _logger.debug(f"Attempting to open pipe: {self._kNamedPipeFilePathString}")
-                self._fdPipe = os.open(
-                    self._kNamedPipeFilePathString, os.O_WRONLY | os.O_NONBLOCK
-                )
-                _logger.debug(f"Successfully opened pipe fd: {self._fdPipe}")
-                
-                # Invalidate cache when pipe opens
-                self._invalidate_cache()
-                
                 # Set the pipe size to the desired value
                 try:
-                    fcntl.fcntl(self._fdPipe, self.config.F_SETPIPE_SZ, self._desired_pipe_capacity)
+                    fcntl.fcntl(fd, self.config.F_SETPIPE_SZ, self._desired_pipe_capacity)
                     _logger.debug(f"Set pipe size to: {self._desired_pipe_capacity}")
-                    # Invalidate capacity cache after setting size
-                    self._cached_pipe_capacity = None
                 except (OSError, IOError) as e:
                     _logger.warning(f"Failed to set pipe size to {self._desired_pipe_capacity}: {e}")
                     # Continue anyway - pipe size setting is not critical
+                
                 # Log the actual pipe size
                 try:
-                    actual_size = fcntl.fcntl(self._fdPipe, self.config.F_GETPIPE_SZ)
+                    actual_size = fcntl.fcntl(fd, self.config.F_GETPIPE_SZ)
                     _logger.info(f"Named pipe opened with system capacity: {actual_size} bytes")
-                    # Cache the capacity we just read
-                    self._cached_pipe_capacity = actual_size
                 except (OSError, IOError) as e:
                     _logger.warning(f"Could not read pipe capacity: {e}")
-            except FileNotFoundError:
-                _logger.warning(f"Named pipe not found: {self._kNamedPipeFilePathString}")
-                # Don't raise - this might be expected during startup
-            except PermissionError as e:
-                _logger.warning(f"Permission denied accessing pipe: {self._kNamedPipeFilePathString} - {e}")
-                # Don't raise - might be temporary, let caller handle
-            except OSError as e:
-                if e.errno == 6:  # ENXIO - no reader
-                    _logger.debug(f"No reader connected to pipe: {self._kNamedPipeFilePathString}")
-                    # Don't raise exception - this is expected when no reader is connected yet
-                else:
-                    _logger.error(f"OS error opening pipe: {e} (errno: {e.errno})")
-                    # For unexpected OS errors, still don't raise - let the system retry
-            except Exception as e:
-                _logger.error(f"Unexpected error opening pipe: {type(e).__name__}: {e}")
-                # Don't raise - unexpected errors should be logged but not break the flow
+                
+                # Only assign to self._fdPipe after all operations succeed
+                self._fdPipe = fd
+                # Invalidate cache when pipe opens successfully
+                self._invalidate_cache()
+                # Cache the capacity if we successfully read it
+                if 'actual_size' in locals():
+                    self._cached_pipe_capacity = actual_size
+                    
+            except Exception as setup_error:
+                # If setup fails after opening, clean up the file descriptor
+                try:
+                    os.close(fd)
+                    _logger.debug(f"Cleaned up fd {fd} after setup failure")
+                except OSError as close_error:
+                    _logger.warning(f"Failed to close fd {fd} during cleanup: {close_error}")
+                raise setup_error
+                
+        except FileNotFoundError:
+            _logger.warning(f"Named pipe not found: {self._kNamedPipeFilePathString}")
+            # Don't raise - this might be expected during startup
+        except PermissionError as e:
+            _logger.warning(f"Permission denied accessing pipe: {self._kNamedPipeFilePathString} - {e}")
+            # Don't raise - might be temporary, let caller handle
+        except OSError as e:
+            if e.errno == 6:  # ENXIO - no reader
+                _logger.debug(f"No reader connected to pipe: {self._kNamedPipeFilePathString}")
+                # Don't raise exception - this is expected when no reader is connected yet
+            else:
+                _logger.error(f"OS error opening pipe: {e} (errno: {e.errno})")
+                # For unexpected OS errors, still don't raise - let the system retry
+        except Exception as e:
+            _logger.error(f"Unexpected error opening pipe: {type(e).__name__}: {e}")
+            # Don't raise - unexpected errors should be logged but not break the flow
 
     def get_bytes_in_pipeline(self) -> int:
         """returns the total number of bytes currently stored in both the pipe and internal buffer"""
@@ -476,6 +493,11 @@ class PipeWriter:
         if self._whether_pipe_is_broken():
             return 0
 
+        # Validate file descriptor before using it
+        if not self.is_fd_valid():
+            _logger.debug("Invalid file descriptor detected, marking pipe as broken")
+            return 0
+
         # Use cached value if within TTL (avoid redundant expensive ioctl calls)
         current_time = time.time()
         if (self._cached_bytes_in_pipe is not None and 
@@ -483,27 +505,30 @@ class PipeWriter:
             return self._cached_bytes_in_pipe
 
         bytes_in_pipe = 0
-        if self._fdPipe:
-            try:
-                buf = bytearray(4)
-                fcntl.ioctl(self._fdPipe, termios.FIONREAD, buf, 1)
-                bytes_in_pipe = int.from_bytes(buf, "little")
-                
-                # Cache the result
-                self._cached_bytes_in_pipe = bytes_in_pipe
-                self._cache_timestamp = current_time
-                
-            except OSError as e:
-                _log_msg(f"Failed to read pipe byte count: {e}", 3)
-                # Return 0 - if we can't read the count, assume empty
-                bytes_in_pipe = 0
-                # Invalidate cache on error
-                self._cached_bytes_in_pipe = None
-            except Exception as e:
-                _log_msg(f"Unexpected error reading pipe byte count: {type(e).__name__}: {e}", 1)
-                bytes_in_pipe = 0
-                # Invalidate cache on error
-                self._cached_bytes_in_pipe = None
+        try:
+            buf = bytearray(4)
+            fcntl.ioctl(self._fdPipe, termios.FIONREAD, buf, 1)
+            bytes_in_pipe = int.from_bytes(buf, "little")
+            
+            # Cache the result
+            self._cached_bytes_in_pipe = bytes_in_pipe
+            self._cache_timestamp = current_time
+            
+        except OSError as e:
+            _log_msg(f"Failed to read pipe byte count: {e}", 3)
+            # Return 0 - if we can't read the count, assume empty
+            bytes_in_pipe = 0
+            # Invalidate cache and mark pipe as broken on error
+            self._cached_bytes_in_pipe = None
+            if e.errno == 9:  # EBADF - Bad file descriptor
+                _logger.warning(f"Bad file descriptor {self._fdPipe}, marking as broken")
+                self._fdPipe = None
+                self._invalidate_cache()
+        except Exception as e:
+            _log_msg(f"Unexpected error reading pipe byte count: {type(e).__name__}: {e}", 1)
+            bytes_in_pipe = 0
+            # Invalidate cache on error
+            self._cached_bytes_in_pipe = None
 
         return bytes_in_pipe
 
@@ -758,9 +783,69 @@ total bytes: {self._count_bytes_in_internal_buffers() + self._count_bytes_in_pip
         return self
 
     def __exit__(self, exc_type: Optional[type], exc_val: Optional[Exception], exc_tb: Optional[Any]) -> bool:
-        """Context manager exit - pipe connection management is external responsibility"""
+        """Context manager exit - close pipe to prevent leaks"""
+        # Always close on context exit to prevent leaks
+        self.close()
         return False  # Don't suppress exceptions
+    
+    @classmethod
+    def get_open_fd_count(cls) -> int:
+        """Get the current number of open file descriptors for this process (Linux only)"""
+        try:
+            import glob
+            fd_count = len(glob.glob('/proc/self/fd/*'))
+            return fd_count
+        except Exception:
+            return -1  # Unable to determine
+    
+    def is_fd_valid(self) -> bool:
+        """Check if the current file descriptor is still valid"""
+        if self._fdPipe is None:
+            return False
+        try:
+            # Try to get file status - will fail if fd is invalid
+            os.fstat(self._fdPipe)
+            return True
+        except (OSError, ValueError):
+            # File descriptor is invalid
+            self._fdPipe = None
+            self._invalidate_cache()
+            return False
 
     def __del__(self) -> None:
-        """PipeWriter doesn't auto-close since it doesn't manage pipe lifecycle"""
-        pass
+        """Automatic cleanup of file descriptors to prevent leaks"""
+        if self._fdPipe is not None:
+            try:
+                os.close(self._fdPipe)
+                _logger.debug(f"Auto-closed leaked fd {self._fdPipe} in __del__")
+            except OSError:
+                # File descriptor may already be closed
+                pass
+            except Exception as e:
+                # Log but don't raise in destructor
+                _logger.warning(f"Error in __del__ cleanup: {type(e).__name__}: {e}")
+            finally:
+                self._fdPipe = None
+
+    def get_fd_info(self) -> dict:
+        """Get diagnostic information about file descriptor usage"""
+        info = {
+            'current_fd': self._fdPipe,
+            'fd_valid': self.is_fd_valid() if self._fdPipe is not None else False,
+            'pipe_path': self._kNamedPipeFilePathString,
+            'process_fd_count': self.get_open_fd_count(),
+            'cache_valid': self._cached_bytes_in_pipe is not None,
+            'cache_age': time.time() - self._cache_timestamp if self._cache_timestamp > 0 else -1
+        }
+        
+        # Try to get system limits
+        try:
+            import resource
+            soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+            info['fd_soft_limit'] = soft_limit
+            info['fd_hard_limit'] = hard_limit
+        except Exception:
+            info['fd_soft_limit'] = -1
+            info['fd_hard_limit'] = -1
+            
+        return info
