@@ -19,7 +19,7 @@ Usage Examples:
     
     # Custom configuration
     custom_config = PipeWriterConfig(
-        chunk_size=8192,
+        chunk_size=131072,    # 128KB chunks for excellent performance
         async_sleep=0,        # No delays for maximum performance
         max_write_retries=20
     )
@@ -143,7 +143,7 @@ class PipeWriterConfig:
     """Centralized configuration for PipeWriter performance and behavior settings"""
     
     def __init__(self,
-                 chunk_size: int = 4096,
+                 chunk_size: int = 65536,  # 64KB - large internal chunks for async efficiency
                  async_sleep: float = 0,
                  default_pipe_capacity: int = 2**20,
                  max_write_retries: int = 10,
@@ -152,7 +152,8 @@ class PipeWriterConfig:
         """Initialize PipeWriter configuration
         
         Args:
-            chunk_size: Size in bytes for data chunking (default: 4096)
+            chunk_size: Size in bytes for internal data chunking (default: 65536 = 64KB)
+                       Large chunks for async efficiency - broken into 4KB pipe writes automatically
             async_sleep: Sleep time in seconds during async operations (default: 0)
                         0 = pure yielding without delay (recommended for performance)
                         >0 = intentional delay for rate limiting or resource sharing
@@ -193,9 +194,9 @@ class PipeWriterConfig:
     
     @classmethod  
     def high_performance(cls) -> 'PipeWriterConfig':
-        """Create a high-performance configuration"""
+        """Create a high-performance configuration for maximum throughput"""
         return cls(
-            chunk_size=8192,      # Larger chunks
+            chunk_size=524288,    # 512KB internal chunks for maximum async efficiency
             async_sleep=0,        # No artificial delays
             cache_ttl=0.002,      # Longer cache TTL
             chunks_per_yield=16   # More chunks per yield
@@ -205,10 +206,10 @@ class PipeWriterConfig:
     def low_latency(cls) -> 'PipeWriterConfig':
         """Create a low-latency configuration"""
         return cls(
-            chunk_size=1024,      # Smaller chunks for responsiveness
+            chunk_size=32768,     # 32KB chunks for good responsiveness
             async_sleep=0,        # No artificial delays
             cache_ttl=0.0005,     # Shorter cache TTL
-            chunks_per_yield=4    # Fewer chunks per yield
+            chunks_per_yield=4    # Fewer chunks per yield for responsiveness
         )
     
     @classmethod
@@ -219,8 +220,22 @@ class PipeWriterConfig:
             delay_seconds: Intentional delay between chunk batches for rate limiting
         """
         return cls(
+            chunk_size=65536,     # 64KB internal chunks
             async_sleep=delay_seconds,  # Intentional delay for rate limiting
             chunks_per_yield=4          # Smaller batches with delays
+        )
+    
+    @classmethod
+    def interleaver_optimized(cls) -> 'PipeWriterConfig':
+        """Optimized for TaskResultWriter/Interleaver usage pattern
+        
+        Uses large internal chunks for handling 2MB+ Interleaver buffers efficiently.
+        """
+        return cls(
+            chunk_size=1048576,   # 1MB internal chunks - optimal for 2MB+ Interleaver buffers
+            async_sleep=0,        # No delays for maximum throughput
+            cache_ttl=0.001,      # Standard cache TTL
+            chunks_per_yield=8    # Balanced yielding for large chunks
         )
     
     def __repr__(self) -> str:
@@ -302,44 +317,73 @@ class MyBytesDeque(collections.deque):
     #     return self.len()
 
 
+
+
+# Optimal pipe write size for Linux kernel performance  
+# Linux pipes use 4KB pages internally - this size minimizes kernel overhead
+PIPE_WRITE_CHUNK_SIZE = 4096
+
+
 def _write_to_pipe(fifoWriteEnd: int, thebytes: bytes, max_retries: int = 10) -> int:
-    """writes bytes to a fifo
+    """writes bytes to a fifo, breaking large chunks into 4KB writes for optimal kernel performance
     required by model__entropythief
     pre: named pipe has been polled for writability -> nonblocking
 
     fifoWriteEnd: a file descriptor the a named pipe
-    thebytes: the bytes to write
+    thebytes: the bytes to write (may be large internal chunk)
     max_retries: maximum number of retry attempts for blocked writes
     """
     # required by: entropythief()
-    WRITTEN = 0
-    try:
-        WRITTEN = os.write(fifoWriteEnd, thebytes)
-    except BlockingIOError:
-        _log_msg(
-            f"_write_to_pipe: BlockingIOError, retrying write of {len(thebytes)} bytes.",
-            2,
-        )
-        for attempt in range(max_retries):
-            try:
-                WRITTEN = os.write(fifoWriteEnd, thebytes)
-                break  # Success, exit retry loop
-            except BlockingIOError:
-                if attempt == max_retries - 1:  # Last attempt failed
-                    raise PipeWriteError(f"Failed to write {len(thebytes)} bytes after {max_retries} attempts due to blocking IO")
-                WRITTEN = 0
-    except BrokenPipeError as e:
-        WRITTEN = 0
-        _log_msg("BROKEN PIPE: Reader disconnected", 3)
-        raise PipeConnectionError(f"Pipe connection broken: {e}")
-    except OSError as e:
-        _log_msg(f"_write_to_pipe: OSError during write: {e}", 1)
-        raise PipeWriteError(f"OS error during pipe write: {e}")
-    except Exception as e:
-        _log_msg(f"_write_to_pipe: Unexpected error: {type(e).__name__}: {e}", 0)
-        raise PipeWriteError(f"Unexpected error during pipe write: {type(e).__name__}: {e}")
+    total_written = 0
+    bytes_remaining = len(thebytes)
+    offset = 0
     
-    return WRITTEN
+    # Break large internal chunks into 4KB pipe writes for optimal kernel performance
+    while bytes_remaining > 0:
+        # Write in 4KB chunks aligned with Linux pipe page boundaries
+        write_size = min(PIPE_WRITE_CHUNK_SIZE, bytes_remaining)
+        chunk_to_write = thebytes[offset:offset + write_size]
+        
+        try:
+            written = os.write(fifoWriteEnd, chunk_to_write)
+            total_written += written
+            offset += written
+            bytes_remaining -= written
+            
+            # If partial write, continue with remaining bytes
+            if written < write_size:
+                _log_msg(f"_write_to_pipe: Partial write {written}/{write_size} bytes, continuing", 3)
+                
+        except BlockingIOError:
+            _log_msg(f"_write_to_pipe: BlockingIOError, retrying write of {write_size} bytes.", 2)
+            
+            for attempt in range(max_retries):
+                try:
+                    written = os.write(fifoWriteEnd, chunk_to_write)
+                    total_written += written
+                    offset += written
+                    bytes_remaining -= written
+                    break  # Success, exit retry loop
+                except BlockingIOError:
+                    if attempt == max_retries - 1:  # Last attempt failed
+                        _log_msg(f"_write_to_pipe: Failed after {max_retries} attempts, wrote {total_written}/{len(thebytes)} bytes", 1)
+                        return total_written
+                    # Continue retry loop
+            else:
+                # All retries failed, return what we wrote
+                return total_written
+                
+        except BrokenPipeError as e:
+            _log_msg("BROKEN PIPE: Reader disconnected", 3)
+            raise PipeConnectionError(f"Pipe connection broken: {e}")
+        except OSError as e:
+            _log_msg(f"_write_to_pipe: OSError during write: {e}", 1)
+            raise PipeWriteError(f"OS error during pipe write: {e}")
+        except Exception as e:
+            _log_msg(f"_write_to_pipe: Unexpected error: {type(e).__name__}: {e}", 0)
+            raise PipeWriteError(f"Unexpected error during pipe write: {type(e).__name__}: {e}")
+    
+    return total_written
 
 
 ##################################{}#########################3
