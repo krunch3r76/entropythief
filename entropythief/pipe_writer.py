@@ -148,10 +148,10 @@ class MyBytesIO(io.BytesIO):
 class MyBytesDeque(collections.deque):
     """wraps collections.deque to keep track of size of contents"""
 
-    _runningTotal: int = 0
-
     def __init__(self) -> None:
         super().__init__()
+        # Instance variable - each MyBytesDeque has its own running total
+        self._runningTotal: int = 0
 
     def append(self, mybytesio: MyBytesIO) -> None:
         assert isinstance(mybytesio, MyBytesIO)
@@ -247,6 +247,12 @@ class PipeWriter:
         self._byteQ: MyBytesDeque = MyBytesDeque()
         self._fdPipe: Optional[int] = None
         
+        # Performance optimization: cache expensive system calls
+        self._cached_pipe_capacity: Optional[int] = None
+        self._cached_bytes_in_pipe: Optional[int] = None
+        self._cache_timestamp: float = 0.0
+        self._cache_ttl: float = 0.001  # 1ms cache TTL for pipe byte count
+        
         self._kNamedPipeFilePathString: str = str(namedPipeFilePathString).strip()
         _logger.debug(f"Using pipe path: {self._kNamedPipeFilePathString}")
         
@@ -264,9 +270,25 @@ class PipeWriter:
     @property
     def named_pipe_system_capacity(self) -> int:
         """Return the current system capacity of the named pipe (via F_GETPIPE_SZ)."""
-        if self._fdPipe:
-            return fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
-        return 0
+        if not self._fdPipe:
+            return 0
+            
+        # Use cached value if available (pipe capacity rarely changes)
+        if self._cached_pipe_capacity is not None:
+            return self._cached_pipe_capacity
+            
+        try:
+            self._cached_pipe_capacity = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
+            return self._cached_pipe_capacity
+        except (OSError, IOError) as e:
+            _logger.debug(f"Failed to read pipe capacity: {e}")
+            return 0
+
+    def _invalidate_cache(self) -> None:
+        """Invalidate cached values when pipe state changes"""
+        self._cached_pipe_capacity = None
+        self._cached_bytes_in_pipe = None
+        self._cache_timestamp = 0.0
 
     def _open_pipe(self) -> None:
         """assigns the pipe to an internal file descriptor if not already set, and sets its size"""
@@ -278,10 +300,15 @@ class PipeWriter:
                 )
                 _logger.debug(f"Successfully opened pipe fd: {self._fdPipe}")
                 
+                # Invalidate cache when pipe opens
+                self._invalidate_cache()
+                
                 # Set the pipe size to the desired value
                 try:
                     fcntl.fcntl(self._fdPipe, self._F_SETPIPE_SZ, self._desired_pipe_capacity)
                     _logger.debug(f"Set pipe size to: {self._desired_pipe_capacity}")
+                    # Invalidate capacity cache after setting size
+                    self._cached_pipe_capacity = None
                 except (OSError, IOError) as e:
                     _logger.warning(f"Failed to set pipe size to {self._desired_pipe_capacity}: {e}")
                     # Continue anyway - pipe size setting is not critical
@@ -289,6 +316,8 @@ class PipeWriter:
                 try:
                     actual_size = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
                     _logger.info(f"Named pipe opened with system capacity: {actual_size} bytes")
+                    # Cache the capacity we just read
+                    self._cached_pipe_capacity = actual_size
                 except (OSError, IOError) as e:
                     _logger.warning(f"Could not read pipe capacity: {e}")
             except FileNotFoundError:
@@ -330,19 +359,34 @@ class PipeWriter:
         if self._whether_pipe_is_broken():
             return 0
 
+        # Use cached value if within TTL (avoid redundant expensive ioctl calls)
+        current_time = time.time()
+        if (self._cached_bytes_in_pipe is not None and 
+            current_time - self._cache_timestamp < self._cache_ttl):
+            return self._cached_bytes_in_pipe
+
         bytes_in_pipe = 0
         if self._fdPipe:
             try:
                 buf = bytearray(4)
                 fcntl.ioctl(self._fdPipe, termios.FIONREAD, buf, 1)
                 bytes_in_pipe = int.from_bytes(buf, "little")
+                
+                # Cache the result
+                self._cached_bytes_in_pipe = bytes_in_pipe
+                self._cache_timestamp = current_time
+                
             except OSError as e:
                 _log_msg(f"Failed to read pipe byte count: {e}", 3)
                 # Return 0 - if we can't read the count, assume empty
                 bytes_in_pipe = 0
+                # Invalidate cache on error
+                self._cached_bytes_in_pipe = None
             except Exception as e:
                 _log_msg(f"Unexpected error reading pipe byte count: {type(e).__name__}: {e}", 1)
                 bytes_in_pipe = 0
+                # Invalidate cache on error
+                self._cached_bytes_in_pipe = None
 
         return bytes_in_pipe
 
@@ -423,15 +467,29 @@ class PipeWriter:
         
         bytestream = io.BytesIO(data)
         
-        # Chunk input into pages added to the byteQ - helps prevent blocking io
-        # and facilitates asynchronous implementation
+        # Optimized chunking: batch multiple chunks before yielding control
+        # This reduces async overhead significantly
         chunks_created = 0
+        chunks_per_yield = 8  # Process 8 chunks (32KB) before yielding
+        
         while True:
-            chunk_of_bytes = bytestream.read(self.DEFAULT_CHUNK_SIZE)
-            if len(chunk_of_bytes) == 0:
+            chunk_batch = 0
+            
+            # Process a batch of chunks without yielding
+            while chunk_batch < chunks_per_yield:
+                chunk_of_bytes = bytestream.read(self.DEFAULT_CHUNK_SIZE)
+                if len(chunk_of_bytes) == 0:
+                    break  # End of data
+                    
+                self._byteQ.append(MyBytesIO(chunk_of_bytes))
+                chunks_created += 1
+                chunk_batch += 1
+            
+            # If we processed no chunks in this batch, we're done
+            if chunk_batch == 0:
                 break
-            self._byteQ.append(MyBytesIO(chunk_of_bytes))
-            chunks_created += 1
+                
+            # Yield control less frequently for better performance
             await asyncio.sleep(self.DEFAULT_ASYNC_SLEEP)
             
         _log_msg(f"_queue_data: Created {chunks_created} chunks, total queue size now: {self._byteQ.len()}", 3)
@@ -482,6 +540,7 @@ class PipeWriter:
                         self._byteQ.appendleft(first)
                         # Mark pipe as broken but don't raise - just log and continue
                         self._fdPipe = None
+                        self._invalidate_cache()  # Invalidate cache when pipe breaks
                         break
                     except Exception as e:
                         _log_msg(f"_flush_to_pipe: Unexpected error in write (full): {type(e).__name__}: {e}", 0)
@@ -510,6 +569,7 @@ class PipeWriter:
                         self._byteQ.appendleft(first)
                         # Mark pipe as broken but don't raise - just log and continue
                         self._fdPipe = None
+                        self._invalidate_cache()  # Invalidate cache when pipe breaks
                         break
                     except Exception as e:
                         _log_msg(f"_flush_to_pipe: Unexpected error in write (partial): {type(e).__name__}: {e}", 0)
@@ -568,6 +628,8 @@ total bytes: {self._count_bytes_in_internal_buffers() + self._count_bytes_in_pip
                 # Don't raise - cleanup should be resilient
             finally:
                 self._fdPipe = None
+                # Invalidate cache when pipe closes
+                self._invalidate_cache()
 
     def __enter__(self) -> 'PipeWriter':
         """Context manager entry"""
