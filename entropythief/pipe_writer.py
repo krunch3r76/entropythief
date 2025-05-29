@@ -14,6 +14,8 @@ import itertools
 import functools
 import time
 from typing import Optional, Union, Any
+import logging
+import threading
 
 import queue
 import collections
@@ -22,6 +24,69 @@ import collections
 _DEBUGLEVEL = (
     int(os.environ["PYTHONDEBUGLEVEL"]) if "PYTHONDEBUGLEVEL" in os.environ else 0
 )
+
+
+# Configure logging for pipe_writer
+def _setup_pipe_writer_logging():
+    """Set up logging for pipe_writer module with ncurses compatibility"""
+    logger = logging.getLogger('pipe_writer')
+    
+    # Don't add handlers if already configured
+    if logger.handlers:
+        return logger
+    
+    # Set log level based on PYTHONDEBUGLEVEL
+    if _DEBUGLEVEL >= 3:
+        logger.setLevel(logging.DEBUG)
+    elif _DEBUGLEVEL >= 2:
+        logger.setLevel(logging.INFO)
+    elif _DEBUGLEVEL >= 1:
+        logger.setLevel(logging.WARNING)
+    else:
+        logger.setLevel(logging.ERROR)
+    
+    # Create file handler - primary log file
+    log_dir = ".debug"
+    log_file = os.path.join(log_dir, "pipe_writer.log")
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        file_handler = logging.FileHandler(log_file, mode='a')
+    except Exception:
+        # Fallback to /tmp if main log directory fails
+        fallback_log = f"/tmp/pipe_writer_fallback_{os.getpid()}.log"
+        file_handler = logging.FileHandler(fallback_log, mode='a')
+    
+    # Create formatter with thread information
+    formatter = logging.Formatter(
+        '[%(asctime)s] [Thread-%(thread)d] [%(name)s] [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(formatter)
+    
+    # Add handler to logger
+    logger.addHandler(file_handler)
+    
+    # Prevent propagation to root logger (avoid any chance of stderr output)
+    logger.propagate = False
+    
+    return logger
+
+
+# Initialize the logger
+_logger = _setup_pipe_writer_logging()
+
+
+def _log_msg(msg: str, debug_level: int = 0, stream: Optional[Any] = None) -> None:
+    """Legacy function for compatibility - now uses standard logging"""
+    # Map debug levels to logging levels
+    if debug_level <= 0:
+        _logger.error(msg)
+    elif debug_level == 1:
+        _logger.warning(msg)
+    elif debug_level == 2:
+        _logger.info(msg)
+    else:  # debug_level >= 3
+        _logger.debug(msg)
 
 
 # Custom exceptions for pipe writer
@@ -43,36 +108,6 @@ class PipeWriteError(PipeWriterError):
 class PipeConfigurationError(PipeWriterError):
     """Raised when there are pipe configuration issues"""
     pass
-
-
-def _log_msg(msg: str, debug_level: int = 0, stream: Optional[Any] = None) -> None:
-    if debug_level <= _DEBUGLEVEL:
-        log_dir = ".debug"
-        log_file = os.path.join(log_dir, "pipe_writer.log")
-        try:
-            os.makedirs(log_dir, exist_ok=True)
-            with open(log_file, "a") as f:  # Changed to append mode
-                import threading
-                import time
-                timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-                thread_id = threading.current_thread().ident
-                print(f"[{timestamp}] [Thread-{thread_id}] [pipe_writer.py] {msg}", file=f, flush=True)
-        except Exception as e:
-            # Don't use stderr fallback - it interferes with ncurses
-            # Try alternative log file in /tmp if main log fails
-            try:
-                import threading
-                import time
-                timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-                thread_id = threading.current_thread().ident
-                fallback_log = f"/tmp/pipe_writer_fallback_{os.getpid()}.log"
-                with open(fallback_log, "a") as f:
-                    print(f"[{timestamp}] [Thread-{thread_id}] [pipe_writer.py] {msg}", file=f, flush=True)
-                    print(f"[{timestamp}] [Thread-{thread_id}] [pipe_writer.py] LOG ERROR: {e}", file=f, flush=True)
-            except:
-                pass  # If all logging fails, give up silently to avoid interfering with ncurses
-
-
 
 
 ##################{}#####################
@@ -173,7 +208,7 @@ def _write_to_pipe(fifoWriteEnd: int, thebytes: bytes, max_retries: int = 10) ->
                 WRITTEN = 0
     except BrokenPipeError as e:
         WRITTEN = 0
-        _log_msg("BROKEN PIPE: Reader disconnected", 2)
+        _log_msg("BROKEN PIPE: Reader disconnected", 3)
         raise PipeConnectionError(f"Pipe connection broken: {e}")
     except OSError as e:
         _log_msg(f"_write_to_pipe: OSError during write: {e}", 1)
@@ -201,11 +236,11 @@ class PipeWriter:
 
     def __init__(self, namedPipeFilePathString: str = "/tmp/pilferedbits") -> None:
         """initializes and sets the pipe size to the system's maximum pipe size"""
-        _log_msg("PipeWriter: Initializing", 1)
+        _logger.debug("PipeWriter initializing")
         
         # Basic input validation - but don't be too strict
         if not namedPipeFilePathString:
-            _log_msg("PipeWriter: Empty pipe path provided, using default", 1)
+            _logger.warning("Empty pipe path provided, using default")
             namedPipeFilePathString = "/tmp/pilferedbits"
         
         # Initialize instance variables (these should NOT be shared between instances)
@@ -213,18 +248,18 @@ class PipeWriter:
         self._fdPipe: Optional[int] = None
         
         self._kNamedPipeFilePathString: str = str(namedPipeFilePathString).strip()
-        _log_msg(f"PipeWriter: Using pipe path: {self._kNamedPipeFilePathString}", 1)
+        _logger.debug(f"Using pipe path: {self._kNamedPipeFilePathString}")
         
         try:
             with open("/proc/sys/fs/pipe-max-size", "r") as f:
                 self._desired_pipe_capacity: int = int(f.read().strip())
-                _log_msg(f"PipeWriter: Read system pipe max size: {self._desired_pipe_capacity}", 1)
+                _logger.debug(f"Read system pipe max size: {self._desired_pipe_capacity}")
         except (FileNotFoundError, PermissionError, ValueError) as e:
             self._desired_pipe_capacity = self.DEFAULT_PIPE_CAPACITY
-            _log_msg(f"PipeWriter: Could not read system pipe max size ({e}), using default of {self.DEFAULT_PIPE_CAPACITY}", 1)
+            _logger.warning(f"Could not read system pipe max size ({e}), using default of {self.DEFAULT_PIPE_CAPACITY}")
         
         # Don't try to open pipe during initialization - let it happen on first write
-        _log_msg("PipeWriter: Initialization complete, pipe will be opened on first write", 1)
+        _logger.debug("Initialization complete, pipe will be opened on first write")
 
     @property
     def named_pipe_system_capacity(self) -> int:
@@ -237,43 +272,40 @@ class PipeWriter:
         """assigns the pipe to an internal file descriptor if not already set, and sets its size"""
         if not self._fdPipe:
             try:
-                _log_msg(f"Attempting to open pipe: {self._kNamedPipeFilePathString}", 2)
+                _logger.debug(f"Attempting to open pipe: {self._kNamedPipeFilePathString}")
                 self._fdPipe = os.open(
                     self._kNamedPipeFilePathString, os.O_WRONLY | os.O_NONBLOCK
                 )
-                _log_msg(f"Successfully opened pipe fd: {self._fdPipe}", 2)
+                _logger.debug(f"Successfully opened pipe fd: {self._fdPipe}")
                 
                 # Set the pipe size to the desired value
                 try:
                     fcntl.fcntl(self._fdPipe, self._F_SETPIPE_SZ, self._desired_pipe_capacity)
-                    _log_msg(f"Set pipe size to: {self._desired_pipe_capacity}", 2)
+                    _logger.debug(f"Set pipe size to: {self._desired_pipe_capacity}")
                 except (OSError, IOError) as e:
-                    _log_msg(f"Failed to set pipe size to {self._desired_pipe_capacity}: {e}", 1)
+                    _logger.warning(f"Failed to set pipe size to {self._desired_pipe_capacity}: {e}")
                     # Continue anyway - pipe size setting is not critical
                 # Log the actual pipe size
                 try:
                     actual_size = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
-                    _log_msg(f"Named pipe opened with system capacity: {actual_size} bytes", 0)
+                    _logger.info(f"Named pipe opened with system capacity: {actual_size} bytes")
                 except (OSError, IOError) as e:
-                    _log_msg(f"Could not read pipe capacity: {e}", 1)
+                    _logger.warning(f"Could not read pipe capacity: {e}")
             except FileNotFoundError:
-                _log_msg(f"Named pipe not found: {self._kNamedPipeFilePathString}", 1)
+                _logger.warning(f"Named pipe not found: {self._kNamedPipeFilePathString}")
                 # Don't raise - this might be expected during startup
-                # raise PipeConnectionError(f"Named pipe does not exist: {self._kNamedPipeFilePathString}")
             except PermissionError as e:
-                _log_msg(f"Permission denied accessing pipe: {self._kNamedPipeFilePathString} - {e}", 1)
+                _logger.warning(f"Permission denied accessing pipe: {self._kNamedPipeFilePathString} - {e}")
                 # Don't raise - might be temporary, let caller handle
-                # raise PipeConnectionError(f"Permission denied accessing pipe: {e}")
             except OSError as e:
                 if e.errno == 6:  # ENXIO - no reader
-                    _log_msg(f"No reader connected to pipe: {self._kNamedPipeFilePathString}", 2)
+                    _logger.debug(f"No reader connected to pipe: {self._kNamedPipeFilePathString}")
                     # Don't raise exception - this is expected when no reader is connected yet
                 else:
-                    _log_msg(f"OS error opening pipe: {e} (errno: {e.errno})", 1)
+                    _logger.error(f"OS error opening pipe: {e} (errno: {e.errno})")
                     # For unexpected OS errors, still don't raise - let the system retry
-                    # raise PipeConnectionError(f"Failed to open pipe: {e}")
             except Exception as e:
-                _log_msg(f"Unexpected error opening pipe: {type(e).__name__}: {e}", 0)
+                _logger.error(f"Unexpected error opening pipe: {type(e).__name__}: {e}")
                 # Don't raise - unexpected errors should be logged but not break the flow
 
     def get_bytes_in_pipeline(self) -> int:
@@ -305,7 +337,7 @@ class PipeWriter:
                 fcntl.ioctl(self._fdPipe, termios.FIONREAD, buf, 1)
                 bytes_in_pipe = int.from_bytes(buf, "little")
             except OSError as e:
-                _log_msg(f"Failed to read pipe byte count: {e}", 2)
+                _log_msg(f"Failed to read pipe byte count: {e}", 3)
                 # Return 0 - if we can't read the count, assume empty
                 bytes_in_pipe = 0
             except Exception as e:
@@ -367,7 +399,7 @@ class PipeWriter:
             return bytes_queued
         except (PipeWriteError, PipeConnectionError) as e:
             # Log our custom exceptions but don't re-raise in async context
-            _log_msg(f"write: Pipe error occurred: {type(e).__name__}: {e}", 1)
+            _log_msg(f"write: Pipe error occurred: {type(e).__name__}: {e}", 3)
             # Return the queued amount even if pipe write failed
             return data_len if data_len > 0 else 0
         except Exception as e:
@@ -411,14 +443,14 @@ class PipeWriter:
         
         # Reconnect broken pipe if applicable
         if self._whether_pipe_is_broken():
-            _log_msg("_flush_to_pipe: Pipe broken, attempting reconnection", 2)
+            _log_msg("_flush_to_pipe: Pipe broken, attempting reconnection", 3)
             try:
                 self._open_pipe()
                 if self._whether_pipe_is_broken():
-                    _log_msg("_flush_to_pipe: Reconnection failed, pipe still broken", 2)
+                    _log_msg("_flush_to_pipe: Reconnection failed, pipe still broken", 3)
                     return
                 else:
-                    _log_msg("_flush_to_pipe: Reconnection successful", 2)
+                    _log_msg("_flush_to_pipe: Reconnection successful", 3)
             except Exception as e:
                 # If reconnection fails, don't raise - just log and return
                 _log_msg(f"_flush_to_pipe: Exception during reconnection: {type(e).__name__}: {e}", 1)
@@ -441,12 +473,12 @@ class PipeWriter:
                         if written == 0:
                             blocked = True
                             self._byteQ.appendleft(first)
-                            _log_msg("_flush_to_pipe: Write blocked, requeuing chunk", 2)
+                            _log_msg("_flush_to_pipe: Write blocked, requeuing chunk", 3)
                         else:
                             _log_msg(f"_flush_to_pipe: Wrote {written} bytes (full chunk)", 3)
                             available_in_pipe -= written
                     except (PipeWriteError, PipeConnectionError) as e:
-                        _log_msg(f"_flush_to_pipe: Pipe write failed (full): {e}", 1)
+                        _log_msg(f"_flush_to_pipe: Pipe write failed (full): {e}", 3)
                         self._byteQ.appendleft(first)
                         # Mark pipe as broken but don't raise - just log and continue
                         self._fdPipe = None
@@ -493,7 +525,7 @@ class PipeWriter:
                 # Don't raise - log and continue
                 break
                 
-        _log_msg(f"_flush_to_pipe: Completed flush", 2)
+        _log_msg(f"_flush_to_pipe: Completed flush", 3)
 
     # -----------------------------------------
     def _count_bytes_in_internal_buffers(self) -> int:
@@ -527,12 +559,12 @@ total bytes: {self._count_bytes_in_internal_buffers() + self._count_bytes_in_pip
         if self._fdPipe is not None:
             try:
                 os.close(self._fdPipe)
-                _log_msg(f"Closed writer's file descriptor {self._fdPipe}", 1)
+                _logger.debug(f"Closed writer's file descriptor {self._fdPipe}")
             except OSError as e:
-                _log_msg(f"Error closing writer's fd {self._fdPipe}: {e}", 1)
+                _logger.warning(f"Error closing writer's fd {self._fdPipe}: {e}")
                 # Don't raise - closing is best effort, and fd might already be closed
             except Exception as e:
-                _log_msg(f"Unexpected error closing fd {self._fdPipe}: {type(e).__name__}: {e}", 1)
+                _logger.error(f"Unexpected error closing fd {self._fdPipe}: {type(e).__name__}: {e}")
                 # Don't raise - cleanup should be resilient
             finally:
                 self._fdPipe = None
