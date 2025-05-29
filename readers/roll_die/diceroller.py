@@ -111,3 +111,80 @@ if __name__ == "__main__":
 
     diceroller = DiceRoller(high_face=face_count, number_of_dice=dice_count, algorithm=algorithm)
     print(diceroller())
+
+
+# ============================================================================
+# Simple Shared Reader Management for Multi-threading
+# ============================================================================
+
+# Module-level shared reader (thread-safe PipeReader)
+_shared_reader = None
+
+def create_shared_dice_roller(buffer_size=None, **kwargs):
+    """Factory function to create DiceRollers that share a single thread-safe PipeReader.
+    
+    This is the recommended way to create DiceRollers for multi-threaded usage.
+    All DiceRollers created via this function will share the same PipeReader instance,
+    eliminating file descriptor contention and improving performance.
+    
+    Args:
+        buffer_size: Size of shared PipeReader buffer (default: 100MB for multi-threading)
+        **kwargs: All normal DiceRoller arguments (high_face, number_of_dice, etc.)
+        
+    Returns:
+        DiceRoller: A new DiceRoller instance using the shared PipeReader
+        
+    Example:
+        # Multi-threaded usage
+        def worker():
+            dice_roller = create_shared_dice_roller(high_face=6, number_of_dice=2)
+            return dice_roller()
+        
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+    """
+    global _shared_reader
+    
+    if _shared_reader is None:
+        # Default to 100MB buffer for multi-threading performance
+        if buffer_size is None:
+            buffer_size = 100 * 1024 * 1024  # 100MB
+        _shared_reader = PipeReader(buffer_size=buffer_size)
+    
+    # Ensure pipe_reader isn't overridden in kwargs
+    kwargs['pipe_reader'] = _shared_reader
+    
+    return DiceRoller(**kwargs)
+
+
+def get_shared_reader_stats():
+    """Get efficiency statistics from the shared PipeReader.
+    
+    Returns:
+        dict: Statistics about shared reader performance, or None if no shared reader exists
+    """
+    global _shared_reader
+    if _shared_reader is None:
+        return None
+    return _shared_reader.get_efficiency_stats()
+
+
+def reset_shared_reader(buffer_size=None):
+    """Reset the shared PipeReader (useful for testing or changing buffer size).
+    
+    Args:
+        buffer_size: New buffer size for the shared reader
+    """
+    global _shared_reader
+    _shared_reader = None
+    if buffer_size is not None:
+        # Pre-create with specific buffer size
+        _shared_reader = PipeReader(buffer_size=buffer_size)
+
+
+# Class method alternative for those who prefer object-oriented style
+def DiceRoller_with_shared_reader(cls, **kwargs):
+    """Class method alternative to create_shared_dice_roller()"""
+    return create_shared_dice_roller(**kwargs)
+
+# Monkey patch the class method
+DiceRoller.with_shared_reader = classmethod(DiceRoller_with_shared_reader)
