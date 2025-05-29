@@ -114,8 +114,39 @@ class Interleaver(TaskResultWriter):
     pending = False
     
     def __init__(self, to_ctl_q):
-        super().__init__(to_ctl_q)
+        # Create a function that returns an Interleaver-optimized PipeWriter instance
+        # Specifically tuned for 2MB+ buffer writes that we build in the interleaver
+        def interleaver_optimized_writer():
+            return pipe_writer.PipeWriter(config=pipe_writer.PipeWriterConfig.interleaver_optimized())
+        
+        super().__init__(to_ctl_q, interleaver_optimized_writer)
         self._entropy_buffer_size = None  # internal entropy buffer size
+        
+        # Set default buffer size for SSD storage (most common modern setup)
+        # This ensures consistency with the storage type configurations
+        self.set_buffer_size_for_storage_type('ssd')
+
+    def set_buffer_size_for_storage_type(self, storage_type: str) -> None:
+        """Configure optimal buffer size based on storage type
+        
+        Args:
+            storage_type: 'ssd', 'nvme', 'enterprise', or 'maximum'
+        """
+        storage_configs = {
+            'ssd': 2097152,      # 2MB - Good for most modern SSDs
+            'nvme': 8388608,     # 8MB - Optimal for high-end NVMe drives  
+            'enterprise': 16777216,  # 16MB - For enterprise SSDs
+            'maximum': 33554432,     # 32MB - Maximum throughput mode
+        }
+        
+        if storage_type.lower() in storage_configs:
+            self._optimal_buffer_size = storage_configs[storage_type.lower()]
+        else:
+            raise ValueError(f"Unknown storage type: {storage_type}. Use: ssd, nvme, enterprise, maximum")
+    
+    def set_custom_buffer_size(self, size_mb: float) -> None:
+        """Set custom buffer size in megabytes"""
+        self._optimal_buffer_size = int(size_mb * 1048576)  # Convert MB to bytes
 
     # def update_capacity(self, new_capacity):
     #     """Update the internal entropy buffer size variable."""
@@ -217,64 +248,52 @@ class Interleaver(TaskResultWriter):
 
                 # write the pages into a single book, alternating each byte across all pages
                 book = io.BytesIO()
-                k_yield_byte_count = (
-                    4096  # number of bytes to read before asynchronously yielding
-                )
-                intervalcount = 0  # the number of times yield_byte_count as been read since the last pipe write
-                k_interval_reset_count = 10
-                bytes_read = 0
-                debug_count = 0
-                for _ in range(
-                    self._page_size
-                ):  # up to the shortest length of all results (now stored in pages)
-                    for (
-                        page
-                    ) in (
-                        pages
-                    ):  # read next byte from each page/result writing them alternately into the book
+                # Optimize: Build much larger buffers before writing to pipe
+                # This allows PipeWriter to use its large chunk capabilities efficiently
+                # Large buffers are optimal for modern SSD performance
+                bytes_written_to_book = 0
+                # Make yield interval proportional to buffer size for consistent responsiveness
+                async_yield_interval = max(32768, self._optimal_buffer_size // 64)  # Yield 64 times per buffer
+                
+                for position in range(self._page_size):  # up to the shortest length of all results
+                    for page in pages:  # read next byte from each page/result writing them alternately into the book
                         book.write(page.read(1))  # read,write
-                        bytes_read += 1
+                        bytes_written_to_book += 1
 
-                    if bytes_read >= k_yield_byte_count:
-                        bytes_read = 0
-                        intervalcount += 1
-                        # await asyncio.sleep(0)  # --------- yield -----------
-                        # upon every intervalcount intervals write whatever was written in the book (intervalcount * k_yield_byte_count)
-                        if intervalcount == k_interval_reset_count:
-                            intervalcount = 0
-                            # write to pipe
+                    # Yield occasionally during large buffer building for async responsiveness
+                    if bytes_written_to_book % async_yield_interval == 0:
+                        await asyncio.sleep(0)  # Pure yield, no delay
 
-                            # print(f"WRITING TO PIPE count: {debug_count}", file=sys.stderr)
-                            # debug_count+=1
+                    # Write to pipe when we have a large optimal buffer, not frequently
+                    if bytes_written_to_book >= self._optimal_buffer_size:
+                        # Write large chunk to pipe for optimal performance
+                        written = await self._write_to_pipe(book.getbuffer())
+                        
+                        # send hex serialized version to controller
+                        randomBytesView = book.getvalue()
+                        to_ctl_cmd = {
+                            "cmd": "add_bytes",
+                            "hex": randomBytesView[:written],
+                        }
+                        self.to_ctl_q.put_nowait(to_ctl_cmd)
 
-                            written = await self._write_to_pipe(book.getbuffer())
-                            # send hex serialized version to controller
-                            randomBytesView = book.getvalue()  # optimize?
-                            to_ctl_cmd = {
-                                "cmd": "add_bytes",
-                                "hex": randomBytesView[:written],
-                            }
-                            self.to_ctl_q.put_nowait(to_ctl_cmd)
+                        # clear book from memory and start a new one
+                        book.close()
+                        book = io.BytesIO()
+                        bytes_written_to_book = 0
 
-                            # clear book from memory and start a new one
-                            book.close()
-                            book = io.BytesIO()
+                        # directly inform controller of any change in pipe
+                        msg = {"bytesInPipe": len(self)}
+                        self.to_ctl_q.put_nowait(msg)
+                        
+                # write remaining bytes that are less than optimal_buffer_size
+                if bytes_written_to_book > 0:
+                    written = await self._write_to_pipe(book.getbuffer())
 
-                            # directly inform controller of any change in pipe, which is next to guaranteed
-                            msg = {"bytesInPipe": len(self)}
-                            self.to_ctl_q.put_nowait(msg)
-                    # await asyncio.sleep(0)
-                # write remaining that is less than yield_byte_count
-                written = await self._write_to_pipe(book.getbuffer())
-
-                # share with controller a view of the bytes written
-                randomBytesView = book.getvalue()
-                msg = randomBytesView[:written].hex()
-                # to_ctl_cmd = {'cmd': 'add_bytes', 'hexstring': msg}; self.to_ctl_q.put_nowait(to_ctl_cmd)
-                # msg = {'bytesInPipe': self.query_len()}; self.to_ctl_q.put_nowait(msg)
-                # TODO for later messages can be tx faster of they are smaller in size (e.g. binary vs hex)
-                to_ctl_cmd = {"cmd": "add_bytes", "hex": randomBytesView[:written]}
-                self.to_ctl_q.put_nowait(to_ctl_cmd)
+                    # share with controller a view of the bytes written
+                    randomBytesView = book.getvalue()
+                    to_ctl_cmd = {"cmd": "add_bytes", "hex": randomBytesView[:written]}
+                    self.to_ctl_q.put_nowait(to_ctl_cmd)
 
                 for page in pages:
                     page.close()  # garbage collect pages (not really necessary in this case)
