@@ -2,6 +2,30 @@
 # author: krunch3r (KJM github.com/krunch3r76)
 # license: General Poetic License (GPL3)
 
+"""
+Advanced pipe writer for named pipes with buffering, caching, and configurable performance.
+
+Usage Examples:
+    # Default configuration
+    writer = PipeWriter("/tmp/myfifo")
+    
+    # High-performance configuration
+    config = PipeWriterConfig.high_performance()
+    writer = PipeWriter("/tmp/myfifo", config=config)
+    
+    # Custom configuration
+    custom_config = PipeWriterConfig(
+        chunk_size=8192,
+        async_sleep=0.005,
+        max_write_retries=20
+    )
+    writer = PipeWriter("/tmp/myfifo", config=custom_config)
+    
+    # Using as context manager
+    with PipeWriter("/tmp/myfifo") as writer:
+        await writer.write(b"some data")
+"""
+
 import fcntl
 import os, sys
 import asyncio
@@ -108,6 +132,86 @@ class PipeWriteError(PipeWriterError):
 class PipeConfigurationError(PipeWriterError):
     """Raised when there are pipe configuration issues"""
     pass
+
+
+# Configuration class for centralized settings
+class PipeWriterConfig:
+    """Centralized configuration for PipeWriter performance and behavior settings"""
+    
+    def __init__(self,
+                 chunk_size: int = 4096,
+                 async_sleep: float = 0.01,
+                 default_pipe_capacity: int = 2**20,
+                 max_write_retries: int = 10,
+                 cache_ttl: float = 0.001,
+                 chunks_per_yield: int = 8):
+        """Initialize PipeWriter configuration
+        
+        Args:
+            chunk_size: Size in bytes for data chunking (default: 4096)
+            async_sleep: Sleep time in seconds during async operations (default: 0.01)
+            default_pipe_capacity: Default pipe capacity in bytes (default: 1MiB)
+            max_write_retries: Maximum retry attempts for blocked writes (default: 10)
+            cache_ttl: Cache TTL in seconds for pipe byte count (default: 0.001)
+            chunks_per_yield: Number of chunks to process before yielding (default: 8)
+        """
+        # Validate configuration parameters
+        if chunk_size <= 0:
+            raise PipeConfigurationError(f"chunk_size must be positive, got {chunk_size}")
+        if async_sleep < 0:
+            raise PipeConfigurationError(f"async_sleep must be non-negative, got {async_sleep}")
+        if default_pipe_capacity <= 0:
+            raise PipeConfigurationError(f"default_pipe_capacity must be positive, got {default_pipe_capacity}")
+        if max_write_retries < 0:
+            raise PipeConfigurationError(f"max_write_retries must be non-negative, got {max_write_retries}")
+        if cache_ttl < 0:
+            raise PipeConfigurationError(f"cache_ttl must be non-negative, got {cache_ttl}")
+        if chunks_per_yield <= 0:
+            raise PipeConfigurationError(f"chunks_per_yield must be positive, got {chunks_per_yield}")
+            
+        self.chunk_size = chunk_size
+        self.async_sleep = async_sleep
+        self.default_pipe_capacity = default_pipe_capacity
+        self.max_write_retries = max_write_retries
+        self.cache_ttl = cache_ttl
+        self.chunks_per_yield = chunks_per_yield
+        
+        # fcntl constants (these don't change)
+        self.F_GETPIPE_SZ = 1032
+        self.F_SETPIPE_SZ = 1031
+    
+    @classmethod
+    def default(cls) -> 'PipeWriterConfig':
+        """Create a default configuration"""
+        return cls()
+    
+    @classmethod  
+    def high_performance(cls) -> 'PipeWriterConfig':
+        """Create a high-performance configuration"""
+        return cls(
+            chunk_size=8192,      # Larger chunks
+            async_sleep=0.005,    # Less sleep time
+            cache_ttl=0.002,      # Longer cache TTL
+            chunks_per_yield=16   # More chunks per yield
+        )
+    
+    @classmethod
+    def low_latency(cls) -> 'PipeWriterConfig':
+        """Create a low-latency configuration"""
+        return cls(
+            chunk_size=1024,      # Smaller chunks for responsiveness
+            async_sleep=0.001,    # Minimal sleep
+            cache_ttl=0.0005,     # Shorter cache TTL
+            chunks_per_yield=4    # Fewer chunks per yield
+        )
+    
+    def __repr__(self) -> str:
+        return (f"PipeWriterConfig(chunk_size={self.chunk_size}, "
+                f"async_sleep={self.async_sleep}, "
+                f"default_pipe_capacity={self.default_pipe_capacity}, "
+                f"max_write_retries={self.max_write_retries}, "
+                f"cache_ttl={self.cache_ttl}, "
+                f"chunks_per_yield={self.chunks_per_yield})")
 
 
 ##################{}#####################
@@ -224,19 +328,15 @@ def _write_to_pipe(fifoWriteEnd: int, thebytes: bytes, max_retries: int = 10) ->
 class PipeWriter:
     """writes as much as it can to a named pipe buffering the rest"""
 
-    # Class constants (these are fine to be shared)
-    _F_GETPIPE_SZ = 1032
-    _F_SETPIPE_SZ = 1031
-    
-    # Configuration constants
-    DEFAULT_CHUNK_SIZE = 4096          # bytes per chunk when queuing data
-    DEFAULT_ASYNC_SLEEP = 0.01         # seconds to sleep during async chunking
-    DEFAULT_PIPE_CAPACITY = 2**20      # 1 MiB default pipe capacity
-    MAX_WRITE_RETRIES = 10             # maximum retry attempts for blocked writes
-
-    def __init__(self, namedPipeFilePathString: str = "/tmp/pilferedbits") -> None:
+    def __init__(self, 
+                 namedPipeFilePathString: str = "/tmp/pilferedbits",
+                 config: Optional[PipeWriterConfig] = None) -> None:
         """initializes and sets the pipe size to the system's maximum pipe size"""
         _logger.debug("PipeWriter initializing")
+        
+        # Initialize configuration
+        self.config = config if config is not None else PipeWriterConfig.default()
+        _logger.debug(f"Using configuration: {self.config}")
         
         # Basic input validation - but don't be too strict
         if not namedPipeFilePathString:
@@ -251,7 +351,6 @@ class PipeWriter:
         self._cached_pipe_capacity: Optional[int] = None
         self._cached_bytes_in_pipe: Optional[int] = None
         self._cache_timestamp: float = 0.0
-        self._cache_ttl: float = 0.001  # 1ms cache TTL for pipe byte count
         
         self._kNamedPipeFilePathString: str = str(namedPipeFilePathString).strip()
         _logger.debug(f"Using pipe path: {self._kNamedPipeFilePathString}")
@@ -261,8 +360,8 @@ class PipeWriter:
                 self._desired_pipe_capacity: int = int(f.read().strip())
                 _logger.debug(f"Read system pipe max size: {self._desired_pipe_capacity}")
         except (FileNotFoundError, PermissionError, ValueError) as e:
-            self._desired_pipe_capacity = self.DEFAULT_PIPE_CAPACITY
-            _logger.warning(f"Could not read system pipe max size ({e}), using default of {self.DEFAULT_PIPE_CAPACITY}")
+            self._desired_pipe_capacity = self.config.default_pipe_capacity
+            _logger.warning(f"Could not read system pipe max size ({e}), using config default of {self.config.default_pipe_capacity}")
         
         # Don't try to open pipe during initialization - let it happen on first write
         _logger.debug("Initialization complete, pipe will be opened on first write")
@@ -278,7 +377,7 @@ class PipeWriter:
             return self._cached_pipe_capacity
             
         try:
-            self._cached_pipe_capacity = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
+            self._cached_pipe_capacity = fcntl.fcntl(self._fdPipe, self.config.F_GETPIPE_SZ)
             return self._cached_pipe_capacity
         except (OSError, IOError) as e:
             _logger.debug(f"Failed to read pipe capacity: {e}")
@@ -305,7 +404,7 @@ class PipeWriter:
                 
                 # Set the pipe size to the desired value
                 try:
-                    fcntl.fcntl(self._fdPipe, self._F_SETPIPE_SZ, self._desired_pipe_capacity)
+                    fcntl.fcntl(self._fdPipe, self.config.F_SETPIPE_SZ, self._desired_pipe_capacity)
                     _logger.debug(f"Set pipe size to: {self._desired_pipe_capacity}")
                     # Invalidate capacity cache after setting size
                     self._cached_pipe_capacity = None
@@ -314,7 +413,7 @@ class PipeWriter:
                     # Continue anyway - pipe size setting is not critical
                 # Log the actual pipe size
                 try:
-                    actual_size = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
+                    actual_size = fcntl.fcntl(self._fdPipe, self.config.F_GETPIPE_SZ)
                     _logger.info(f"Named pipe opened with system capacity: {actual_size} bytes")
                     # Cache the capacity we just read
                     self._cached_pipe_capacity = actual_size
@@ -362,7 +461,7 @@ class PipeWriter:
         # Use cached value if within TTL (avoid redundant expensive ioctl calls)
         current_time = time.time()
         if (self._cached_bytes_in_pipe is not None and 
-            current_time - self._cache_timestamp < self._cache_ttl):
+            current_time - self._cache_timestamp < self.config.cache_ttl):
             return self._cached_bytes_in_pipe
 
         bytes_in_pipe = 0
@@ -470,14 +569,14 @@ class PipeWriter:
         # Optimized chunking: batch multiple chunks before yielding control
         # This reduces async overhead significantly
         chunks_created = 0
-        chunks_per_yield = 8  # Process 8 chunks (32KB) before yielding
+        chunks_per_yield = self.config.chunks_per_yield  # Use config value
         
         while True:
             chunk_batch = 0
             
             # Process a batch of chunks without yielding
             while chunk_batch < chunks_per_yield:
-                chunk_of_bytes = bytestream.read(self.DEFAULT_CHUNK_SIZE)
+                chunk_of_bytes = bytestream.read(self.config.chunk_size)
                 if len(chunk_of_bytes) == 0:
                     break  # End of data
                     
@@ -490,7 +589,7 @@ class PipeWriter:
                 break
                 
             # Yield control less frequently for better performance
-            await asyncio.sleep(self.DEFAULT_ASYNC_SLEEP)
+            await asyncio.sleep(self.config.async_sleep)
             
         _log_msg(f"_queue_data: Created {chunks_created} chunks, total queue size now: {self._byteQ.len()}", 3)
         return bytes_to_store
@@ -527,7 +626,7 @@ class PipeWriter:
                 
                 if first.len() <= available_in_pipe:
                     try:
-                        written = _write_to_pipe(self._fdPipe, first.getbuffer(), self.MAX_WRITE_RETRIES)
+                        written = _write_to_pipe(self._fdPipe, first.getbuffer(), self.config.max_write_retries)
                         if written == 0:
                             blocked = True
                             self._byteQ.appendleft(first)
@@ -550,7 +649,7 @@ class PipeWriter:
                 else:  # len(first) > available_in_pipe
                     frame = first.read(available_in_pipe)
                     try:
-                        written = _write_to_pipe(self._fdPipe, frame[:available_in_pipe], self.MAX_WRITE_RETRIES)
+                        written = _write_to_pipe(self._fdPipe, frame[:available_in_pipe], self.config.max_write_retries)
                         if written == 0:
                             blocked = True
                             first.putback(available_in_pipe)
