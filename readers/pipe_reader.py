@@ -8,6 +8,7 @@ import time
 import select
 import sys
 import io
+import threading
 
 from utils.count_bytes_in_pipe import count_bytes_in_pipe
 
@@ -48,6 +49,7 @@ class _PipeReader:
         notes: the named pipe open is the constant self._kNamedPipeFilePathString
         """
         self._fdPipe = None
+        self._lock = threading.Lock()  # Thread safety for file descriptor operations
         self._open_pipe()
 
     # .......................
@@ -112,27 +114,28 @@ class _PipeReader:
         if not isinstance(count, int) or count < 0:
             raise ValueError(f"read() count parameter must be a non-negative integer, got {type(count).__name__}: {count}")
         
-        result = bytearray()
-        remainingCount = count
+        with self._lock:  # Thread-safe file descriptor access
+            result = bytearray()
+            remainingCount = count
 
-        while remainingCount > 0:
-            if not self._whether_pipe_is_readable(0):  # Pure immediate polling - max performance
-                continue
-            
-            try:
-                _ba = os.read(self._fdPipe, remainingCount)
-            except BlockingIOError:
-                _log_msg("pipe reader: BLOCKING ERROR", 5)
-                continue
-            except Exception as e:
-                _log_msg(f"Other exception: {e}", 5)
-                continue
-            else:
-                if not _ba:
-                    break  # EOF reached
-                remainingCount -= len(_ba)
-                result.extend(_ba)
-        return bytes(result)
+            while remainingCount > 0:
+                if not self._whether_pipe_is_readable(0):  # Pure immediate polling - max performance
+                    continue
+                
+                try:
+                    _ba = os.read(self._fdPipe, remainingCount)
+                except BlockingIOError:
+                    _log_msg("pipe reader: BLOCKING ERROR", 5)
+                    continue
+                except Exception as e:
+                    _log_msg(f"Other exception: {e}", 5)
+                    continue
+                else:
+                    if not _ba:
+                        break  # EOF reached
+                    remainingCount -= len(_ba)
+                    result.extend(_ba)
+            return bytes(result)
 
 
     # potential issues
@@ -185,6 +188,9 @@ class PipeReader(_PipeReader):
         self.buffer_pos = 0
         self.buffer_end = 0
         
+        # Thread safety for buffer operations and statistics
+        self._buffer_lock = threading.Lock()
+        
         # Stats tracking for performance monitoring
         self._total_requests = 0
         self._total_pipe_reads = 0
@@ -192,76 +198,78 @@ class PipeReader(_PipeReader):
         self._total_bytes_read_from_pipe = 0
 
     def read(self, count):
-        self._total_requests += 1
-        self._total_bytes_requested += count
-        
-        remaining = self.buffer_end - self.buffer_pos
-        if remaining >= count:
-            # Use memoryview to avoid extra copy
-            result_mv = memoryview(self.buffer)[self.buffer_pos : self.buffer_pos + count]
-            self.buffer_pos += count
-            return bytes(result_mv)  # Ensure return type is bytes
-        else:
-            # Not enough data in the buffer, need to refill
-            result = bytearray()
-            if remaining > 0:
-                # Use memoryview for the buffer slice
-                result += memoryview(self.buffer)[self.buffer_pos : self.buffer_end]
+        with self._buffer_lock:  # Thread-safe buffer and statistics access
+            self._total_requests += 1
+            self._total_bytes_requested += count
             
-            # GREEDY BUFFERING STRATEGY: Read much more than needed for future requests
-            need = count - remaining
-            
-            # For very small requests (like dice rolls), be maximally greedy
-            if need <= 64:  # Small requests like dice rolls (8 bytes) 
-                # Use full greedy read size to dramatically improve efficiency
-                read_amount = self.greedy_read_size
+            remaining = self.buffer_end - self.buffer_pos
+            if remaining >= count:
+                # Use memoryview to avoid extra copy
+                result_mv = memoryview(self.buffer)[self.buffer_pos : self.buffer_pos + count]
+                self.buffer_pos += count
+                return bytes(result_mv)  # Ensure return type is bytes
             else:
-                # For larger requests, use normal logic with max_read_size cap
-                read_amount = min(max(need, 4096), self.max_read_size)
-            
-            # Safeguard: ensure read_amount is valid
-            if read_amount is None or read_amount <= 0:
-                read_amount = max(need, 4096)  # Fallback to at least what we need or 4KB
-            
-            new_data = super().read(read_amount)
-            self._total_pipe_reads += 1
-            self._total_bytes_read_from_pipe += len(new_data)
-            
-            # Use memoryview for new_data as well
-            result += memoryview(new_data)[:need]
-            # Save any excess in the buffer for next time
-            remaining_from_new = len(new_data) - need
-            if remaining_from_new > 0:
-                self.buffer[:remaining_from_new] = memoryview(new_data)[need:]
-            self.buffer_pos = 0
-            self.buffer_end = remaining_from_new
-            return bytes(result)
+                # Not enough data in the buffer, need to refill
+                result = bytearray()
+                if remaining > 0:
+                    # Use memoryview for the buffer slice
+                    result += memoryview(self.buffer)[self.buffer_pos : self.buffer_end]
+                
+                # GREEDY BUFFERING STRATEGY: Read much more than needed for future requests
+                need = count - remaining
+                
+                # For very small requests (like dice rolls), be maximally greedy
+                if need <= 64:  # Small requests like dice rolls (8 bytes) 
+                    # Use full greedy read size to dramatically improve efficiency
+                    read_amount = self.greedy_read_size
+                else:
+                    # For larger requests, use normal logic with max_read_size cap
+                    read_amount = min(max(need, 4096), self.max_read_size)
+                
+                # Safeguard: ensure read_amount is valid
+                if read_amount is None or read_amount <= 0:
+                    read_amount = max(need, 4096)  # Fallback to at least what we need or 4KB
+                
+                new_data = super().read(read_amount)
+                self._total_pipe_reads += 1
+                self._total_bytes_read_from_pipe += len(new_data)
+                
+                # Use memoryview for new_data as well
+                result += memoryview(new_data)[:need]
+                # Save any excess in the buffer for next time
+                remaining_from_new = len(new_data) - need
+                if remaining_from_new > 0:
+                    self.buffer[:remaining_from_new] = memoryview(new_data)[need:]
+                self.buffer_pos = 0
+                self.buffer_end = remaining_from_new
+                return bytes(result)
     
     def get_efficiency_stats(self) -> dict:
         """Return efficiency statistics for performance monitoring"""
-        if self._total_requests == 0:
+        with self._buffer_lock:  # Thread-safe access to statistics
+            if self._total_requests == 0:
+                return {
+                    "total_requests": 0,
+                    "total_pipe_reads": 0,
+                    "efficiency_ratio": 0,
+                    "average_requests_per_pipe_read": 0,
+                    "bytes_requested": 0,
+                    "bytes_read_from_pipe": 0,
+                    "amplification_factor": 0,
+                    "buffer_utilization": f"{self.buffer_end - self.buffer_pos} bytes available"
+                }
+            
+            efficiency_ratio = self._total_requests / max(1, self._total_pipe_reads)
+            amplification = self._total_bytes_read_from_pipe / max(1, self._total_bytes_requested)
+            
             return {
-                "total_requests": 0,
-                "total_pipe_reads": 0,
-                "efficiency_ratio": 0,
-                "average_requests_per_pipe_read": 0,
-                "bytes_requested": 0,
-                "bytes_read_from_pipe": 0,
-                "amplification_factor": 0,
-                "buffer_utilization": f"{self.buffer_end - self.buffer_pos} bytes available"
+                "total_requests": self._total_requests,
+                "total_pipe_reads": self._total_pipe_reads,
+                "efficiency_ratio": efficiency_ratio,
+                "average_requests_per_pipe_read": efficiency_ratio,
+                "bytes_requested": self._total_bytes_requested,
+                "bytes_read_from_pipe": self._total_bytes_read_from_pipe,
+                "amplification_factor": amplification,
+                "buffer_utilization": f"{self.buffer_end - self.buffer_pos} bytes available",
+                "greedy_read_size": f"{self.greedy_read_size} bytes"
             }
-        
-        efficiency_ratio = self._total_requests / max(1, self._total_pipe_reads)
-        amplification = self._total_bytes_read_from_pipe / max(1, self._total_bytes_requested)
-        
-        return {
-            "total_requests": self._total_requests,
-            "total_pipe_reads": self._total_pipe_reads,
-            "efficiency_ratio": efficiency_ratio,
-            "average_requests_per_pipe_read": efficiency_ratio,
-            "bytes_requested": self._total_bytes_requested,
-            "bytes_read_from_pipe": self._total_bytes_read_from_pipe,
-            "amplification_factor": amplification,
-            "buffer_utilization": f"{self.buffer_end - self.buffer_pos} bytes available",
-            "greedy_read_size": f"{self.greedy_read_size} bytes"
-        }
