@@ -59,8 +59,8 @@ from .worker import worker_public
 
 ENTRYPOINT_FILEPATH = Path("/golem/run/worker")
 kTASK_TIMEOUT = timedelta(
-    minutes=10
-)  # should be >= script timeout, which is actually used
+    minutes=5  # should be >= script timeout, which is actually used
+)
 DEVELOPER_LOG_EVENTS = True
 
 

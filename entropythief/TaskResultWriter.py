@@ -115,9 +115,11 @@ class Interleaver(TaskResultWriter):
     
     def __init__(self, to_ctl_q):
         # Create a function that returns an Interleaver-optimized PipeWriter instance
-        # Specifically tuned for 2MB+ buffer writes that we build in the interleaver
+        # Optimized for 2MB Interleaver buffers - no internal chunking needed
         def interleaver_optimized_writer():
-            return pipe_writer.PipeWriter(config=pipe_writer.PipeWriterConfig.interleaver_optimized())
+            # Set chunk_size to 2MB to match Interleaver buffer size
+            # This stores each 2MB buffer as a single chunk, maximizing vectored I/O efficiency
+            return pipe_writer.PipeWriter(chunk_size=2097152)  # 2MB chunks
         
         super().__init__(to_ctl_q, interleaver_optimized_writer)
         self._entropy_buffer_size = None  # internal entropy buffer size
