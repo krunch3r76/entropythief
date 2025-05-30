@@ -164,4 +164,4 @@ if __name__ == "__main__":
     bit_generator = EntropyBitReader(10)  # just reserve 10 bytes for the buffer
 
     roller = DiceRollerSimple(bit_generator=bit_generator, face_count=face_count)
-    print(roller(dice_count))
+    print(roller(dice_count)) 
