@@ -22,6 +22,9 @@ import collections
 import time
 import logging
 from typing import Optional, Union
+import multiprocessing
+import queue
+import sys
 
 
 _DEBUGLEVEL = (
@@ -159,19 +162,24 @@ class PipeWriter:
     """High-performance pipe writer using vectored I/O and intelligent buffering"""
     
     def __init__(self, namedPipeFilePathString: str = "/tmp/pilferedbits", 
-                 chunk_size: int = 4096):
-        """Initialize PipeWriter with optimized settings"""
+                 chunk_size: int = 2097152):
+        """Initialize PipeWriter with optimized settings
+        
+        Args:
+            namedPipeFilePathString: Path to the named pipe
+            chunk_size: Size of chunks for buffering (default 4KiB for optimal pipe writing)
+        """
         self._kNamedPipeFilePathString = namedPipeFilePathString
         self.chunk_size = chunk_size
         self._fdPipe: Optional[int] = None
         self._byteQ = OptimizedBytesDeque()
         
-        # Get system's maximum pipe size
+        # Get system's pipe capacity - let the system determine this, not external config
         try:
             with open("/proc/sys/fs/pipe-max-size", "r") as f:
                 self._desired_pipe_capacity = int(f.read().strip())
         except (FileNotFoundError, PermissionError, ValueError):
-            self._desired_pipe_capacity = 2**20  # 1MB default
+            self._desired_pipe_capacity = 2**20  # 1MB fallback
         
         # fcntl constants
         self._F_GETPIPE_SZ = 1032
@@ -180,9 +188,10 @@ class PipeWriter:
         self._open_pipe()
     
     def _open_pipe(self) -> None:
-        """Open pipe for writing with optimal size"""
+        """Open pipe for writing with better error handling"""
         if not self._fdPipe:
             try:
+                # Try to open pipe for writing (requires a reader to be connected)
                 self._fdPipe = os.open(self._kNamedPipeFilePathString, os.O_WRONLY | os.O_NONBLOCK)
                 
                 # Set pipe to maximum size
@@ -191,15 +200,20 @@ class PipeWriter:
                 except Exception as e:
                     _log_msg(f"Failed to set pipe size: {e}", 1)
                 
-                # Log actual pipe size
+                # Log successful connection
                 try:
                     actual_size = fcntl.fcntl(self._fdPipe, self._F_GETPIPE_SZ)
-                    _log_msg(f"Named pipe opened with system capacity: {actual_size} bytes", 1)
+                    _log_msg(f"Named pipe connected with capacity: {actual_size} bytes", 1)
                 except Exception:
                     pass
                     
-            except OSError:
+            except OSError as e:
                 self._fdPipe = None
+                # Log the specific reason for connection failure
+                if e.errno == 6:  # ENXIO - No such device or address
+                    _log_msg("Cannot connect to pipe: No reader connected", 2)
+                else:
+                    _log_msg(f"Cannot connect to pipe: {e}", 2)
     
     def _whether_pipe_is_broken(self) -> bool:
         """Check if pipe is still writable"""
@@ -374,10 +388,16 @@ class PipeWriter:
             self._byteQ.appendleft(buffer_obj)
     
     async def refresh(self) -> None:
-        """Periodic refresh to flush buffers"""
+        """Periodic refresh with stuck buffer monitoring"""
         try:
             self._open_pipe()
-            await self._flush_buffers()
+            flushed = await self._flush_buffers()
+            
+            # Monitor for stuck buffers
+            if self.is_buffer_stuck():
+                _log_msg(f"WARNING: {self._byteQ.len()} bytes stuck in internal buffers", 1)
+                _log_msg(f"Available pipe space: {self.get_available_space()}", 2)
+                
         except Exception as e:
             log_exception(e, "PipeWriter.refresh")
             _log_msg(f"Error in refresh: {e}", 0)
@@ -389,16 +409,42 @@ class PipeWriter:
                     pass
                 self._fdPipe = None
     
-    def len(self) -> int:
-        """Total bytes in pipeline (pipe + buffers)"""
+    def len_accessible(self) -> int:
+        """Bytes accessible to readers (only what's actually in the pipe)"""
+        return self._count_bytes_in_pipe()
+    
+    def len_total_buffered(self) -> int:
+        """Total bytes in pipeline (pipe + internal buffers) - for internal use"""
         return self._count_bytes_in_pipe() + self._byteQ.len()
     
+    def is_buffer_stuck(self) -> bool:
+        """Check if internal buffers have data that can't be flushed to pipe"""
+        return self._byteQ.len() > 0 and self.get_available_space() > 0
+    
+    def get_buffer_health(self) -> dict:
+        """Return detailed buffer status for diagnostics"""
+        return {
+            "accessible_bytes": self.len_accessible(),
+            "buffered_bytes": self._byteQ.len(), 
+            "total_bytes": self.len_total_buffered(),
+            "available_space": self.get_available_space(),
+            "pipe_writable": not self._whether_pipe_is_broken(),
+            "buffers_stuck": self.is_buffer_stuck()
+        }
+
+    def len(self) -> int:
+        """Total entropy bytes available in the system (for UI display purposes)"""
+        # CORRECTED: Return total available entropy (pipe + internal buffers)
+        # This gives users the accurate picture of how much entropy is available for consumption
+        return self.len_total_buffered()
+
     def __len__(self) -> int:
         return self.len()
     
     def get_bytes_in_pipeline(self) -> int:
         """Return the total number of bytes currently stored in both the pipe and internal buffer"""
-        return self.len()
+        # Keep this method for backward compatibility, but note it returns total buffered
+        return self.len_total_buffered()
     
     def _count_bytes_in_internal_buffers(self) -> int:
         """Return the total bytes in internal buffers"""
@@ -420,3 +466,194 @@ total bytes: {self._count_bytes_in_internal_buffers() + self._count_bytes_in_pip
                 os.close(self._fdPipe)
         except:
             pass
+
+
+# ==============================================================================
+# OPTIMIZED PROCESS-BASED PIPEWRITER (from isolated_pipe_writer.py)
+# ==============================================================================
+
+class IsolatedPipeWriter:
+    """PipeWriter that runs in a separate process to avoid event loop starvation"""
+    
+    def __init__(self, namedPipeFilePathString: str = "/tmp/pilferedbits"):
+        self.namedPipeFilePathString = namedPipeFilePathString
+        # Remove arbitrary queue size limit - data should never be dropped
+        self.data_queue = multiprocessing.Queue()  # Unlimited queue to prevent data loss
+        self.control_queue = multiprocessing.Queue()
+        self.stats_queue = multiprocessing.Queue()
+        self.process = None
+        self._shutdown = False
+        
+    def start(self):
+        """Start the isolated PipeWriter process"""
+        if self.process and self.process.is_alive():
+            return
+            
+        self.process = multiprocessing.Process(
+            target=self._worker_process,
+            args=(self.data_queue, self.control_queue, self.stats_queue, self.namedPipeFilePathString)
+        )
+        self.process.daemon = True  # Clean shutdown with parent
+        self.process.start()
+        
+    async def write(self, data):
+        """Write data to the isolated pipe (blocking to ensure no data loss)"""
+        if not self.process or not self.process.is_alive():
+            self.start()
+            
+        if data:
+            # Block until data is queued - never drop data
+            self.data_queue.put(data)
+            return len(data)
+        return 0
+    
+    def get_stats(self):
+        """Get statistics from the isolated writer"""
+        try:
+            self.control_queue.put("stats", timeout=0.1)
+            return self.stats_queue.get(timeout=0.1)
+        except (queue.Empty, queue.Full):
+            return {"error": "stats unavailable"}
+    
+    def len(self):
+        """Get current bytes in pipeline for TaskResultWriter compatibility"""
+        stats = self.get_stats()
+        return stats.get('pipe_bytes', 0)
+    
+    def __len__(self):
+        """Python len() support"""
+        return self.len()
+    
+    async def refresh(self):
+        """No-op refresh since isolated process handles its own refreshing"""
+        # The isolated worker process continuously refreshes on its own
+        # No action needed here
+        pass
+    
+    def stop(self):
+        """Stop the isolated PipeWriter process"""
+        if self.process and self.process.is_alive():
+            try:
+                self.control_queue.put("shutdown", timeout=1.0)
+                self.process.join(timeout=2.0)
+            except:
+                pass
+            finally:
+                if self.process.is_alive():
+                    self.process.terminate()
+                    self.process.join(timeout=1.0)
+                    
+    def __del__(self):
+        """Cleanup on destruction"""
+        self.stop()
+    
+    @staticmethod
+    def _worker_process(data_queue, control_queue, stats_queue, pipe_path):
+        """Worker process that handles all pipe writing"""
+        import asyncio
+        import signal
+        import sys
+        
+        # Set up signal handling for clean shutdown
+        def signal_handler(signum, frame):
+            sys.exit(0)
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+        
+        # Create new event loop for this process
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        async def worker_main():
+            writer = PipeWriter(namedPipeFilePathString=pipe_path)
+            bytes_written = 0
+            items_processed = 0
+            
+            try:
+                while True:
+                    # Handle control commands
+                    try:
+                        cmd = control_queue.get_nowait()
+                        if cmd == "shutdown":
+                            break
+                        elif cmd == "stats":
+                            stats = {
+                                "bytes_written": bytes_written,
+                                "items_processed": items_processed,
+                                "queue_size": data_queue.qsize(),
+                                "pipe_bytes": len(writer)
+                            }
+                            try:
+                                stats_queue.put_nowait(stats)
+                            except queue.Full:
+                                pass  # Drop stats if queue full
+                    except queue.Empty:
+                        pass
+                    
+                    # Process data queue
+                    try:
+                        data = data_queue.get_nowait()
+                        if data:
+                            written = await writer.write(data)
+                            bytes_written += written
+                            items_processed += 1
+                    except queue.Empty:
+                        pass
+                    
+                    # Refresh the writer
+                    await writer.refresh()
+                    await asyncio.sleep(0.01)  # Prevent busy waiting
+                    
+            except Exception as e:
+                print(f"PipeWriter worker error: {e}", file=sys.stderr)
+            finally:
+                # Final flush
+                try:
+                    await writer.refresh()
+                except:
+                    pass
+        
+        try:
+            loop.run_until_complete(worker_main())
+        except KeyboardInterrupt:
+            pass
+        finally:
+            loop.close()
+
+
+# ==============================================================================
+# CONVENIENCE FACTORY FUNCTIONS
+# ==============================================================================
+
+def create_standard_writer(namedPipeFilePathString: str = "/tmp/pilferedbits", 
+                          chunk_size: int = 4096) -> PipeWriter:
+    """Create a standard PipeWriter instance
+    
+    Args:
+        namedPipeFilePathString: Path to named pipe
+        chunk_size: Buffer chunk size (default 4KiB for optimal pipe writing)
+    """
+    return PipeWriter(namedPipeFilePathString, chunk_size)
+
+
+def create_isolated_writer(namedPipeFilePathString: str = "/tmp/pilferedbits") -> IsolatedPipeWriter:
+    """Create an isolated process-based PipeWriter instance for maximum reliability"""
+    return IsolatedPipeWriter(namedPipeFilePathString)
+
+
+def create_optimal_writer(namedPipeFilePathString: str = "/tmp/pilferedbits", 
+                         use_process_isolation: bool = False) -> Union[PipeWriter, IsolatedPipeWriter]:
+    """Create the optimal PipeWriter based on use case
+    
+    Args:
+        namedPipeFilePathString: Path to named pipe
+        use_process_isolation: True for maximum reliability during intensive operations
+    
+    Returns:
+        PipeWriter or IsolatedPipeWriter instance
+    """
+    if use_process_isolation:
+        return create_isolated_writer(namedPipeFilePathString)
+    else:
+        # Use 2MiB chunks - optimal for vectored I/O (os.writev) performance
+        return create_standard_writer(namedPipeFilePathString, chunk_size=2097152)  # 2MiB chunks

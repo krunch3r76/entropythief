@@ -42,7 +42,7 @@ class TaskResultWriter(ABC):
             await self._writerPipe.refresh()
             # await self._flush_pipe()
             print("refresh", file=sys.stderr)
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.002)  # 2ms for responsive UI (was 0.01 = 10ms)
 
     # number of result files added so far
     @abstractmethod
@@ -114,14 +114,9 @@ class Interleaver(TaskResultWriter):
     pending = False
     
     def __init__(self, to_ctl_q):
-        # Create a function that returns an Interleaver-optimized PipeWriter instance
-        # Optimized for 2MB Interleaver buffers - no internal chunking needed
-        def interleaver_optimized_writer():
-            # Set chunk_size to 2MB to match Interleaver buffer size
-            # This stores each 2MB buffer as a single chunk, maximizing vectored I/O efficiency
-            return pipe_writer.PipeWriter(chunk_size=2097152)  # 2MB chunks
-        
-        super().__init__(to_ctl_q, interleaver_optimized_writer)
+        # Use regular PipeWriter for simplicity and responsiveness with our UI fixes
+        # The optimized PipeWriter uses efficient vectored I/O (os.writev) with 2MiB chunks
+        super().__init__(to_ctl_q, pipe_writer.PipeWriter)
         self._entropy_buffer_size = None  # internal entropy buffer size
         
         # Set default buffer size for SSD storage (most common modern setup)
@@ -254,22 +249,22 @@ class Interleaver(TaskResultWriter):
                 # This allows PipeWriter to use its large chunk capabilities efficiently
                 # Large buffers are optimal for modern SSD performance
                 bytes_written_to_book = 0
-                # Make yield interval proportional to buffer size for consistent responsiveness
-                async_yield_interval = max(32768, self._optimal_buffer_size // 64)  # Yield 64 times per buffer
+                # Use small fixed yield interval for UI responsiveness (not proportional to buffer size)
+                async_yield_interval = 1024  # Yield every 1KB for smooth UI interaction
                 
                 for position in range(self._page_size):  # up to the shortest length of all results
                     for page in pages:  # read next byte from each page/result writing them alternately into the book
                         book.write(page.read(1))  # read,write
                         bytes_written_to_book += 1
 
-                    # Yield occasionally during large buffer building for async responsiveness
+                    # Yield frequently during buffer building for UI responsiveness
                     if bytes_written_to_book % async_yield_interval == 0:
                         await asyncio.sleep(0)  # Pure yield, no delay
 
                     # Write to pipe when we have a large optimal buffer, not frequently
                     if bytes_written_to_book >= self._optimal_buffer_size:
                         # Write large chunk to pipe for optimal performance
-                        written = await self._write_to_pipe(book.getbuffer())
+                        written = await self._write_to_pipe(book.getvalue())  # Convert memoryview to bytes for pickling
                         
                         # send hex serialized version to controller
                         randomBytesView = book.getvalue()
@@ -290,7 +285,7 @@ class Interleaver(TaskResultWriter):
                         
                 # write remaining bytes that are less than optimal_buffer_size
                 if bytes_written_to_book > 0:
-                    written = await self._write_to_pipe(book.getbuffer())
+                    written = await self._write_to_pipe(book.getvalue())  # Convert memoryview to bytes for pickling
 
                     # share with controller a view of the bytes written
                     randomBytesView = book.getvalue()
@@ -301,7 +296,7 @@ class Interleaver(TaskResultWriter):
                     page.close()  # garbage collect pages (not really necessary in this case)
                 self.pending = False
             await self._writerPipe.refresh()
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.002)  # 2ms for responsive UI (was 0.01 = 10ms)
         # await self._flush_pipe()
 
     # ---------Interleaver-----------------

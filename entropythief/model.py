@@ -76,6 +76,34 @@ def _log_msg(msg, debug_level=0, color=utils.TEXT_COLOR_MAGENTA):
         # print(f"\n[model.py] {utils.TEXT_COLOR_MAGENTA}{msg}{utils.TEXT_COLOR_DEFAULT}\n", file=sys.stderr)
 
 
+# ==============================================================================
+# OPTIMIZED ASYNC TASK EXECUTION (from model_optimized.py)
+# ==============================================================================
+
+async def execute_tasks_with_yielding(golem, steps, tasks, **kwargs):
+    """
+    Wrapper around golem.execute_tasks that yields control more frequently
+    to prevent event loop starvation during intensive Golem operations
+    """
+    
+    # Get the original async generator
+    completed_tasks = golem.execute_tasks(steps, tasks, **kwargs)
+    
+    task_count = 0
+    
+    # Process tasks with frequent yielding
+    async for task in completed_tasks:
+        # Yield every task to prevent blocking
+        await asyncio.sleep(0)
+        
+        yield task
+        task_count += 1
+        
+        # Extra yield every 5 tasks for heavily loaded systems
+        if task_count % 5 == 0:
+            await asyncio.sleep(0.001)  # Small delay to ensure other coroutines run
+
+
 class model__EntropyThief:
     """
     __init__

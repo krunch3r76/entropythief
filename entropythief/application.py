@@ -37,8 +37,7 @@ _DEBUGLEVEL = True if "PYTHONDEBUGLEVEL" in os.environ else False
 class Controller:
     """asynchronously interacts with the view and model"""
 
-    # IMAGE_HASH  = "9931037256ca1a602a8a706463547d2aecbdd55f296adf07c4e72667"
-    IMAGE_HASH = "d9c6582abf7430c60d1b2b235f990bd92d40d418af0ec54e2f84934b"
+    IMAGE_HASH = "2cab8ac654056acbb90baaf208d253b9a10172c7139e40f8d20fbfd6de67711d"
     MAXWORKERS = 5
     ENTROPY_BUFFER_CAPACITY = 10 * _kMEBIBYTE + 5
     BUDGET = 2.0
@@ -165,7 +164,7 @@ class Controller:
                 if REFRESH:
                     self.theview.refresh()
 
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.001)  # 1ms for responsive UI (was 0.01 = 10ms)
             # /while
         except asyncio.CancelledError:
             pass
@@ -313,10 +312,10 @@ class Controller:
         elif "set buflim=" in ucmd:
             tokens = ucmd.split("=")
             self.ENTROPY_BUFFER_CAPACITY = int(eval(tokens[-1]))
-            if self.ENTROPY_BUFFER_CAPACITY < 2**20:
+            if self.ENTROPY_BUFFER_CAPACITY < 2*2**20:
                 self.ENTROPY_BUFFER_CAPACITY = (
-                    2**20
-                )  # the pool writer minimum buffer size is set to 1 MiB
+                    2*2**20
+                )  # the pool writer minimum buffer size is set to 2 MiB
                 # ideally this requirement would be done on the model end and an update occur over the wire
                 # TODO
             msg_to_model = {"cmd": "set buflim", "limit": self.ENTROPY_BUFFER_CAPACITY}

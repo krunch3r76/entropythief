@@ -231,10 +231,10 @@ class PipeReader(_PipeReader):
                     # For larger requests, use normal logic with max_read_size cap
                     read_amount = min(max(need, 4096), self.max_read_size)
                 
-                # Safeguard: ensure read_amount is valid
-                if read_amount is None or read_amount <= 0:
-                    read_amount = max(need, 4096)  # Fallback to at least what we need or 4KB
-                
+                    # Safeguard: ensure read_amount is valid
+                    if read_amount is None or read_amount <= 0:
+                        read_amount = max(need, 4096)  # Fallback to at least what we need or 4KB
+                    
                 new_data = super().read(read_amount)
                 self._total_pipe_reads += 1
                 self._total_bytes_read_from_pipe += len(new_data)
@@ -263,10 +263,10 @@ class PipeReader(_PipeReader):
                     "amplification_factor": 0,
                     "buffer_utilization": f"{self.buffer_end - self.buffer_pos} bytes available"
                 }
-            
+        
             efficiency_ratio = self._total_requests / max(1, self._total_pipe_reads)
             amplification = self._total_bytes_read_from_pipe / max(1, self._total_bytes_requested)
-            
+        
             return {
                 "total_requests": self._total_requests,
                 "total_pipe_reads": self._total_pipe_reads,
