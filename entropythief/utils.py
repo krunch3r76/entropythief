@@ -88,8 +88,6 @@ def print_env_info(args):
     print(f"{TEXT_COLOR_DEFAULT}")
 
     print(f"entropy source:\t{TEXT_COLOR_YELLOW}", end="")
-    if args.use_dev_random:
-        print(f"/dev/random", end="")
-    else:
-        print(f"RDRAND", end="")
+    print(f"RDSEED", end="")
+
     print(f"{TEXT_COLOR_DEFAULT}")
