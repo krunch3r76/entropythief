@@ -56,12 +56,6 @@ def build_parser(description: str):
         help="log to the stderr and the above log-file",
     )
     parser.add_argument(
-        "--use-dev-random",
-        action="store_true",
-        help="use /dev/random instead of rdrand",
-        default=False,
-    )
-    parser.add_argument(
         "--start-paused",
         action="store_true",
         help="start paused instead of beginning execution immediately",

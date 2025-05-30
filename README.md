@@ -1,7 +1,7 @@
 # entropythief
 
 **A golem requestor installation is needed to run this app. Please visit https://www.golem.network for details**
-get high quality entropy (randomness) at a steal of a rate from multiple providers utilizing the linux entropy source or Intel's RDRAND cpu instruction (**default**). requests are sent whenever the pipe falls below half the set threshold. 
+get high quality entropy (randomness) at a steal of a rate from multiple providers utilizing Intel's RDSEED cpu instruction. Requests are sent whenever the pipe falls below half the set threshold. 
 
 # requirements
 a requestor installation of golem (see https://handbook.golem.network/requestor-tutorials/flash-tutorial-of-requestor-development)
@@ -29,7 +29,7 @@ python3 -m venv entropythief-venv
 source entropythief-venv/bin/activate
 pip install -r entropythief/requirements.txt
 yagna payment init --sender
-./entropythief.py # --help # to change the network from the default rinkeby and the subnet-tag from the default devnet-beta.2
+./entropythief.py # --help # to change the network from the default testnet
 ```
 
 ```
@@ -105,10 +105,10 @@ worker/randwriter.c           # for vm, compiled into worker executable
 have fun with a unpredictable and exotic stream of 1's and 0's!
 
 # memory management
-start entropythief with the argument option --conceal-view which will prevent bytes from backlogging in stdout. this can be a considerable backlog well streaming gigabytes of random bits.
+start entropythief with the argument option --conceal-view which will prevent bytes from backlogging in stdout. this can be a considerable backlog while streaming gigabytes of random bits.
 
 # discussion
-randomness is different things to different people. John Venn described it as raindrops falling on a surface touching different spots until the surface has been completely, or uniformly, saturated [0]. but the randomness here is not so "perfect," as randomness commonly connotes otherwise! randomness with any uniformity and (potential) periodicity similar to what Venn described is considered pseudo randomness, and in the context of using computers for research purposes this is often desired. however, some endeavor to obtain true randomness (say for cryptography, monte carlo simulations...). one obstacle to such however is the intrinsic determinism in any algorithm tied to the computer generating the numbers. the linux kernel offers "true" random power of 2 ranged numbers by altering random numbers according to "random" inputs, such as mouse movements. the amount of randomness thus generated is called entropy. however, there can only be so much user interaction before such randomness is exhausted. to solve this problem, Intel added a feature and corresponding instruction to its 64 bit processors called RDRAND [1], [2]. it is regarded as a hardware true random number generator (base-2 ranged e.g. 16-bit, 32-bit, or 64-bit ranges). however, it has received criticism as being of untrustworthy quality because of its black box nature and the fact that has been "engineered" at the hardware level suggesting it could have a deterministic quality [2]. 
+randomness is different things to different people. John Venn described it as raindrops falling on a surface touching different spots until the surface has been completely, or uniformly, saturated [0]. but the randomness here is not so "perfect," as randomness commonly connotes otherwise! randomness with any uniformity and (potential) periodicity similar to what Venn described is considered pseudo randomness, and in the context of using computers for research purposes this is often desired. however, some endeavor to obtain true randomness (say for cryptography, monte carlo simulations...). one obstacle to such however is the intrinsic determinism in any algorithm tied to the computer generating the numbers. the linux kernel offers "true" random power of 2 ranged numbers by altering random numbers according to "random" inputs, such as mouse movements. the amount of randomness thus generated is called entropy. however, there can only be so much user interaction before such randomness is exhausted. to solve this problem, Intel added a feature and corresponding instruction to its 64 bit processors called RDSEED [1], [2]. it is regarded as a hardware true random number generator (base-2 ranged e.g. 16-bit, 32-bit, or 64-bit ranges). However, some have raised concerns about its black-box nature. While RDSEED does not expand a seed deterministically like -- say, RDRAND or /dev/urandom -- it still relies on Intel’s proprietary hardware conditioner. Thus, although its output should be truly random, its quality ultimately depends on the trustworthiness of Intel’s design.
 
 entropythief solves the scarcity problem of high quality entropy by procuring randomly generated bits (decomposed from random numbers) in considerable quantities from independent sources, i.e. provider computers on the Golem network, and mixing them together to effectively capture entropy from _movements_ of providers, i.e. random sampling, instead of _movements_ of mice. this input is inherently random because no one provider is necessarily available at any given time on the Golem network. furthermore, its modular nature allows for increased refinement depending on the quality and or quantity desired. for additional details, please refer to the cited sources [1,2] and to the source code of entropythief itself.
 
@@ -116,12 +116,14 @@ entropythief solves the scarcity problem of high quality entropy by procuring ra
 
 [1] https://software.intel.com/content/www/us/en/develop/articles/intel-digital-random-number-generator-drng-software-implementation-guide.html
 
-[2]	https://en.wikipedia.org/wiki/RDRAND
+[2]	https://en.wikipedia.org/wiki/RDSEED
 
 
 # comments/reflections
 
-this project was inspired by gandom. however, gandom does not draw upon the underlying system's entropy source (kernel/cpu), which Docker reportedly guarantees is attached to every image (inferring gvmkit-build as well). furthermore, gandom mixes bytes (stream cipher) to produce a _single_ value whereas entropythief provides a stream of values, which incidentally are mixed by default, and can be played with in a myriad of ways, including passing thru a stream cipher (XOR'ing). additionally, entropythief stores bits in raw format while presenting to the user a bird's eye view of them in the intelligible base 16 (cf. base64).
+this project was inspired by gandom. however, gandom draws upon the system's standard conditioned entropy source (kernel/cpu). furthermore, gandom mixes bytes (stream cipher) to produce a _single_ value whereas entropythief provides a stream of values, which incidentally are mixed by default, and can be played with in a myriad of ways, including passing thru a stream cipher (XOR'ing). additionally, entropythief stores bits in raw format while presenting to the user a bird's eye view of them in the intelligible base 16 (cf. base64).
+
+RDSEED samples the chip’s analog noise source, runs those raw bits through an on-die AES-based ‘whitener’ to remove bias, and returns the resulting 256-bit block directly—no deterministic expansion, just fresh hardware entropy every call (though it’s slower and may ask you to retry when the noise FIFO is empty). (Credit for this description goes to ChatGPT, which may be consulted directly for further elucidation)
 
 scalability of TRNGs remains an issue but that is a component problem. entropythief primarily addresses the scarcity of true "randomness," indirectly addressing scalability. it is noteworthy that entropythief randomness does not attempt to fit the traditional modern definition of randomness, which is expected to have "statistical independence, uniform distribution, and unpredictability" [1], i.e. no sequence bias, no overall bias, no pattern. entropythief does not attempt to fit the definition but rather the connotation. it is therefore not necessary, for example, to prove uniformity, but all these qualities may reasonably be assumed to be met if run indefinitely. however, the proof, imho, would negate the reality of true randomness. if the reader is interested in traditonal randomness, the reader is referred to Intel's RDSEED in combination with software CSPRNGs.
 
