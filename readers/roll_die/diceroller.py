@@ -12,8 +12,19 @@ from pipe_reader import PipeReader
 from roll_die.die import Die
 
 
+# ============================================================================
+# High Performance Shared Reader (DEFAULT)
+# ============================================================================
+
+# Single shared reader using optimized defaults for maximum performance
+# Uses PipeReader() with optimal defaults: 100MB buffer, 256KB reads
+shared_reader = PipeReader()
+
 class DiceRoller:
-    """roll 2 or more Die to return a tuple of random rolls"""
+    """roll 2 or more Die to return a tuple of random rolls
+    
+    By default uses optimized shared PipeReader for maximum performance.
+    """
 
     def __init__(
         self,
@@ -22,7 +33,10 @@ class DiceRoller:
         number_of_dice=2,
         as_sorted=False,
         allow_repeats=True,
+<<<<<<< HEAD
         read_buffer_size=None,
+=======
+>>>>>>> refactor_writer
         algorithm=Die.Algorithm.MODULOBYTES,
         pipe_reader=None
     ):
@@ -34,9 +48,10 @@ class DiceRoller:
         - high_face: the highest face of the dice [6]
         - low_face: the lowest face of the dice [1]
         - number_of_dice: how many dice to roll [2]
-        - as_sorted: whether to sort the dice faces [TRUE]
+        - as_sorted: whether to sort the dice faces [FALSE]
         - allow_repeats: whether to allow the same number to come up [TRUE]
-        - [read_buffer_size]: override the default pipe reader's buffer value
+        - algorithm: which algorithm to use for rolling [MODULOBYTES]
+        - pipe_reader: custom pipe reader (default: uses optimized shared reader)
         post:
         - _number_of_dice
         - _as_sorted
@@ -46,10 +61,16 @@ class DiceRoller:
         self._as_sorted = as_sorted
         self._allow_repeats = allow_repeats
 
+<<<<<<< HEAD
         if pipe_reader is None:
             pipe_reader = PipeReader(read_buffer_size)
         else:
             pipe_reader = pipe_reader
+=======
+        # Use optimized shared reader by default for maximum performance
+        if pipe_reader is None:
+            pipe_reader = shared_reader
+>>>>>>> refactor_writer
 
         self._die = Die(
             high_face,
@@ -111,3 +132,27 @@ if __name__ == "__main__":
 
     diceroller = DiceRoller(high_face=face_count, number_of_dice=dice_count, algorithm=algorithm)
     print(diceroller())
+
+
+# ============================================================================
+# Convenience Functions
+# ============================================================================
+
+def get_shared_stats():
+    """Get efficiency statistics from the shared reader."""
+    return shared_reader.get_efficiency_stats()
+
+# Legacy compatibility - these now just create normal DiceRollers (which use shared reader by default)
+def DiceRoller_fast(**kwargs):
+    """Legacy alias - DiceRoller now uses shared reader by default."""
+    return DiceRoller(**kwargs)
+
+def create_shared_dice_roller(**kwargs):
+    """Legacy alias - DiceRoller now uses shared reader by default.""" 
+    return DiceRoller(**kwargs)
+
+# Short aliases for convenience
+fast = DiceRoller
+max_performance = DiceRoller
+get_performance_stats = get_shared_stats
+get_shared_reader_stats = get_shared_stats
