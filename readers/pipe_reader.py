@@ -170,17 +170,22 @@ class PipeReader(_PipeReader):
         sourced it
     """
 
-    def __init__(self, buffer_size=None, max_read_size=4096, greedy_read_size=None):
+    def __init__(self, buffer_size=None, max_read_size=None, greedy_read_size=None):
         super().__init__()
         if buffer_size is None:
-            self.buffer_size = 2**30  # 1GB default buffer
+            self.buffer_size = 100 * 1024 * 1024  # 100MB default buffer (down from 1GB for efficiency)
         else:
             self.buffer_size = buffer_size
-        self.max_read_size = max_read_size  # 4KB default max read - matches pipe page size
+            
+        # Optimize defaults for better performance
+        if max_read_size is None:
+            self.max_read_size = 256 * 1024  # 256KB default (up from 4KB for much better performance)
+        else:
+            self.max_read_size = max_read_size
         
         # Set default greedy_read_size if None
         if greedy_read_size is None:
-            self.greedy_read_size = 65536  # 64KB default greedy read size
+            self.greedy_read_size = 256 * 1024  # 256KB default greedy read size (up from 64KB)
         else:
             self.greedy_read_size = greedy_read_size
             
