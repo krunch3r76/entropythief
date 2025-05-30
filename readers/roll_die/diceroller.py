@@ -12,8 +12,19 @@ from pipe_reader import PipeReader
 from roll_die.die import Die
 
 
+# ============================================================================
+# High Performance Shared Reader (DEFAULT)
+# ============================================================================
+
+# Single shared reader using optimized defaults for maximum performance
+# Uses PipeReader() with optimal defaults: 100MB buffer, 256KB reads
+shared_reader = PipeReader()
+
 class DiceRoller:
-    """roll 2 or more Die to return a tuple of random rolls"""
+    """roll 2 or more Die to return a tuple of random rolls
+    
+    By default uses optimized shared PipeReader for maximum performance.
+    """
 
     def __init__(
         self,
@@ -22,7 +33,6 @@ class DiceRoller:
         number_of_dice=2,
         as_sorted=False,
         allow_repeats=True,
-        read_buffer_size=None,
         algorithm=Die.Algorithm.MODULOBYTES,
         pipe_reader=None
     ):
@@ -34,9 +44,10 @@ class DiceRoller:
         - high_face: the highest face of the dice [6]
         - low_face: the lowest face of the dice [1]
         - number_of_dice: how many dice to roll [2]
-        - as_sorted: whether to sort the dice faces [TRUE]
+        - as_sorted: whether to sort the dice faces [FALSE]
         - allow_repeats: whether to allow the same number to come up [TRUE]
-        - [read_buffer_size]: override the default pipe reader's buffer value
+        - algorithm: which algorithm to use for rolling [MODULOBYTES]
+        - pipe_reader: custom pipe reader (default: uses optimized shared reader)
         post:
         - _number_of_dice
         - _as_sorted
@@ -46,10 +57,9 @@ class DiceRoller:
         self._as_sorted = as_sorted
         self._allow_repeats = allow_repeats
 
+        # Use optimized shared reader by default for maximum performance
         if pipe_reader is None:
-            pipe_reader = PipeReader(read_buffer_size)
-        else:
-            pipe_reader = pipe_reader
+            pipe_reader = shared_reader
 
         self._die = Die(
             high_face,
@@ -114,111 +124,24 @@ if __name__ == "__main__":
 
 
 # ============================================================================
-# Maximum Performance Shared Reader API (PRIMARY - USE THIS)
+# Convenience Functions
 # ============================================================================
 
-# Pre-optimized shared reader for maximum performance (47K+ rolls/sec)
-# This reader is instantiated once with optimal settings and shared across all usage
-_performance_reader = PipeReader(
-    buffer_size=100*1024*1024,   # 100MB buffer (optimal for multi-threading)
-    max_read_size=1024*1024,     # 1MB max read (250x faster than 4KB default!)
-    greedy_read_size=1024*1024   # 1MB greedy read (15x faster than 64KB default!)
-)
-
-# PRIMARY API: Direct access to maximally optimized shared reader
-shared_reader = _performance_reader
-
-def DiceRoller_fast(**kwargs):
-    """Create a DiceRoller using the pre-optimized shared reader for MAXIMUM performance.
-    
-    ⚡ PRIMARY RECOMMENDED API ⚡
-    This achieves 47K+ rolls/sec performance by using a pre-instantiated, 
-    optimally configured PipeReader with zero function call overhead.
-    
-    Args:
-        **kwargs: All normal DiceRoller arguments (high_face, number_of_dice, etc.)
-        
-    Returns:
-        DiceRoller: Maximum performance DiceRoller instance
-        
-    Example:
-        # FASTEST approach - use this for maximum performance
-        roller = DiceRoller_fast(high_face=6, number_of_dice=2)
-        result = roller()
-        
-        # Multi-threaded usage (maximum performance)
-        def worker():
-            roller = DiceRoller_fast(high_face=6, number_of_dice=2)
-            return roller()
-        
-        threads = [threading.Thread(target=worker) for _ in range(10)]
-    """
-    kwargs['pipe_reader'] = shared_reader
-    return DiceRoller(**kwargs)
-
-# Convenience aliases for maximum performance API
-fast = DiceRoller_fast  # Short alias: fast(high_face=6, number_of_dice=2)
-max_performance = DiceRoller_fast  # Descriptive alias
-
-def get_performance_stats():
-    """Get efficiency statistics from the high-performance shared reader."""
+def get_shared_stats():
+    """Get efficiency statistics from the shared reader."""
     return shared_reader.get_efficiency_stats()
 
-
-# ============================================================================
-# Legacy Factory API (SECONDARY - use fast() instead for max performance)
-# ============================================================================
-
-# Module-level shared reader for factory pattern (slower than direct approach above)
-_factory_reader = None
-
-def create_shared_dice_roller(buffer_size=None, max_read_size=None, greedy_read_size=None, **kwargs):
-    """Legacy factory function - SLOWER than DiceRoller_fast() above.
-    
-    ⚠️  SECONDARY API - Use DiceRoller_fast() instead for maximum performance ⚠️
-    
-    This factory pattern has function call overhead and global variable access.
-    The DiceRoller_fast() function above is ~4x faster (47K vs 11K rolls/sec).
-    
-    Args:
-        buffer_size: Size of shared PipeReader buffer (default: 100MB)
-        max_read_size: Maximum bytes per pipe read (default: 1MB)  
-        greedy_read_size: Greedy buffer fill size (default: 1MB)
-        **kwargs: All normal DiceRoller arguments (high_face, number_of_dice, etc.)
-        
-    Returns:
-        DiceRoller: A DiceRoller instance using factory-managed shared PipeReader
-    """
-    global _factory_reader
-    
-    if _factory_reader is None:
-        _factory_reader = PipeReader(
-            buffer_size=100*1024*1024 if buffer_size is None else buffer_size,      # 100MB
-            max_read_size=1024*1024 if max_read_size is None else max_read_size,    # 1MB  
-            greedy_read_size=1024*1024 if greedy_read_size is None else greedy_read_size  # 1MB
-        )
-    
-    kwargs['pipe_reader'] = _factory_reader
+# Legacy compatibility - these now just create normal DiceRollers (which use shared reader by default)
+def DiceRoller_fast(**kwargs):
+    """Legacy alias - DiceRoller now uses shared reader by default."""
     return DiceRoller(**kwargs)
 
-def get_factory_reader_stats():
-    """Get efficiency statistics from the factory shared reader."""
-    global _factory_reader
-    if _factory_reader is None:
-        return None
-    return _factory_reader.get_efficiency_stats()
+def create_shared_dice_roller(**kwargs):
+    """Legacy alias - DiceRoller now uses shared reader by default.""" 
+    return DiceRoller(**kwargs)
 
-def reset_factory_reader(buffer_size=None, max_read_size=None, greedy_read_size=None):
-    """Reset the factory shared PipeReader."""
-    global _factory_reader
-    _factory_reader = None
-    if any(param is not None for param in [buffer_size, max_read_size, greedy_read_size]):
-        _factory_reader = PipeReader(
-            buffer_size=100*1024*1024 if buffer_size is None else buffer_size,      # 100MB
-            max_read_size=1024*1024 if max_read_size is None else max_read_size,    # 1MB
-            greedy_read_size=1024*1024 if greedy_read_size is None else greedy_read_size  # 1MB
-        )
-
-# Legacy aliases for backward compatibility
-get_shared_reader_stats = get_factory_reader_stats
-reset_shared_reader = reset_factory_reader
+# Short aliases for convenience
+fast = DiceRoller
+max_performance = DiceRoller
+get_performance_stats = get_shared_stats
+get_shared_reader_stats = get_shared_stats
