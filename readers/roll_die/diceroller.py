@@ -120,22 +120,24 @@ if __name__ == "__main__":
 # Module-level shared reader (thread-safe PipeReader)
 _shared_reader = None
 
-def create_shared_dice_roller(buffer_size=None, **kwargs):
-    """Factory function to create DiceRollers that share a single thread-safe PipeReader.
+def create_shared_dice_roller(buffer_size=None, max_read_size=None, greedy_read_size=None, **kwargs):
+    """Factory function to create DiceRollers that share a single optimized thread-safe PipeReader.
     
     This is the recommended way to create DiceRollers for multi-threaded usage.
     All DiceRollers created via this function will share the same PipeReader instance,
-    eliminating file descriptor contention and improving performance.
+    eliminating file descriptor contention and maximizing performance.
     
     Args:
-        buffer_size: Size of shared PipeReader buffer (default: 100MB for multi-threading)
+        buffer_size: Size of shared PipeReader buffer (default: 100MB)
+        max_read_size: Maximum bytes per pipe read (default: 1MB)  
+        greedy_read_size: Greedy buffer fill size (default: 1MB)
         **kwargs: All normal DiceRoller arguments (high_face, number_of_dice, etc.)
         
     Returns:
-        DiceRoller: A new DiceRoller instance using the shared PipeReader
+        DiceRoller: A new DiceRoller instance using the optimized shared PipeReader
         
     Example:
-        # Multi-threaded usage
+        # Multi-threaded usage (matches manual approach performance)
         def worker():
             dice_roller = create_shared_dice_roller(high_face=6, number_of_dice=2)
             return dice_roller()
@@ -145,10 +147,12 @@ def create_shared_dice_roller(buffer_size=None, **kwargs):
     global _shared_reader
     
     if _shared_reader is None:
-        # Default to 100MB buffer for multi-threading performance
-        if buffer_size is None:
-            buffer_size = 100 * 1024 * 1024  # 100MB
-        _shared_reader = PipeReader(buffer_size=buffer_size)
+        # Optimal parameters for dice rolling workload (matches manual approach)
+        _shared_reader = PipeReader(
+            buffer_size=100*1024*1024 if buffer_size is None else buffer_size,      # 100MB
+            max_read_size=1024*1024 if max_read_size is None else max_read_size,    # 1MB  
+            greedy_read_size=1024*1024 if greedy_read_size is None else greedy_read_size  # 1MB
+        )
     
     # Ensure pipe_reader isn't overridden in kwargs
     kwargs['pipe_reader'] = _shared_reader
@@ -168,17 +172,23 @@ def get_shared_reader_stats():
     return _shared_reader.get_efficiency_stats()
 
 
-def reset_shared_reader(buffer_size=None):
-    """Reset the shared PipeReader (useful for testing or changing buffer size).
+def reset_shared_reader(buffer_size=None, max_read_size=None, greedy_read_size=None):
+    """Reset the shared PipeReader (useful for testing or changing parameters).
     
     Args:
         buffer_size: New buffer size for the shared reader
+        max_read_size: New max read size for the shared reader  
+        greedy_read_size: New greedy read size for the shared reader
     """
     global _shared_reader
     _shared_reader = None
-    if buffer_size is not None:
-        # Pre-create with specific buffer size
-        _shared_reader = PipeReader(buffer_size=buffer_size)
+    if any(param is not None for param in [buffer_size, max_read_size, greedy_read_size]):
+        # Pre-create with optimal dice rolling parameters
+        _shared_reader = PipeReader(
+            buffer_size=100*1024*1024 if buffer_size is None else buffer_size,      # 100MB
+            max_read_size=1024*1024 if max_read_size is None else max_read_size,    # 1MB
+            greedy_read_size=1024*1024 if greedy_read_size is None else greedy_read_size  # 1MB
+        )
 
 
 # Class method alternative for those who prefer object-oriented style
