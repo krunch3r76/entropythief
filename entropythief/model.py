@@ -334,7 +334,7 @@ class model__EntropyThief:
                         / Decimal("3600.0"),
                     },
                 ),
-                use_rdrand=not self.args.use_dev_random,
+                use_rdrand=True
             )
         except Exception as e:
             print(f"Exception thrown in call to model: {e}\n", file=sys.stderr)
