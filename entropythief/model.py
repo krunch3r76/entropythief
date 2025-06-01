@@ -307,10 +307,7 @@ class model__EntropyThief:
         # asynchronously launch taskResultWriter's refresh method instead of calling directly
         thetask = asyncio.create_task(self.taskResultWriter.refresh())
 
-        if not self.args.use_dev_random:
-            self.rdrand_arg = "rdrand"
-        else:
-            self.rdrand_arg = "devrand"
+        self.rdrand_arg = "rdrand"
 
         self.OP_STOP = False
         self.OP_PAUSE = True  # wait for controller to send start signal as restart
