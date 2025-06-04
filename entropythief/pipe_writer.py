@@ -151,6 +151,11 @@ class OptimizedBytesDeque(collections.deque):
         self._running_total -= len(rv)
         return rv
     
+    def clear(self) -> None:
+        """Clear all items and reset running total"""
+        super().clear()
+        self._running_total = 0
+    
     def len(self) -> int:
         return max(0, self._running_total)
     
@@ -162,17 +167,27 @@ class PipeWriter:
     """High-performance pipe writer using vectored I/O and intelligent buffering"""
     
     def __init__(self, namedPipeFilePathString: str = "/tmp/pilferedbits", 
-                 chunk_size: int = 2097152):
+                 chunk_size: int = 2097152, target_capacity: int = None):
         """Initialize PipeWriter with optimized settings
         
         Args:
             namedPipeFilePathString: Path to the named pipe
-            chunk_size: Size of chunks for buffering (default 4KiB for optimal pipe writing)
+            chunk_size: Size of chunks for buffering (default 2MB for optimal pipe writing)
+            target_capacity: Target capacity limit for total buffered data (pipe + internal)
+                           If None, no capacity enforcement is applied
         """
         self._kNamedPipeFilePathString = namedPipeFilePathString
         self.chunk_size = chunk_size
         self._fdPipe: Optional[int] = None
         self._byteQ = OptimizedBytesDeque()
+        
+        # CAPACITY ENFORCEMENT: Add target capacity tracking
+        self._target_capacity = target_capacity
+        self._enforce_capacity = target_capacity is not None
+        
+        # BUFFER MANAGEMENT: Add buffer timeout for stale data cleanup
+        self._buffer_timeout = 30.0  # 30 seconds timeout for stale data
+        self._last_write_time = time.time()
         
         # Get system's pipe capacity - let the system determine this, not external config
         try:
@@ -245,11 +260,99 @@ class PipeWriter:
         """Calculate available space in pipe"""
         return max(0, self.named_pipe_system_capacity - self._count_bytes_in_pipe())
     
+    def _clear_stale_buffers(self) -> int:
+        """Clear stale internal buffers if they've been sitting too long without writes"""
+        if not self._byteQ or not hasattr(self, '_last_write_time'):
+            return 0
+            
+        current_time = time.time()
+        time_since_write = current_time - self._last_write_time
+        
+        if time_since_write > self._buffer_timeout and len(self._byteQ) > 0:
+            cleared_bytes = self._byteQ.len()
+            _log_msg(f"Clearing {cleared_bytes:,} bytes of stale buffer data (idle for {time_since_write:.1f}s)", 1)
+            self._byteQ.clear()
+            return cleared_bytes
+        
+        return 0
+    
+    def _check_capacity_limit(self, additional_bytes: int) -> bool:
+        """Check if adding additional_bytes would exceed target capacity"""
+        if not self._enforce_capacity:
+            return True  # No limit enforced
+            
+        current_total = self.len_total_buffered()
+        would_exceed = (current_total + additional_bytes) > self._target_capacity
+        
+        if would_exceed:
+            excess = (current_total + additional_bytes) - self._target_capacity
+            _log_msg(f"Capacity limit check: Would exceed target by {excess:,} bytes", 2)
+            
+        return not would_exceed
+    
+    def _enforce_capacity_limit(self, data_size: int) -> int:
+        """Enforce capacity limit using high/low water mark system for proper refill behavior"""
+        if not self._enforce_capacity:
+            return data_size  # No limit enforced
+            
+        current_total = self.len_total_buffered()
+        
+        # WATER MARK SYSTEM: Allow refills when buffer is low
+        # Low water mark: 50% of target capacity
+        # High water mark: 100% of target capacity (strict limit)
+        low_water_mark = self._target_capacity * 0.5
+        high_water_mark = self._target_capacity
+        
+        # If we're below low water mark, allow writes freely to encourage refill
+        if current_total < low_water_mark:
+            # Still cap at high water mark to prevent extreme overflow
+            available_capacity = high_water_mark - current_total
+            accepted_size = min(data_size, available_capacity)
+            
+            if accepted_size < data_size:
+                _log_msg(f"Refill mode: Accepting {accepted_size:,} of {data_size:,} bytes (buffer at {current_total:,}/{self._target_capacity:,})", 2)
+            else:
+                _log_msg(f"Refill mode: Accepting all {data_size:,} bytes (buffer at {current_total:,}/{self._target_capacity:,})", 3)
+            
+            return accepted_size
+        
+        # If we're between low and high water marks, apply gradual restriction
+        elif current_total < high_water_mark:
+            available_capacity = high_water_mark - current_total
+            accepted_size = min(data_size, available_capacity)
+            
+            if accepted_size < data_size:
+                _log_msg(f"Capacity enforcement: Accepting {accepted_size:,} of {data_size:,} bytes (buffer at {current_total:,}/{self._target_capacity:,})", 2)
+            
+            return accepted_size
+        
+        # If we're at or above high water mark, reject writes
+        else:
+            _log_msg(f"Capacity limit reached: Rejecting {data_size:,} bytes (buffer at {current_total:,}/{self._target_capacity:,})", 1)
+            return 0
+
     async def write(self, data: Union[bytes, bytearray, memoryview]) -> int:
-        """Write data using optimized chunking and vectored I/O"""
+        """Write data using optimized chunking and vectored I/O with capacity enforcement"""
         if not data:
-            # Empty write - just flush existing buffers
+            # Empty write - just flush existing buffers and clear stale data
+            self._clear_stale_buffers()
             return await self._flush_buffers()
+        
+        # CAPACITY ENFORCEMENT: Check and limit data size based on target capacity
+        original_size = len(data)
+        if self._enforce_capacity:
+            # Clear any stale buffers first to free up space
+            self._clear_stale_buffers()
+            
+            # Determine how much data we can actually accept
+            accepted_size = self._enforce_capacity_limit(original_size)
+            
+            if accepted_size == 0:
+                _log_msg(f"Capacity limit reached: Cannot accept any of {original_size:,} bytes", 1)
+                return 0
+            elif accepted_size < original_size:
+                _log_msg(f"Capacity limit: Accepting {accepted_size:,} of {original_size:,} bytes", 1)
+                data = data[:accepted_size]
         
         bytes_written = 0
         
@@ -272,6 +375,8 @@ class PipeWriter:
                     await asyncio.sleep(0)
             
             bytes_written = len(data)
+            # Update last write time for stale buffer tracking
+            self._last_write_time = time.time()
         
         # PHASE 2: Write buffered data using vectored I/O
         await self._flush_buffers()
@@ -388,8 +493,11 @@ class PipeWriter:
             self._byteQ.appendleft(buffer_obj)
     
     async def refresh(self) -> None:
-        """Periodic refresh with stuck buffer monitoring"""
+        """Periodic refresh with stuck buffer monitoring and stale data cleanup"""
         try:
+            # Clear stale buffers first
+            self._clear_stale_buffers()
+            
             self._open_pipe()
             flushed = await self._flush_buffers()
             
@@ -423,19 +531,45 @@ class PipeWriter:
     
     def get_buffer_health(self) -> dict:
         """Return detailed buffer status for diagnostics"""
+        current_total = self.len_total_buffered()
+        
+        # Calculate water marks if capacity enforcement is enabled
+        water_marks = {}
+        if self._enforce_capacity:
+            low_water_mark = self._target_capacity * 0.5
+            high_water_mark = self._target_capacity
+            
+            water_marks = {
+                "low_water_mark": low_water_mark,
+                "high_water_mark": high_water_mark,
+                "below_low_water": current_total < low_water_mark,
+                "above_high_water": current_total >= high_water_mark,
+                "refill_zone": current_total < low_water_mark,
+                "normal_zone": low_water_mark <= current_total < high_water_mark,
+                "limit_zone": current_total >= high_water_mark
+            }
+        
         return {
             "accessible_bytes": self.len_accessible(),
             "buffered_bytes": self._byteQ.len(), 
-            "total_bytes": self.len_total_buffered(),
+            "total_bytes": current_total,
             "available_space": self.get_available_space(),
             "pipe_writable": not self._whether_pipe_is_broken(),
-            "buffers_stuck": self.is_buffer_stuck()
+            "buffers_stuck": self.is_buffer_stuck(),
+            "target_capacity": self._target_capacity,
+            "capacity_enforced": self._enforce_capacity,
+            "capacity_utilization": (current_total / self._target_capacity * 100) if self._target_capacity else 0,
+            "last_write_age": time.time() - self._last_write_time if hasattr(self, '_last_write_time') else 0,
+            **water_marks  # Include water mark information
         }
 
     def len(self) -> int:
-        """Total entropy bytes available in the system (for UI display purposes)"""
-        # CORRECTED: Return total available entropy (pipe + internal buffers)
-        # This gives users the accurate picture of how much entropy is available for consumption
+        """Total entropy bytes available in the system (for UI display purposes)
+        
+        NOTE: This method includes automatic stale buffer cleanup
+        """
+        # Clear stale buffers before reporting length
+        self._clear_stale_buffers()
         return self.len_total_buffered()
 
     def __len__(self) -> int:

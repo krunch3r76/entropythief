@@ -20,10 +20,22 @@ class TaskResultWriter(ABC):
     _writerPipe = None
     to_ctl_q = None
 
-    def __init__(self, to_ctl_q, writer=pipe_writer.PipeWriter):
-        """initialize TaskResultWriter with a message queue to the controller and a pipe writer"""
+    def __init__(self, to_ctl_q, writer=pipe_writer.PipeWriter, target_capacity=None):
+        """initialize TaskResultWriter with a message queue to the controller and a pipe writer
+        
+        Args:
+            to_ctl_q: Queue to send messages to controller
+            writer: PipeWriter class to use
+            target_capacity: Target capacity limit for the pipe writer (ENTROPY_BUFFER_CAPACITY)
+        """
         self.to_ctl_q = to_ctl_q
-        self._writerPipe = writer()
+        self.target_capacity = target_capacity
+        
+        # Pass target capacity to PipeWriter for enforcement
+        if target_capacity is not None:
+            self._writerPipe = writer(target_capacity=target_capacity)
+        else:
+            self._writerPipe = writer()
 
     async def _write_to_pipe(self, data):
         """writes data to the pipe"""
@@ -113,11 +125,17 @@ class Interleaver(TaskResultWriter):
     _source_next_group = []  # next sublist of tasks results before being committed
     pending = False
     
-    def __init__(self, to_ctl_q):
+    def __init__(self, to_ctl_q, target_capacity=None):
+        """Initialize Interleaver with capacity enforcement
+        
+        Args:
+            to_ctl_q: Queue to send messages to controller  
+            target_capacity: Target capacity limit (ENTROPY_BUFFER_CAPACITY)
+        """
         # Use regular PipeWriter for simplicity and responsiveness with our UI fixes
         # The optimized PipeWriter uses efficient vectored I/O (os.writev) with 2MiB chunks
-        super().__init__(to_ctl_q, pipe_writer.PipeWriter)
-        self._entropy_buffer_size = None  # internal entropy buffer size
+        super().__init__(to_ctl_q, pipe_writer.PipeWriter, target_capacity=target_capacity)
+        self._entropy_buffer_size = target_capacity  # Store for internal use
         
         # Set default buffer size for SSD storage (most common modern setup)
         # This ensures consistency with the storage type configurations
@@ -203,7 +221,7 @@ class Interleaver(TaskResultWriter):
         # ........................................
         # post: _source_groups either has a list of 2 or more results in the front of the queue
         #       or groups are removed until this condition has been satisfied or until empty
-        def ___refresh_source_groups():
+        async def ___refresh_source_groups():
             if len(self._source_groups) > 0:
                 sources = self._source_groups[0]  # just treat head
                 shortlist = [
@@ -224,13 +242,32 @@ class Interleaver(TaskResultWriter):
                 if len(current_group) == 0:
                     self._source_groups.pop(0)  # empty pop
                 elif len(current_group) < 2:  # dangling group has only one member
-                    popped_dangling_source_group = self._source_groups.pop(0)
-                    popped_dangling_source_group.clear()  # deletes underlying files
+                    # SINGLE FILE FIX: Process single files instead of deleting them
+                    # This ensures downloaded entropy always appears in UI even with small batches
+                    single_file_group = self._source_groups.pop(0)
+                    if single_file_group:
+                        # Process the single file
+                        single_source = single_file_group[0]
+                        if single_source.hasPageAvailable(single_source._file_len):
+                            # Read the entire file and write it to pipe
+                            single_file_data = single_source.read(single_source._file_len)
+                            written = await self._write_to_pipe(single_file_data)
+                            
+                            # Notify controller
+                            to_ctl_cmd = {"cmd": "add_bytes", "hex": single_file_data[:written]}
+                            self.to_ctl_q.put_nowait(to_ctl_cmd)
+                            
+                            # Update bytesInPipe
+                            msg = {"bytesInPipe": len(self)}
+                            self.to_ctl_q.put_nowait(msg)
+                    
+                    # Clean up the single file group
+                    single_file_group.clear()
 
         # ........................................
 
         while True:
-            ___refresh_source_groups()  # ensure there are at least two results with at least length _page_size
+            await ___refresh_source_groups()  # ensure there are at least two results with at least length _page_size
             # at the head of _source_groups
 
             # [ viable source list (2+ members with all having at least a page of bytes) now at head ]

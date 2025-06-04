@@ -23,6 +23,10 @@ import subprocess
 import shutil
 import datetime
 
+# PIPE FIX: Add PipeReader import  
+sys.path.append("readers")
+import pipe_reader
+
 from . import utils
 from . import view
 from . import model
@@ -83,6 +87,11 @@ class Controller:
 
         self.theview = view.View(concealedview=self.args.conceal_view)
 
+        # PIPE FIX: Create PipeReader to open pipe for reading (allows PipeWriter to connect)
+        print("Creating PipeReader to open entropy pipe...")
+        self.pipe_reader = pipe_reader.PipeReader()
+        print("✅ Pipe opened for reading - PipeWriter can now connect")
+
         # self.taskResultWriter = Interleaver(self.to_ctl_q)
 
         self.themodeltask = loop.create_task(
@@ -95,7 +104,7 @@ class Controller:
                 MAXWORKERS=self.MAXWORKERS,
                 BUDGET=self.BUDGET,
                 IMAGE_HASH=self.IMAGE_HASH,
-                taskResultWriter=Interleaver(self.from_model_q),
+                taskResultWriter=Interleaver(self.from_model_q, target_capacity=self.ENTROPY_BUFFER_CAPACITY),
             )()
         )
 

@@ -120,15 +120,21 @@ class _PipeReader:
 
             while remainingCount > 0:
                 if not self._whether_pipe_is_readable(0):  # Pure immediate polling - max performance
+                    # FIX: Add small sleep to prevent 100% CPU usage when no entropy available
+                    time.sleep(0.001)  # 1ms yield to prevent busy-waiting
                     continue
                 
                 try:
                     _ba = os.read(self._fdPipe, remainingCount)
                 except BlockingIOError:
                     _log_msg("pipe reader: BLOCKING ERROR", 5)
+                    # FIX: Also yield CPU on blocking errors
+                    time.sleep(0.001)  # 1ms yield
                     continue
                 except Exception as e:
                     _log_msg(f"Other exception: {e}", 5)
+                    # FIX: Yield CPU on other exceptions too
+                    time.sleep(0.001)  # 1ms yield
                     continue
                 else:
                     if not _ba:

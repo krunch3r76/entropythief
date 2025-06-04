@@ -1,6 +1,7 @@
 # random_number.py
 from enum import Enum, auto
 from pathlib import Path
+import time  # Add time import for CPU yielding
 
 import os, sys
 
@@ -93,6 +94,13 @@ def roll_modulo_bytes(
     """
     while True:
         random_bytes = _pipe_reader.read(_num_bytes_random_needed)
+        
+        # FIX: Check if we got insufficient entropy and yield CPU
+        if len(random_bytes) < _num_bytes_random_needed:
+            # Not enough entropy available, yield CPU to prevent busy-waiting
+            time.sleep(0.001)  # 1ms yield
+            continue
+            
         random_int = int.from_bytes(random_bytes, byteorder="little")
         # can test for 0 to optimize
         # shift lsb to the right to zero most significant bits
@@ -101,6 +109,8 @@ def roll_modulo_bytes(
             random_shifted
             > _highest_random_number - _distance_of_multiple_from_power_of_two
         ):
+            # FIX: Add small yield on rejection sampling to prevent busy-waiting
+            time.sleep(0.0001)  # 0.1ms yield on rejection
             continue
         return _n + random_shifted % (_N - _n + 1)
 
@@ -123,6 +133,13 @@ def random_number_scaled(n: int, N: int, pipe_reader, num_bytes=8) -> int:
 
     while True:
         random_bytes = pipe_reader.read(num_bytes)  # bytes for scaling
+        
+        # FIX: Check if we got insufficient entropy and yield CPU
+        if len(random_bytes) < num_bytes:
+            # Not enough entropy available, yield CPU to prevent busy-waiting
+            time.sleep(0.001)  # 1ms yield
+            continue
+            
         random_int = int.from_bytes(
             random_bytes, byteorder="big"
         )  # a random number for scaling
@@ -140,3 +157,5 @@ def random_number_scaled(n: int, N: int, pipe_reader, num_bytes=8) -> int:
         # Ensure the result falls within the desired range
         if n <= result <= N:
             return result
+        # FIX: Add small yield if result is out of range to prevent busy-waiting
+        time.sleep(0.0001)  # 0.1ms yield on range rejection
