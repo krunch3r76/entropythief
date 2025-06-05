@@ -23,9 +23,7 @@ import subprocess
 import shutil
 import datetime
 
-# PIPE FIX: Add PipeReader import  
-sys.path.append("readers")
-import pipe_reader
+# Note: EntopyThief is a pure writer - expects external reader to be connected
 
 from . import utils
 from . import view
@@ -70,7 +68,7 @@ class Controller:
         # self.args = parser.parse_args()
         self.args = args
 
-        # setup console streams
+        # setup console streams - clear logs on each run
         self.mainlog = open(
             "main.log", "w", buffering=1
         )  # monitoring events mostly or other things thought informative for dev ideas
@@ -81,16 +79,25 @@ class Controller:
             "stderr", "w", buffering=1
         )  # messages from project and if logging enabled INFO messages from rest
         sys.stderr = self.stderr2file  # replace stderr stream with file stream
+        
+        # Clear PipeWriter log file on startup
+        import os
+        import datetime
+        os.makedirs('.logs', exist_ok=True)
+        with open('.logs/pipewriter.log', 'w') as f:
+            f.write("")  # Clear the file
+            
+        # Log session start in main logs
+        session_start = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"=== EntopyThief Session Started: {session_start} ===", file=self.mainlog)
+        print(f"=== EntopyThief Session Started: {session_start} ===", file=self.stderr2file)
 
         if self.ENTROPY_BUFFER_CAPACITY < 2*2**20:  # enforce minimum pool size
             self.ENTROPY_BUFFER_CAPACITY = 2*2**20
 
         self.theview = view.View(concealedview=self.args.conceal_view)
 
-        # PIPE FIX: Create PipeReader to open pipe for reading (allows PipeWriter to connect)
-        print("Creating PipeReader to open entropy pipe...")
-        self.pipe_reader = pipe_reader.PipeReader()
-        print("✅ Pipe opened for reading - PipeWriter can now connect")
+        # EntopyThief is a pure writer - external reader should already be connected
 
         # self.taskResultWriter = Interleaver(self.to_ctl_q)
 
@@ -104,7 +111,7 @@ class Controller:
                 MAXWORKERS=self.MAXWORKERS,
                 BUDGET=self.BUDGET,
                 IMAGE_HASH=self.IMAGE_HASH,
-                taskResultWriter=Interleaver(self.from_model_q, target_capacity=self.ENTROPY_BUFFER_CAPACITY),
+                taskResultWriter=Interleaver(self.from_model_q),
             )()
         )
 

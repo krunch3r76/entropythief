@@ -68,7 +68,6 @@ _DEBUGLEVEL = (
     int(os.environ["PYTHONDEBUGLEVEL"]) if "PYTHONDEBUGLEVEL" in os.environ else 0
 )
 
-
 def _log_msg(msg, debug_level=0, color=utils.TEXT_COLOR_MAGENTA):
     pass
     if debug_level <= _DEBUGLEVEL:
@@ -167,7 +166,7 @@ class model__EntropyThief:
             self.OP_STOP = True
         elif "cmd" in qmsg and qmsg["cmd"] == "set buflim":
             self.ENTROPY_BUFFER_CAPACITY = qmsg["limit"]
-            # self.taskResultWriter.update_capacity(self.ENTROPY_BUFFER_CAPACITY)
+            self.taskResultWriter.update_capacity(self.ENTROPY_BUFFER_CAPACITY)
         elif "cmd" in qmsg and qmsg["cmd"] == "set maxworkers":
             self.MAXWORKERS = qmsg["count"]
         elif "cmd" in qmsg and qmsg["cmd"] == "pause execution":
@@ -215,18 +214,43 @@ class model__EntropyThief:
 
         ## BEGIN ROUTINE _provision
         count_bytes_requested = self.ENTROPY_BUFFER_CAPACITY - len(self.taskResultWriter)
-
-        ####################################################################|
-        # check whether task result writer can/should accept more bytes     #
-        _log_msg(f"::[provision()] the costs so far are: {self._costRunning}", 11)
+        
+        # DEBUG: Log provisioning decision details
+        current_buffered = len(self.taskResultWriter)
+        
+        # DEBUG: Break down what's in the buffer
+        pipe_writer = self.taskResultWriter._writerPipe
+        pipe_bytes = pipe_writer.len_accessible() if hasattr(pipe_writer, 'len_accessible') else 'N/A'
+        internal_bytes = pipe_writer._count_bytes_in_internal_buffers() if hasattr(pipe_writer, '_count_bytes_in_internal_buffers') else 'N/A'
+        total_pipe_writer = pipe_writer.len_total_buffered() if hasattr(pipe_writer, 'len_total_buffered') else 'N/A'
+        
+        _log_msg(f"_provision() - ENTROPY_BUFFER_CAPACITY: {self.ENTROPY_BUFFER_CAPACITY:,}", 3)
+        _log_msg(f"_provision() - len(taskResultWriter): {current_buffered:,}", 3)
+        _log_msg(f"_provision() - PipeWriter breakdown:", 3)
+        _log_msg(f"    pipe_bytes (accessible): {pipe_bytes}", 3)
+        _log_msg(f"    internal_buffer_bytes: {internal_bytes}", 3)
+        _log_msg(f"    total_pipe_writer_bytes: {total_pipe_writer}", 3)
+        _log_msg(f"_provision() - count_bytes_requested: {count_bytes_requested:,}", 3)
+        _log_msg(f"_provision() - pending: {self.taskResultWriter.pending}", 3)
+        _log_msg(f"_provision() - cost_running: {self._costRunning:.4f}", 3)
+        _log_msg(f"_provision() - budget_remaining: {(self.BUDGET - 0.02):,.4f}", 3)
 
         # 2.4.1)  test if bytes available from task result writer are beneath threshold
         #     2   test if within budget
+        condition_1 = count_bytes_requested > 0
+        condition_2 = not self.taskResultWriter.pending
+        condition_3 = len(self.taskResultWriter) < int(self.ENTROPY_BUFFER_CAPACITY / 2)
+        condition_4 = self._costRunning < (self.BUDGET - 0.02)
+        
+        _log_msg(f"Provisioning conditions:", 3)
+        _log_msg(f"  bytes_requested > 0: {condition_1} ({count_bytes_requested:,} > 0)", 3)
+        _log_msg(f"  not pending: {condition_2}", 3)
+        _log_msg(f"  buffer < 50% capacity: {condition_3} ({current_buffered:,} < {int(self.ENTROPY_BUFFER_CAPACITY / 2):,})", 3)
+        _log_msg(f"  within budget: {condition_4} ({self._costRunning:.4f} < {(self.BUDGET - 0.02):.4f})", 3)
+        _log_msg(f"  ALL CONDITIONS MET: {condition_1 and condition_2 and condition_3 and condition_4}", 3)
+        
         if (
-            count_bytes_requested > 0
-            and not self.taskResultWriter.pending
-            and len(self.taskResultWriter) < int(self.ENTROPY_BUFFER_CAPACITY / 2)
-            and self._costRunning < (self.BUDGET - 0.02)
+            condition_1 and condition_2 and condition_3 and condition_4
         ):
             package = await vm.repo(
                 image_hash=self.IMAGE_HASH, min_mem_gib=0.3, min_storage_gib=0.3
@@ -300,6 +324,8 @@ class model__EntropyThief:
                 self.taskResultWriter.commit_added_result_files()
 
                 ####################################################################\
+        else:
+            print(f"DEBUG: Provisioning SKIPPED - conditions not met", file=sys.stderr)
 
     # ---------model_EntropyThief----------
     async def __call__(self):

@@ -10,7 +10,10 @@ import sys
 import io
 import threading
 
-from utils.count_bytes_in_pipe import count_bytes_in_pipe
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), 'utils'))
+from count_bytes_in_pipe import count_bytes_in_pipe
 
 _DEBUGLEVEL = (
     int(os.environ["PYTHONDEBUGLEVEL"]) if "PYTHONDEBUGLEVEL" in os.environ else 0

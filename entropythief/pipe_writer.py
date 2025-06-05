@@ -51,16 +51,16 @@ def _setup_pipe_writer_logging():
     else:
         logger.setLevel(logging.ERROR)
     
-    # Create file handler - write to .debug/pipe_writer.log
-    log_dir = ".debug"
-    log_file = os.path.join(log_dir, "pipe_writer.log")
+    # Create file handler - write to .logs/pipewriter.log
+    log_dir = ".logs"
+    log_file = os.path.join(log_dir, "pipewriter.log")
     try:
         os.makedirs(log_dir, exist_ok=True)
-        file_handler = logging.FileHandler(log_file, mode='a')
+        file_handler = logging.FileHandler(log_file, mode='w')  # Clear file on each run
     except Exception:
         # Fallback to /tmp if main log directory fails
         fallback_log = f"/tmp/pipe_writer_fallback_{os.getpid()}.log"
-        file_handler = logging.FileHandler(fallback_log, mode='a')
+        file_handler = logging.FileHandler(fallback_log, mode='w')  # Clear file on each run
     
     # Create formatter with thread information
     formatter = logging.Formatter(
@@ -74,6 +74,9 @@ def _setup_pipe_writer_logging():
     
     # Prevent propagation to root logger (avoid any stderr output)
     logger.propagate = False
+    
+    # Log session start
+    logger.info("=== PipeWriter Session Started ===")
     
     return logger
 
@@ -185,9 +188,15 @@ class PipeWriter:
         self._target_capacity = target_capacity
         self._enforce_capacity = target_capacity is not None
         
-        # BUFFER MANAGEMENT: Add buffer timeout for stale data cleanup
-        self._buffer_timeout = 30.0  # 30 seconds timeout for stale data
+        # BUFFER MANAGEMENT: Disable stale data cleanup to allow buffer accumulation
+        self._buffer_timeout = float('inf')  # Never clear stale data - let it accumulate
         self._last_write_time = time.time()
+        
+        # DATA FLOW TRACKING: Track bytes received vs bytes processed
+        self._total_bytes_received = 0
+        self._total_bytes_buffered = 0  
+        self._total_bytes_rejected = 0
+        self._total_bytes_to_pipe = 0
         
         # Get system's pipe capacity - let the system determine this, not external config
         try:
@@ -226,7 +235,7 @@ class PipeWriter:
                 self._fdPipe = None
                 # Log the specific reason for connection failure
                 if e.errno == 6:  # ENXIO - No such device or address
-                    _log_msg("Cannot connect to pipe: No reader connected", 2)
+                    _log_msg("Cannot connect to pipe: No reader connected - start external reader first", 1)
                 else:
                     _log_msg(f"Cannot connect to pipe: {e}", 2)
     
@@ -338,8 +347,12 @@ class PipeWriter:
             self._clear_stale_buffers()
             return await self._flush_buffers()
         
-        # CAPACITY ENFORCEMENT: Check and limit data size based on target capacity
+        # DATA FLOW TRACKING: Record bytes received
         original_size = len(data)
+        self._total_bytes_received += original_size
+        _log_msg(f"PipeWriter.write: Received {original_size:,} bytes (total received: {self._total_bytes_received:,})", 2)
+        
+        # CAPACITY ENFORCEMENT: Check and limit data size based on target capacity
         if self._enforce_capacity:
             # Clear any stale buffers first to free up space
             self._clear_stale_buffers()
@@ -348,17 +361,23 @@ class PipeWriter:
             accepted_size = self._enforce_capacity_limit(original_size)
             
             if accepted_size == 0:
-                _log_msg(f"Capacity limit reached: Cannot accept any of {original_size:,} bytes", 1)
+                self._total_bytes_rejected += original_size
+                _log_msg(f"DATA LOSS: Rejected {original_size:,} bytes (total rejected: {self._total_bytes_rejected:,})", 1)
                 return 0
             elif accepted_size < original_size:
-                _log_msg(f"Capacity limit: Accepting {accepted_size:,} of {original_size:,} bytes", 1)
+                rejected_bytes = original_size - accepted_size
+                self._total_bytes_rejected += rejected_bytes
+                _log_msg(f"DATA LOSS: Partial reject - accepting {accepted_size:,}, rejecting {rejected_bytes:,} (total rejected: {self._total_bytes_rejected:,})", 1)
                 data = data[:accepted_size]
         
         bytes_written = 0
         
         # PHASE 1: Chunk incoming data into buffer queue
         if isinstance(data, (bytes, bytearray, memoryview)) and len(data) > 0:
-            _log_msg(f"write: received {len(data)} bytes", 3)
+            actual_buffered = len(data)
+            self._total_bytes_buffered += actual_buffered
+            _log_msg(f"PipeWriter.write: Buffered {actual_buffered:,} bytes (total buffered: {self._total_bytes_buffered:,})", 3)
+            
             bytestream = io.BytesIO(data)
             chunk_count = 0
             
@@ -379,7 +398,10 @@ class PipeWriter:
             self._last_write_time = time.time()
         
         # PHASE 2: Write buffered data using vectored I/O
-        await self._flush_buffers()
+        flushed_bytes = await self._flush_buffers()
+        if flushed_bytes > 0:
+            self._total_bytes_to_pipe += flushed_bytes
+            _log_msg(f"PipeWriter.write: Flushed {flushed_bytes:,} bytes to pipe (total to pipe: {self._total_bytes_to_pipe:,})", 3)
         
         return bytes_written
     
@@ -393,6 +415,7 @@ class PipeWriter:
         
         available_space = self.get_available_space()
         if available_space <= 0:
+            # Pipe is full - data stays in internal buffers until space is available
             return 0
         
         # Prepare vectored write buffers
@@ -505,6 +528,19 @@ class PipeWriter:
             if self.is_buffer_stuck():
                 _log_msg(f"WARNING: {self._byteQ.len()} bytes stuck in internal buffers", 1)
                 _log_msg(f"Available pipe space: {self.get_available_space()}", 2)
+
+            # DATA FLOW REPORTING: Periodic statistics (every ~30 calls to refresh)
+            if not hasattr(self, '_refresh_counter'):
+                self._refresh_counter = 0
+            self._refresh_counter += 1
+            
+            if self._refresh_counter % 30 == 0:  # Report every 30 refresh cycles
+                stats = self.get_data_flow_stats()
+                _log_msg(f"DATA FLOW STATS: Received={stats['total_received']:,}, "
+                        f"Buffered={stats['total_buffered']:,}, "
+                        f"Rejected={stats['total_rejected']:,}, "
+                        f"ToPipe={stats['total_to_pipe']:,}, "
+                        f"Loss={stats['loss_percentage']:.1f}%", 1)
                 
         except Exception as e:
             log_exception(e, "PipeWriter.refresh")
@@ -563,13 +599,27 @@ class PipeWriter:
             **water_marks  # Include water mark information
         }
 
+    def get_data_flow_stats(self) -> dict:
+        """Return comprehensive data flow statistics for debugging"""
+        return {
+            "total_received": getattr(self, '_total_bytes_received', 0),
+            "total_buffered": getattr(self, '_total_bytes_buffered', 0),
+            "total_rejected": getattr(self, '_total_bytes_rejected', 0),
+            "total_to_pipe": getattr(self, '_total_bytes_to_pipe', 0),
+            "current_internal_buffer": self._byteQ.len(),
+            "current_pipe_buffer": self.len_accessible(),
+            "efficiency_buffered": (getattr(self, '_total_bytes_buffered', 0) / max(1, getattr(self, '_total_bytes_received', 1))) * 100,
+            "efficiency_to_pipe": (getattr(self, '_total_bytes_to_pipe', 0) / max(1, getattr(self, '_total_bytes_buffered', 1))) * 100,
+            "loss_percentage": (getattr(self, '_total_bytes_rejected', 0) / max(1, getattr(self, '_total_bytes_received', 1))) * 100
+        }
+
     def len(self) -> int:
         """Total entropy bytes available in the system (for UI display purposes)
         
         NOTE: This method includes automatic stale buffer cleanup
         """
         # Clear stale buffers before reporting length
-        self._clear_stale_buffers()
+        # self._clear_stale_buffers()
         return self.len_total_buffered()
 
     def __len__(self) -> int:

@@ -26,25 +26,32 @@ class TaskResultWriter(ABC):
         Args:
             to_ctl_q: Queue to send messages to controller
             writer: PipeWriter class to use
-            target_capacity: Target capacity limit for the pipe writer (ENTROPY_BUFFER_CAPACITY)
+            target_capacity: Target capacity limit - for controller tracking only
         """
         self.to_ctl_q = to_ctl_q
         self.target_capacity = target_capacity
         
-        # Pass target capacity to PipeWriter for enforcement
-        if target_capacity is not None:
-            self._writerPipe = writer(target_capacity=target_capacity)
-        else:
-            self._writerPipe = writer()
+        # Create PipeWriter without capacity limits - let data flow freely
+        self._writerPipe = writer()
 
     async def _write_to_pipe(self, data):
         """writes data to the pipe"""
+        # TRACKING: Log data being sent to PipeWriter
+        data_size = len(data) if data else 0
+        print(f"DEBUG: TaskResultWriter._write_to_pipe: Sending {data_size:,} bytes to PipeWriter", file=sys.stderr)
         written = await self._writerPipe.write(data)
+        print(f"DEBUG: TaskResultWriter._write_to_pipe: PipeWriter accepted {written:,} bytes", file=sys.stderr)
         return written
 
     def __len__(self):
         """Return the number of bytes currently buffered in the writer."""
         return self._writerPipe.len()
+
+    def update_capacity(self, new_capacity):
+        """Update the target capacity for controller tracking only"""
+        print(f"DEBUG: TaskResultWriter.update_capacity called with {new_capacity:,} bytes (tracking only)", file=sys.stderr)
+        self.target_capacity = new_capacity
+        # Note: PipeWriter has no capacity enforcement - data flows freely
 
     # the inheritor may wish to write processed data first then calling this as a super
     async def refresh(self):
@@ -126,16 +133,15 @@ class Interleaver(TaskResultWriter):
     pending = False
     
     def __init__(self, to_ctl_q, target_capacity=None):
-        """Initialize Interleaver with capacity enforcement
+        """Initialize Interleaver without capacity enforcement
         
         Args:
             to_ctl_q: Queue to send messages to controller  
-            target_capacity: Target capacity limit (ENTROPY_BUFFER_CAPACITY)
+            target_capacity: Target capacity limit (ENTROPY_BUFFER_CAPACITY) - for tracking only
         """
-        # Use regular PipeWriter for simplicity and responsiveness with our UI fixes
-        # The optimized PipeWriter uses efficient vectored I/O (os.writev) with 2MiB chunks
-        super().__init__(to_ctl_q, pipe_writer.PipeWriter, target_capacity=target_capacity)
-        self._entropy_buffer_size = target_capacity  # Store for internal use
+        # Create PipeWriter without capacity limits - let data flow freely
+        super().__init__(to_ctl_q, pipe_writer.PipeWriter, target_capacity=None)
+        self._entropy_buffer_size = target_capacity  # Store for internal tracking only
         
         # Set default buffer size for SSD storage (most common modern setup)
         # This ensures consistency with the storage type configurations
@@ -163,9 +169,13 @@ class Interleaver(TaskResultWriter):
         """Set custom buffer size in megabytes"""
         self._optimal_buffer_size = int(size_mb * 1048576)  # Convert MB to bytes
 
-    # def update_capacity(self, new_capacity):
-    #     """Update the internal entropy buffer size variable."""
-    #     self._entropy_buffer_size = new_capacity
+    def update_capacity(self, new_capacity):
+        """Update the target capacity for tracking only"""
+        print(f"DEBUG: Interleaver.update_capacity called with {new_capacity:,} bytes (tracking only)", file=sys.stderr)
+        super().update_capacity(new_capacity)
+        old_buffer_size = getattr(self, '_entropy_buffer_size', 'None')
+        self._entropy_buffer_size = new_capacity  # Update internal tracking
+        print(f"DEBUG: Updated Interleaver._entropy_buffer_size from {old_buffer_size} to {new_capacity:,}", file=sys.stderr)
 
     # ----------------Interleaver-------------------
     @property
