@@ -325,7 +325,7 @@ class model__EntropyThief:
 
                 ####################################################################\
         else:
-            print(f"DEBUG: Provisioning SKIPPED - conditions not met", file=sys.stderr)
+            _log_msg(f"DEBUG: Provisioning SKIPPED - conditions not met", 3)
 
     # ---------model_EntropyThief----------
     async def __call__(self):
