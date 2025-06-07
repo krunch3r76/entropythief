@@ -5,7 +5,7 @@ get high quality entropy (randomness) at a steal of a rate from multiple provide
 
 # requirements
 a requestor installation of golem (see https://handbook.golem.network/requestor-tutorials/flash-tutorial-of-requestor-development)
-yapapi module version 0.10.0 (satisfied by following usage directions below)
+yapapi module version 0.13.1 (satisfied by following usage directions below)
 
 # Video Demo
 See all videos at [https://krunch3r76.github.io/entropythief](https://krunch3r76.github.io/entropythief). Note: your browser must support the ogg codec to view most of these videos as of this writing.
