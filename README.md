@@ -66,28 +66,25 @@ tail -f stderr          # or `entropythief-yapapi.log`
 
 ## Requirements
 
-| Item | Notes |
-|------|-------|
-| **Golem requestor** | Install via the Golem handbook. |
-| **Python 3.8+** | Tested on 3.10. |
-| **yapapi 0.13.1** | Included in `requirements.txt`. |
-| **Intel RDSEED‑capable CPU** | Providers must expose this instruction. |
+- **Golem requestor** – Install the Golem client (see the [handbook tutorial](https://handbook.golem.network/requestor-tutorials/flash-tutorial-of-requestor-development)).
+- **yapapi 0.13.1** – The Python wrapper for Golem’s API; this version is required and will be installed automatically when you follow the usage instructions below.
 
 ---
 
 ## Video Demo  
-All demo videos are hosted at <https://krunch3r76.github.io/entropythief>.  
-Your browser needs Ogg support to view most of them.
 
-| Format | Link |
-|--------|------|
-| **OGG** (native Golem‑stream) | <https://krunch3r76.github.io/entropythief/video2.ogg> |
-| **MP4** (fallback for browsers without OGG) | <https://user-images.githubusercontent.com/46289600/148718743-b365840e-86c3-436e-91b6-4852615bbe66.mp4> |
+All demo videos are hosted at <https://krunch3r76.github.io/entropythief>.  
+Your browser needs Ogg support to view the first video; the second is an MP4 fallback.
+
+| Demo | Description | Link |
+|------|-------------|------|
+| **Golem‑stream (OGG)** | Shows how `entropythief` pulls entropy from multiple providers in real time. | <https://krunch3r76.github.io/entropythief/video2.ogg> |
+| **Inline readers API demo (MP4)** | Demonstrates the `_readers_` API: random dice rolls, bit streams, etc., using the pre‑recorded video. | <https://user-images.githubusercontent.com/46289600/148718743-b365840e-86c3-436e-91b6-4852615bbe66.mp4> |
 
 ### Quick‑look thumbnail  
-[![Watch the video](https://krunch3r76.github.io/entropythief/thumbnail2.png)](https://user-images.githubusercontent.com/46289600/148718743-b365840e-86c3-436e-91b6-4852615bbe66.mp4)
+[![Watch the MP4 demo](https://krunch3r76.github.io/entropythief/thumbnail2.png)](https://user-images.githubusercontent.com/46289600/148718743-b365840e-86c3-436e-91b6-4852615bbe66.mp4)
 
-The inline demo shows the **_readers_** API in action: random dice rolls, bit streams, etc.
+Feel free to click the thumbnail or open each link directly to view the corresponding demo.
 
 ---
 
